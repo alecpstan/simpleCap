@@ -1,0 +1,136 @@
+import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
+import '../providers/cap_table_provider.dart';
+import '../utils/helpers.dart';
+
+class OwnershipPieChart extends StatelessWidget {
+  final bool showByShareClass;
+
+  const OwnershipPieChart({super.key, this.showByShareClass = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<CapTableProvider>(
+      builder: (context, provider, child) {
+        final ownership = showByShareClass
+            ? provider.getOwnershipByShareClass()
+            : provider.getOwnershipByInvestor();
+
+        if (ownership.isEmpty) {
+          return const Center(child: Text('No shareholdings yet'));
+        }
+
+        final sections = <PieChartSectionData>[];
+        final legendItems = <Widget>[];
+        int colorIndex = 0;
+
+        ownership.forEach((id, percentage) {
+          String name;
+          if (showByShareClass) {
+            final shareClass = provider.getShareClassById(id);
+            name = shareClass?.name ?? 'Unknown';
+          } else {
+            final investor = provider.getInvestorById(id);
+            name = investor?.name ?? 'Unknown';
+          }
+
+          final color = AppColors.getChartColor(colorIndex);
+
+          sections.add(
+            PieChartSectionData(
+              value: percentage,
+              title: percentage >= 5 ? '${percentage.toStringAsFixed(1)}%' : '',
+              color: color,
+              radius: 80,
+              titleStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          );
+
+          legendItems.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '$name (${percentage.toStringAsFixed(1)}%)',
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+
+          colorIndex++;
+        });
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth > 400;
+
+            if (isWide) {
+              return Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: PieChart(
+                      PieChartData(
+                        sections: sections,
+                        centerSpaceRadius: 40,
+                        sectionsSpace: 2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: legendItems,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            } else {
+              return Column(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: PieChart(
+                      PieChartData(
+                        sections: sections,
+                        centerSpaceRadius: 30,
+                        sectionsSpace: 2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(spacing: 16, runSpacing: 4, children: legendItems),
+                ],
+              );
+            }
+          },
+        );
+      },
+    );
+  }
+}

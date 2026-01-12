@@ -1,0 +1,24 @@
+name: simple_cap
+description: "Simple Cap Table management App for Australian Pty Ltd companies"
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.2
+  path_provider: ^2.1.4
+  uuid: ^4.5.1
+  intl: ^0.19.0
+  fl_chart: ^0.69.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
