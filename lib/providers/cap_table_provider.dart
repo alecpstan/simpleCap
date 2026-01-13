@@ -4,6 +4,9 @@ import '../models/share_class.dart';
 import '../models/investment_round.dart';
 import '../models/vesting_schedule.dart';
 import '../models/transaction.dart';
+import '../models/convertible_instrument.dart';
+import '../models/milestone.dart';
+import '../models/hours_vesting.dart';
 import '../services/storage_service.dart';
 
 class CapTableProvider extends ChangeNotifier {
@@ -14,9 +17,13 @@ class CapTableProvider extends ChangeNotifier {
   List<InvestmentRound> _rounds = [];
   List<VestingSchedule> _vestingSchedules = [];
   List<Transaction> _transactions = [];
+  List<ConvertibleInstrument> _convertibles = [];
+  List<Milestone> _milestones = [];
+  List<HoursVestingSchedule> _hoursVestingSchedules = [];
   String _companyName = 'My Company Pty Ltd';
   bool _isLoading = true;
   Map<String, double> _tableColumnWidths = {};
+  bool _showFullyDiluted = false; // Toggle for FD view
 
   // Getters
   List<Investor> get investors => List.unmodifiable(_investors);
@@ -26,6 +33,12 @@ class CapTableProvider extends ChangeNotifier {
   List<VestingSchedule> get vestingSchedules =>
       List.unmodifiable(_vestingSchedules);
   List<Transaction> get transactions => List.unmodifiable(_transactions);
+  List<ConvertibleInstrument> get convertibles =>
+      List.unmodifiable(_convertibles);
+  List<Milestone> get milestones => List.unmodifiable(_milestones);
+  List<HoursVestingSchedule> get hoursVestingSchedules =>
+      List.unmodifiable(_hoursVestingSchedules);
+  bool get showFullyDiluted => _showFullyDiluted;
 
   /// Returns all transactions sorted chronologically
   List<Transaction> get sortedTransactions {
@@ -60,11 +73,67 @@ class CapTableProvider extends ChangeNotifier {
     return _transactions.fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
+  /// Shares that would be issued if all convertibles converted
+  int get convertibleShares {
+    return _convertibles
+        .where((c) => c.status == ConvertibleStatus.outstanding)
+        .fold(0, (sum, c) {
+      // Use cap-based conversion as default estimate
+      if (c.valuationCap != null && c.valuationCap! > 0) {
+        final capPPS = c.valuationCap! / totalCurrentShares;
+        return sum + (c.convertibleAmount / capPPS).round();
+      }
+      return sum;
+    });
+  }
+
+  /// Unallocated ESOP pool shares
+  int get esopPoolShares {
+    final esopClass = _shareClasses.firstWhere(
+      (s) => s.type == ShareClassType.esop,
+      orElse: () => ShareClass(
+        name: 'ESOP',
+        type: ShareClassType.esop,
+        votingRightsMultiplier: 0,
+        liquidationPreference: 0,
+      ),
+    );
+    // ESOP shares that haven't been allocated to specific holders
+    return _transactions
+        .where((t) => t.shareClassId == esopClass.id && t.isAcquisition)
+        .fold(0, (sum, t) => sum + t.numberOfShares);
+  }
+
+  /// Fully diluted share count (issued + convertibles + ESOP)
+  int get fullyDilutedShares {
+    return totalCurrentShares + convertibleShares;
+  }
+
+  /// Toggle fully diluted view
+  void toggleFullyDiluted([bool? value]) {
+    _showFullyDiluted = value ?? !_showFullyDiluted;
+    notifyListeners();
+  }
+
   /// Total amount invested (sum of acquisition transaction amounts)
   double get totalInvested {
     return _transactions
         .where((t) => t.isAcquisition)
         .fold(0.0, (sum, t) => sum + t.totalAmount);
+  }
+
+  /// Total convertible principal outstanding
+  double get totalConvertiblePrincipal {
+    return _convertibles
+        .where((c) => c.status == ConvertibleStatus.outstanding)
+        .fold(0.0, (sum, c) => sum + c.principalAmount);
+  }
+
+  /// Total convertible amount including accrued interest
+  double get totalConvertibleAmount {
+    return _convertibles
+        .where((c) => c.status == ConvertibleStatus.outstanding)
+        .fold(0.0, (sum, c) => sum + c.convertibleAmount);
   }
 
   double get latestValuation {
@@ -101,6 +170,15 @@ class CapTableProvider extends ChangeNotifier {
           .toList();
       _transactions = (data['transactions'] as List? ?? [])
           .map((e) => Transaction.fromJson(e))
+          .toList();
+      _convertibles = (data['convertibles'] as List? ?? [])
+          .map((e) => ConvertibleInstrument.fromJson(e))
+          .toList();
+      _milestones = (data['milestones'] as List? ?? [])
+          .map((e) => Milestone.fromJson(e))
+          .toList();
+      _hoursVestingSchedules = (data['hoursVestingSchedules'] as List? ?? [])
+          .map((e) => HoursVestingSchedule.fromJson(e))
           .toList();
       _companyName = data['companyName'] ?? 'My Company Pty Ltd';
       _tableColumnWidths =
@@ -148,6 +226,9 @@ class CapTableProvider extends ChangeNotifier {
       rounds: _rounds,
       vestingSchedules: _vestingSchedules,
       transactions: _transactions,
+      convertibles: _convertibles,
+      milestones: _milestones,
+      hoursVestingSchedules: _hoursVestingSchedules,
       companyName: _companyName,
       tableColumnWidths: _tableColumnWidths,
     );
@@ -498,6 +579,237 @@ class CapTableProvider extends ChangeNotifier {
     final vesting = getVestingByTransaction(transactionId);
     if (vesting == null) return 0; // No vesting = fully vested
     return transaction.numberOfShares - getVestedShares(transactionId);
+  }
+
+  // Convertible Instrument CRUD
+  Future<void> addConvertible(ConvertibleInstrument convertible) async {
+    _convertibles.add(convertible);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> updateConvertible(ConvertibleInstrument convertible) async {
+    final index = _convertibles.indexWhere((c) => c.id == convertible.id);
+    if (index != -1) {
+      _convertibles[index] = convertible;
+      await _save();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteConvertible(String id) async {
+    _convertibles.removeWhere((c) => c.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  ConvertibleInstrument? getConvertibleById(String id) {
+    try {
+      return _convertibles.firstWhere((c) => c.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<ConvertibleInstrument> getConvertiblesByInvestor(String investorId) {
+    return _convertibles.where((c) => c.investorId == investorId).toList();
+  }
+
+  List<ConvertibleInstrument> get outstandingConvertibles {
+    return _convertibles
+        .where((c) => c.status == ConvertibleStatus.outstanding)
+        .toList();
+  }
+
+  /// Convert a convertible instrument to shares
+  /// Requires round pre-money and issued shares to calculate conversion PPS
+  Future<void> convertConvertible(
+    String convertibleId,
+    String shareClassId,
+    String roundId,
+    DateTime conversionDate,
+  ) async {
+    final index = _convertibles.indexWhere((c) => c.id == convertibleId);
+    if (index == -1) return;
+
+    final round = getRoundById(roundId);
+    if (round == null) return;
+
+    final convertible = _convertibles[index];
+    final issuedSharesBeforeRound = getIssuedSharesBeforeRound(roundId);
+    
+    final shares = convertible.calculateConversionShares(
+      roundPreMoney: round.preMoneyValuation,
+      issuedSharesBeforeRound: issuedSharesBeforeRound,
+    );
+    
+    final pps = convertible.calculateConversionPPS(
+      roundPreMoney: round.preMoneyValuation,
+      issuedSharesBeforeRound: issuedSharesBeforeRound,
+    ) ?? 0;
+
+    // Create the transaction
+    final transaction = Transaction(
+      investorId: convertible.investorId,
+      shareClassId: shareClassId,
+      roundId: roundId,
+      type: TransactionType.conversion,
+      numberOfShares: shares,
+      pricePerShare: pps,
+      totalAmount: convertible.convertibleAmount,
+      date: conversionDate,
+      notes: 'Converted from ${convertible.typeDisplayName}',
+    );
+    _transactions.add(transaction);
+
+    // Mark convertible as converted
+    _convertibles[index] = convertible.copyWith(
+      status: ConvertibleStatus.converted,
+      conversionRoundId: roundId,
+      conversionShares: shares,
+      conversionPricePerShare: pps,
+      conversionDate: conversionDate,
+    );
+
+    await _save();
+    notifyListeners();
+  }
+
+  // Milestone CRUD
+  Future<void> addMilestone(Milestone milestone) async {
+    _milestones.add(milestone);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> updateMilestone(Milestone milestone) async {
+    final index = _milestones.indexWhere((m) => m.id == milestone.id);
+    if (index != -1) {
+      _milestones[index] = milestone;
+      await _save();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteMilestone(String id) async {
+    _milestones.removeWhere((m) => m.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  Milestone? getMilestoneById(String id) {
+    try {
+      return _milestones.firstWhere((m) => m.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<Milestone> getMilestonesByInvestor(String investorId) {
+    return _milestones.where((m) => m.investorId == investorId).toList();
+  }
+
+  List<Milestone> get pendingMilestones {
+    return _milestones.where((m) => !m.isCompleted && !m.isLapsed).toList();
+  }
+
+  /// Complete a milestone and award equity
+  Future<void> completeMilestone(
+    String milestoneId,
+    String shareClassId,
+    double pricePerShare,
+  ) async {
+    final index = _milestones.indexWhere((m) => m.id == milestoneId);
+    if (index == -1) return;
+
+    final milestone = _milestones[index];
+    if (milestone.investorId == null) return;
+    
+    // Complete the milestone
+    milestone.complete();
+    
+    // Calculate shares from equity percent
+    final shares =
+        (totalCurrentShares * milestone.earnedEquityPercent / 100).round();
+
+    // Create the transaction
+    final transaction = Transaction(
+      investorId: milestone.investorId!,
+      shareClassId: shareClassId,
+      type: TransactionType.grant,
+      numberOfShares: shares,
+      pricePerShare: pricePerShare,
+      totalAmount: shares * pricePerShare,
+      date: DateTime.now(),
+      notes: 'Milestone achieved: ${milestone.name}',
+    );
+    _transactions.add(transaction);
+
+    // Update milestone in list (already mutated but triggers save)
+    _milestones[index] = milestone;
+
+    await _save();
+    notifyListeners();
+  }
+
+  // Hours Vesting Schedule CRUD
+  Future<void> addHoursVestingSchedule(HoursVestingSchedule schedule) async {
+    _hoursVestingSchedules.add(schedule);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> updateHoursVestingSchedule(HoursVestingSchedule schedule) async {
+    final index =
+        _hoursVestingSchedules.indexWhere((h) => h.id == schedule.id);
+    if (index != -1) {
+      _hoursVestingSchedules[index] = schedule;
+      await _save();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteHoursVestingSchedule(String id) async {
+    _hoursVestingSchedules.removeWhere((h) => h.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  HoursVestingSchedule? getHoursVestingById(String id) {
+    try {
+      return _hoursVestingSchedules.firstWhere((h) => h.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<HoursVestingSchedule> getHoursVestingByInvestor(String investorId) {
+    return _hoursVestingSchedules
+        .where((h) => h.investorId == investorId)
+        .toList();
+  }
+
+  /// Log hours for an hours vesting schedule
+  Future<void> logHoursForSchedule(
+    String scheduleId,
+    double hours,
+    DateTime date,
+    String? description,
+  ) async {
+    final index =
+        _hoursVestingSchedules.indexWhere((h) => h.id == scheduleId);
+    if (index == -1) return;
+
+    final schedule = _hoursVestingSchedules[index];
+    
+    // logHours mutates the schedule in place
+    schedule.logHours(hours, description: description, date: date);
+    
+    // Trigger save with the mutated schedule
+    _hoursVestingSchedules[index] = schedule;
+
+    await _save();
+    notifyListeners();
   }
 
   // Analysis methods
@@ -865,10 +1177,14 @@ class CapTableProvider extends ChangeNotifier {
       'rounds': _rounds.map((e) => e.toJson()).toList(),
       'vestingSchedules': _vestingSchedules.map((e) => e.toJson()).toList(),
       'transactions': _transactions.map((e) => e.toJson()).toList(),
+      'convertibles': _convertibles.map((e) => e.toJson()).toList(),
+      'milestones': _milestones.map((e) => e.toJson()).toList(),
+      'hoursVestingSchedules':
+          _hoursVestingSchedules.map((e) => e.toJson()).toList(),
       'companyName': _companyName,
       'tableColumnWidths': _tableColumnWidths,
       'exportedAt': DateTime.now().toIso8601String(),
-      'version': '1.0',
+      'version': '2.0', // Updated version for new models
     };
   }
 
@@ -888,6 +1204,15 @@ class CapTableProvider extends ChangeNotifier {
         .toList();
     _transactions = (data['transactions'] as List? ?? [])
         .map((e) => Transaction.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _convertibles = (data['convertibles'] as List? ?? [])
+        .map((e) => ConvertibleInstrument.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _milestones = (data['milestones'] as List? ?? [])
+        .map((e) => Milestone.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _hoursVestingSchedules = (data['hoursVestingSchedules'] as List? ?? [])
+        .map((e) => HoursVestingSchedule.fromJson(e as Map<String, dynamic>))
         .toList();
     _companyName = data['companyName'] as String? ?? 'My Company Pty Ltd';
     _tableColumnWidths = Map<String, double>.from(

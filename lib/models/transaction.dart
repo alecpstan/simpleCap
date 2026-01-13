@@ -21,6 +21,9 @@ enum TransactionType {
 
   /// ESOP/option exercise
   optionExercise,
+
+  /// Conversion from convertible instrument (SAFE/Note)
+  conversion,
 }
 
 class Transaction {
@@ -248,6 +251,8 @@ class Transaction {
         return 'Share Grant';
       case TransactionType.optionExercise:
         return 'Option Exercise';
+      case TransactionType.conversion:
+        return 'Convertible Conversion';
     }
   }
 }

@@ -102,6 +102,30 @@ class SettingsDrawer extends StatelessWidget {
                   },
                 ),
 
+                ListTile(
+                  leading: const Icon(Icons.science_outlined),
+                  title: const Text('Scenario Simulator'),
+                  subtitle: const Text('Model raises, ESOP, dilution'),
+                  enabled: false,
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'COMING SOON',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+
                 const Divider(height: 32),
 
                 // Settings Section

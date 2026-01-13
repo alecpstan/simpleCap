@@ -7,6 +7,9 @@ import '../models/share_class.dart';
 import '../models/investment_round.dart';
 import '../models/vesting_schedule.dart';
 import '../models/transaction.dart';
+import '../models/convertible_instrument.dart';
+import '../models/milestone.dart';
+import '../models/hours_vesting.dart';
 
 class StorageService {
   static const String _fileName = 'cap_table_data.json';
@@ -42,6 +45,9 @@ class StorageService {
       'rounds': [],
       'vestingSchedules': [],
       'transactions': [],
+      'convertibles': [],
+      'milestones': [],
+      'hoursVestingSchedules': [],
       'companyName': 'My Company Pty Ltd',
       'tableColumnWidths': <String, double>{},
     };
@@ -53,6 +59,9 @@ class StorageService {
     required List<InvestmentRound> rounds,
     required List<VestingSchedule> vestingSchedules,
     required List<Transaction> transactions,
+    required List<ConvertibleInstrument> convertibles,
+    required List<Milestone> milestones,
+    required List<HoursVestingSchedule> hoursVestingSchedules,
     required String companyName,
     Map<String, double> tableColumnWidths = const {},
   }) async {
@@ -63,6 +72,11 @@ class StorageService {
       'rounds': rounds.map((e) => e.toJson()).toList(),
       'vestingSchedules': vestingSchedules.map((e) => e.toJson()).toList(),
       'transactions': transactions.map((e) => e.toJson()).toList(),
+      'convertibles': convertibles.map((e) => e.toJson()).toList(),
+      'milestones': milestones.map((e) => e.toJson()).toList(),
+      'hoursVestingSchedules': hoursVestingSchedules
+          .map((e) => e.toJson())
+          .toList(),
       'companyName': companyName,
       'tableColumnWidths': tableColumnWidths,
     };

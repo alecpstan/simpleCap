@@ -62,33 +62,64 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildStatsGrid(CapTableProvider provider) {
     final activeInvestorCount = provider.activeInvestors.length;
-    return StatsGrid(
-      stats: [
-        StatCard(
-          title: 'Valuation',
-          value: Formatters.compactCurrency(provider.latestValuation),
-          icon: Icons.trending_up,
-          color: Colors.green,
+    final showFD = provider.showFullyDiluted;
+    final shareCount = showFD
+        ? provider.fullyDilutedShares
+        : provider.totalCurrentShares;
+    final shareLabel = showFD ? 'Fully Diluted' : 'Shares Issued';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // FD Toggle
+        Row(
+          children: [
+            const Spacer(),
+            FilterChip(
+              label: Text(showFD ? 'Fully Diluted' : 'Issued Only'),
+              selected: showFD,
+              onSelected: (_) => provider.toggleFullyDiluted(),
+              avatar: Icon(
+                showFD ? Icons.unfold_more : Icons.unfold_less,
+                size: 18,
+              ),
+            ),
+          ],
         ),
-        StatCard(
-          title: 'Total Raised',
-          value: Formatters.compactCurrency(provider.totalInvested),
-          icon: Icons.attach_money,
-          color: Colors.blue,
-          subtitle: '${provider.rounds.length} rounds',
-        ),
-        StatCard(
-          title: 'Shares Issued',
-          value: Formatters.number(provider.totalCurrentShares),
-          icon: Icons.pie_chart,
-          color: Colors.purple,
-          subtitle: '$activeInvestorCount active investors',
-        ),
-        StatCard(
-          title: 'Share Price',
-          value: Formatters.currency(provider.latestSharePrice),
-          icon: Icons.monetization_on,
-          color: Colors.orange,
+        const SizedBox(height: 8),
+        StatsGrid(
+          stats: [
+            StatCard(
+              title: 'Valuation',
+              value: Formatters.compactCurrency(provider.latestValuation),
+              icon: Icons.trending_up,
+              color: Colors.green,
+            ),
+            StatCard(
+              title: 'Total Raised',
+              value: Formatters.compactCurrency(provider.totalInvested),
+              icon: Icons.attach_money,
+              color: Colors.blue,
+              subtitle: provider.outstandingConvertibles.isNotEmpty
+                  ? '+ ${Formatters.compactCurrency(provider.totalConvertiblePrincipal)} convertibles'
+                  : '${provider.rounds.length} rounds',
+            ),
+            StatCard(
+              title: shareLabel,
+              value: Formatters.number(shareCount),
+              icon: Icons.pie_chart,
+              color: Colors.purple,
+              subtitle: showFD && provider.convertibleShares > 0
+                  ? 'Incl. ${Formatters.number(provider.convertibleShares)} from convertibles'
+                  : '$activeInvestorCount active investors',
+            ),
+            StatCard(
+              title: 'Share Price',
+              value: Formatters.currency(provider.latestSharePrice),
+              icon: Icons.monetization_on,
+              color: Colors.orange,
+            ),
+          ],
         ),
       ],
     );

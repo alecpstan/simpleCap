@@ -4,14 +4,36 @@ import '../providers/cap_table_provider.dart';
 import '../models/vesting_schedule.dart';
 import '../models/transaction.dart';
 import '../models/investor.dart';
+import '../models/milestone.dart';
+import '../models/hours_vesting.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/section_card.dart';
 import '../widgets/avatars.dart';
 import '../widgets/info_widgets.dart';
 import '../utils/helpers.dart';
 
-class VestingPage extends StatelessWidget {
+class VestingPage extends StatefulWidget {
   const VestingPage({super.key});
+
+  @override
+  State<VestingPage> createState() => _VestingPageState();
+}
+
+class _VestingPageState extends State<VestingPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,22 +43,34 @@ class VestingPage extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final vestingSchedules = provider.vestingSchedules;
-
         return Scaffold(
-          body: vestingSchedules.isEmpty
-              ? const EmptyState(
-                  icon: Icons.schedule_outlined,
-                  title: 'No vesting schedules',
-                  subtitle:
-                      'Add vesting schedules to track employee and founder share vesting',
-                )
-              : _VestingListView(
-                  vestingSchedules: vestingSchedules,
-                  provider: provider,
-                ),
+          appBar: TabBar(
+            controller: _tabController,
+            tabs: [
+              Tab(
+                icon: const Icon(Icons.schedule),
+                text: 'Time-based (${provider.vestingSchedules.length})',
+              ),
+              Tab(
+                icon: const Icon(Icons.flag),
+                text: 'Milestones (${provider.milestones.length})',
+              ),
+              Tab(
+                icon: const Icon(Icons.access_time),
+                text: 'Hours (${provider.hoursVestingSchedules.length})',
+              ),
+            ],
+          ),
+          body: TabBarView(
+            controller: _tabController,
+            children: [
+              _TimeBasedVestingTab(provider: provider),
+              _MilestoneVestingTab(provider: provider),
+              _HoursVestingTab(provider: provider),
+            ],
+          ),
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _showAddVestingDialog(context, provider),
+            onPressed: () => _showAddMenu(context, provider),
             icon: const Icon(Icons.add),
             label: const Text('Add Vesting'),
           ),
@@ -45,8 +79,50 @@ class VestingPage extends StatelessWidget {
     );
   }
 
-  void _showAddVestingDialog(BuildContext context, CapTableProvider provider) {
-    // Get acquisition transactions that don't already have vesting
+  void _showAddMenu(BuildContext context, CapTableProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.schedule),
+              title: const Text('Time-based Vesting'),
+              subtitle: const Text('Standard cliff + linear vesting'),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddTimeBasedVesting(context, provider);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.flag),
+              title: const Text('Milestone Vesting'),
+              subtitle: const Text('Vest on achievement of goals'),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddMilestone(context, provider);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.access_time),
+              title: const Text('Hours-based Vesting'),
+              subtitle: const Text('Vest based on hours worked'),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddHoursVesting(context, provider);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddTimeBasedVesting(
+    BuildContext context,
+    CapTableProvider provider,
+  ) {
     final allAcquisitions = provider.transactions
         .where((t) => t.isAcquisition)
         .toList();
@@ -71,19 +147,40 @@ class VestingPage extends StatelessWidget {
       ),
     );
   }
+
+  void _showAddMilestone(BuildContext context, CapTableProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) => _MilestoneDialog(provider: provider),
+    );
+  }
+
+  void _showAddHoursVesting(BuildContext context, CapTableProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) => _HoursVestingDialog(provider: provider),
+    );
+  }
 }
 
-class _VestingListView extends StatelessWidget {
-  final List<VestingSchedule> vestingSchedules;
+// Time-based vesting tab (original content)
+class _TimeBasedVestingTab extends StatelessWidget {
   final CapTableProvider provider;
 
-  const _VestingListView({
-    required this.vestingSchedules,
-    required this.provider,
-  });
+  const _TimeBasedVestingTab({required this.provider});
 
   @override
   Widget build(BuildContext context) {
+    final vestingSchedules = provider.vestingSchedules;
+
+    if (vestingSchedules.isEmpty) {
+      return const EmptyState(
+        icon: Icons.schedule_outlined,
+        title: 'No time-based vesting',
+        subtitle: 'Add schedules to track cliff + linear vesting',
+      );
+    }
+
     // Group vesting by status
     final active = vestingSchedules
         .where((v) => v.leaverStatus == LeaverStatus.active)
@@ -96,7 +193,6 @@ class _VestingListView extends StatelessWidget {
         .where((v) => v.leaverStatus != LeaverStatus.active)
         .toList();
 
-    // Sort by vesting percentage (least vested first for active)
     vesting.sort((a, b) => a.vestingPercentage.compareTo(b.vestingPercentage));
 
     return SingleChildScrollView(
@@ -174,6 +270,890 @@ class _VestingListView extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+// Milestone vesting tab
+class _MilestoneVestingTab extends StatelessWidget {
+  final CapTableProvider provider;
+
+  const _MilestoneVestingTab({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final milestones = provider.milestones;
+
+    if (milestones.isEmpty) {
+      return const EmptyState(
+        icon: Icons.flag_outlined,
+        title: 'No milestone vesting',
+        subtitle: 'Add milestones to award equity on goal achievement',
+      );
+    }
+
+    final pending = milestones
+        .where((m) => !m.isCompleted && !m.isLapsed)
+        .toList();
+    final completed = milestones.where((m) => m.isCompleted).toList();
+    final lapsed = milestones.where((m) => m.isLapsed).toList();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Pending milestones
+          if (pending.isNotEmpty) ...[
+            _buildMilestoneSection(context, 'Pending', pending, Colors.orange),
+            const SizedBox(height: 16),
+          ],
+
+          // Completed milestones
+          if (completed.isNotEmpty) ...[
+            _buildMilestoneSection(
+              context,
+              'Completed',
+              completed,
+              Colors.green,
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Lapsed milestones
+          if (lapsed.isNotEmpty) ...[
+            _buildMilestoneSection(context, 'Lapsed', lapsed, Colors.grey),
+          ],
+
+          const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMilestoneSection(
+    BuildContext context,
+    String title,
+    List<Milestone> milestones,
+    Color color,
+  ) {
+    return SectionCard(
+      title: title,
+      child: Column(
+        children: milestones.map((m) {
+          final investor = provider.getInvestorById(m.investorId ?? '');
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundColor: color.withValues(alpha: 0.2),
+              child: Icon(
+                m.isCompleted
+                    ? Icons.check
+                    : m.isLapsed
+                    ? Icons.close
+                    : Icons.flag,
+                color: color,
+              ),
+            ),
+            title: Text(m.name),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (investor != null) Text(investor.name),
+                Text(
+                  '${m.equityPercent.toStringAsFixed(2)}% equity • ${m.triggerTypeDisplayName}',
+                ),
+                if (m.triggerType == MilestoneTriggerType.graded)
+                  LinearProgressIndicator(
+                    value: m.progress,
+                    backgroundColor: Colors.grey.shade200,
+                  ),
+              ],
+            ),
+            trailing: m.isCompleted
+                ? Text(
+                    Formatters.date(m.completedDate!),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )
+                : !m.isLapsed
+                ? IconButton(
+                    icon: const Icon(Icons.check_circle_outline),
+                    onPressed: () =>
+                        _showCompleteMilestone(context, provider, m),
+                  )
+                : null,
+            isThreeLine: true,
+            onTap: () => _showEditMilestone(context, provider, m),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  void _showCompleteMilestone(
+    BuildContext context,
+    CapTableProvider provider,
+    Milestone milestone,
+  ) {
+    String? shareClassId;
+    final priceController = TextEditingController(
+      text: provider.latestSharePrice.toStringAsFixed(4),
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Complete Milestone'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Milestone: ${milestone.name}'),
+              Text(
+                'Equity to award: ${milestone.earnedEquityPercent.toStringAsFixed(2)}%',
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: shareClassId,
+                decoration: const InputDecoration(
+                  labelText: 'Share Class',
+                  border: OutlineInputBorder(),
+                ),
+                items: provider.shareClasses.map((sc) {
+                  return DropdownMenuItem(value: sc.id, child: Text(sc.name));
+                }).toList(),
+                onChanged: (v) => setState(() => shareClassId = v),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: priceController,
+                decoration: const InputDecoration(
+                  labelText: 'Price per Share',
+                  prefixText: '\$',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: shareClassId != null
+                  ? () {
+                      final pps = double.tryParse(priceController.text) ?? 0;
+                      provider.completeMilestone(
+                        milestone.id,
+                        shareClassId!,
+                        pps,
+                      );
+                      Navigator.pop(context);
+                    }
+                  : null,
+              child: const Text('Award Equity'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditMilestone(
+    BuildContext context,
+    CapTableProvider provider,
+    Milestone milestone,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          _MilestoneDialog(provider: provider, milestone: milestone),
+    );
+  }
+}
+
+// Hours-based vesting tab
+class _HoursVestingTab extends StatelessWidget {
+  final CapTableProvider provider;
+
+  const _HoursVestingTab({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final schedules = provider.hoursVestingSchedules;
+
+    if (schedules.isEmpty) {
+      return const EmptyState(
+        icon: Icons.access_time,
+        title: 'No hours-based vesting',
+        subtitle: 'Track equity vesting based on hours worked',
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...schedules.map(
+            (s) => _HoursVestingCard(schedule: s, provider: provider),
+          ),
+          const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+}
+
+class _HoursVestingCard extends StatelessWidget {
+  final HoursVestingSchedule schedule;
+  final CapTableProvider provider;
+
+  const _HoursVestingCard({required this.schedule, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final investor = provider.getInvestorById(schedule.investorId);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                CircleAvatar(
+                  child: Text(investor?.name.substring(0, 1) ?? '?'),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        investor?.name ?? 'Unknown',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        '${schedule.curveTypeDisplayName} curve',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline),
+                  onPressed: () => _showLogHoursDialog(context),
+                  tooltip: 'Log hours',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Progress
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${schedule.hoursLogged.toStringAsFixed(1)} / ${schedule.totalHoursCommitment} hours',
+                    ),
+                    Text(
+                      '${schedule.totalVestedPercent.toStringAsFixed(2)}% vested',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                  value: schedule.progress,
+                  minHeight: 8,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Info chips
+            Wrap(
+              spacing: 8,
+              children: [
+                Chip(
+                  avatar: const Icon(Icons.pie_chart, size: 18),
+                  label: Text('${schedule.totalEquityPercent}% total equity'),
+                ),
+                if (schedule.cliffHours != null)
+                  Chip(
+                    avatar: const Icon(Icons.vertical_align_bottom, size: 18),
+                    label: Text('${schedule.cliffHours}h cliff'),
+                  ),
+                if (schedule.bonusMilestones.isNotEmpty)
+                  Chip(
+                    avatar: const Icon(Icons.stars, size: 18),
+                    label: Text('${schedule.bonusMilestones.length} bonuses'),
+                  ),
+              ],
+            ),
+
+            // Recent logs
+            if (schedule.logEntries.isNotEmpty) ...[
+              const Divider(),
+              Text(
+                'Recent Activity',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+              const SizedBox(height: 8),
+              ...schedule.logEntries
+                  .take(3)
+                  .map(
+                    (e) => Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(Formatters.date(e.date)),
+                        Text('+${e.hours.toStringAsFixed(1)}h'),
+                      ],
+                    ),
+                  ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLogHoursDialog(BuildContext context) {
+    final hoursController = TextEditingController();
+    final notesController = TextEditingController();
+    DateTime date = DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Log Hours'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: hoursController,
+                decoration: const InputDecoration(
+                  labelText: 'Hours',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: notesController,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Date'),
+                trailing: TextButton(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: date,
+                      firstDate: schedule.startDate,
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setState(() => date = picked);
+                    }
+                  },
+                  child: Text(Formatters.date(date)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final hours = double.tryParse(hoursController.text);
+                if (hours != null && hours > 0) {
+                  provider.logHoursForSchedule(
+                    schedule.id,
+                    hours,
+                    date,
+                    notesController.text.isEmpty ? null : notesController.text,
+                  );
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Log'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Milestone dialog
+class _MilestoneDialog extends StatefulWidget {
+  final CapTableProvider provider;
+  final Milestone? milestone;
+
+  const _MilestoneDialog({required this.provider, this.milestone});
+
+  @override
+  State<_MilestoneDialog> createState() => _MilestoneDialogState();
+}
+
+class _MilestoneDialogState extends State<_MilestoneDialog> {
+  final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _equityController = TextEditingController();
+  final _targetController = TextEditingController();
+  String? _investorId;
+  MilestoneTriggerType _triggerType = MilestoneTriggerType.binary;
+  DateTime? _deadline;
+  bool _lapseOnMiss = false;
+
+  bool get isEditing => widget.milestone != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.milestone != null) {
+      final m = widget.milestone!;
+      _nameController.text = m.name;
+      _descriptionController.text = m.description ?? '';
+      _equityController.text = m.equityPercent.toString();
+      _targetController.text = m.targetValue?.toString() ?? '';
+      _investorId = m.investorId;
+      _triggerType = m.triggerType;
+      _deadline = m.deadline;
+      _lapseOnMiss = m.lapseOnMiss;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(isEditing ? 'Edit Milestone' : 'Add Milestone'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Milestone Name',
+                hintText: 'e.g., MVP Complete',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _investorId,
+              decoration: const InputDecoration(
+                labelText: 'Investor',
+                border: OutlineInputBorder(),
+              ),
+              items: widget.provider.investors.map((inv) {
+                return DropdownMenuItem(value: inv.id, child: Text(inv.name));
+              }).toList(),
+              onChanged: (v) => setState(() => _investorId = v),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _equityController,
+              decoration: const InputDecoration(
+                labelText: 'Equity %',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            SegmentedButton<MilestoneTriggerType>(
+              segments: const [
+                ButtonSegment(
+                  value: MilestoneTriggerType.binary,
+                  label: Text('Binary'),
+                ),
+                ButtonSegment(
+                  value: MilestoneTriggerType.graded,
+                  label: Text('Graded'),
+                ),
+              ],
+              selected: {_triggerType},
+              onSelectionChanged: (v) => setState(() => _triggerType = v.first),
+            ),
+            if (_triggerType == MilestoneTriggerType.graded) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _targetController,
+                decoration: const InputDecoration(
+                  labelText: 'Target Value',
+                  hintText: 'e.g., 250000 for \$250k ARR',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Deadline'),
+              trailing: TextButton(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate:
+                        _deadline ??
+                        DateTime.now().add(const Duration(days: 365)),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    setState(() => _deadline = picked);
+                  }
+                },
+                child: Text(
+                  _deadline != null ? Formatters.date(_deadline!) : 'None',
+                ),
+              ),
+            ),
+            if (_deadline != null)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Lapse if missed'),
+                value: _lapseOnMiss,
+                onChanged: (v) => setState(() => _lapseOnMiss = v ?? false),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        if (isEditing)
+          TextButton(
+            onPressed: () {
+              widget.provider.deleteMilestone(widget.milestone!.id);
+              Navigator.pop(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        FilledButton(
+          onPressed: _canSave() ? _save : null,
+          child: Text(isEditing ? 'Update' : 'Add'),
+        ),
+      ],
+    );
+  }
+
+  bool _canSave() {
+    return _nameController.text.isNotEmpty &&
+        _investorId != null &&
+        _equityController.text.isNotEmpty;
+  }
+
+  void _save() {
+    final milestone = Milestone(
+      id: widget.milestone?.id,
+      name: _nameController.text,
+      description: _descriptionController.text.isEmpty
+          ? null
+          : _descriptionController.text,
+      investorId: _investorId,
+      equityPercent: double.parse(_equityController.text),
+      triggerType: _triggerType,
+      targetValue:
+          _triggerType == MilestoneTriggerType.graded &&
+              _targetController.text.isNotEmpty
+          ? double.parse(_targetController.text)
+          : null,
+      deadline: _deadline,
+      lapseOnMiss: _lapseOnMiss,
+      isCompleted: widget.milestone?.isCompleted ?? false,
+      completedDate: widget.milestone?.completedDate,
+      isLapsed: widget.milestone?.isLapsed ?? false,
+    );
+
+    if (isEditing) {
+      widget.provider.updateMilestone(milestone);
+    } else {
+      widget.provider.addMilestone(milestone);
+    }
+
+    Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _equityController.dispose();
+    _targetController.dispose();
+    super.dispose();
+  }
+}
+
+// Hours vesting dialog
+class _HoursVestingDialog extends StatefulWidget {
+  final CapTableProvider provider;
+  final HoursVestingSchedule? schedule;
+
+  const _HoursVestingDialog({required this.provider, this.schedule});
+
+  @override
+  State<_HoursVestingDialog> createState() => _HoursVestingDialogState();
+}
+
+class _HoursVestingDialogState extends State<_HoursVestingDialog> {
+  String? _investorId;
+  String? _shareholdingId;
+  final _equityController = TextEditingController();
+  final _hoursController = TextEditingController();
+  final _cliffController = TextEditingController();
+  HoursVestingCurve _curveType = HoursVestingCurve.linear;
+  DateTime _startDate = DateTime.now();
+
+  bool get isEditing => widget.schedule != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.schedule != null) {
+      final s = widget.schedule!;
+      _investorId = s.investorId;
+      _shareholdingId = s.shareholdingId;
+      _equityController.text = s.totalEquityPercent.toString();
+      _hoursController.text = s.totalHoursCommitment.toString();
+      _cliffController.text = s.cliffHours?.toString() ?? '';
+      _curveType = s.curveType;
+      _startDate = s.startDate;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Get transactions for selected investor
+    final investorTransactions = _investorId != null
+        ? widget.provider.transactions
+              .where((t) => t.investorId == _investorId && t.isAcquisition)
+              .toList()
+        : <Transaction>[];
+
+    return AlertDialog(
+      title: Text(isEditing ? 'Edit Hours Schedule' : 'Add Hours Schedule'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _investorId,
+              decoration: const InputDecoration(
+                labelText: 'Investor',
+                border: OutlineInputBorder(),
+              ),
+              items: widget.provider.investors.map((inv) {
+                return DropdownMenuItem(value: inv.id, child: Text(inv.name));
+              }).toList(),
+              onChanged: (v) => setState(() {
+                _investorId = v;
+                _shareholdingId = null;
+              }),
+            ),
+            if (investorTransactions.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _shareholdingId,
+                decoration: const InputDecoration(
+                  labelText: 'Shareholding',
+                  border: OutlineInputBorder(),
+                ),
+                items: investorTransactions.map((t) {
+                  return DropdownMenuItem(
+                    value: t.id,
+                    child: Text(
+                      '${Formatters.number(t.numberOfShares)} shares (${Formatters.date(t.date)})',
+                    ),
+                  );
+                }).toList(),
+                onChanged: (v) => setState(() => _shareholdingId = v),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _equityController,
+                    decoration: const InputDecoration(
+                      labelText: 'Equity %',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _hoursController,
+                    decoration: const InputDecoration(
+                      labelText: 'Total Hours',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<HoursVestingCurve>(
+              initialValue: _curveType,
+              decoration: const InputDecoration(
+                labelText: 'Vesting Curve',
+                border: OutlineInputBorder(),
+              ),
+              items: HoursVestingCurve.values.map((c) {
+                return DropdownMenuItem(
+                  value: c,
+                  child: Text(_getCurveName(c)),
+                );
+              }).toList(),
+              onChanged: (v) => setState(() => _curveType = v!),
+            ),
+            if (_curveType == HoursVestingCurve.cliff) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _cliffController,
+                decoration: const InputDecoration(
+                  labelText: 'Cliff Hours',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Start Date'),
+              trailing: TextButton(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _startDate,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() => _startDate = picked);
+                  }
+                },
+                child: Text(Formatters.date(_startDate)),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        if (isEditing)
+          TextButton(
+            onPressed: () {
+              widget.provider.deleteHoursVestingSchedule(widget.schedule!.id);
+              Navigator.pop(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        FilledButton(
+          onPressed: _canSave() ? _save : null,
+          child: Text(isEditing ? 'Update' : 'Add'),
+        ),
+      ],
+    );
+  }
+
+  String _getCurveName(HoursVestingCurve curve) {
+    switch (curve) {
+      case HoursVestingCurve.linear:
+        return 'Linear';
+      case HoursVestingCurve.cliff:
+        return 'Cliff';
+      case HoursVestingCurve.progressive:
+        return 'Progressive (faster later)';
+      case HoursVestingCurve.frontLoaded:
+        return 'Front-loaded (faster early)';
+    }
+  }
+
+  bool _canSave() {
+    return _investorId != null &&
+        _shareholdingId != null &&
+        _equityController.text.isNotEmpty &&
+        _hoursController.text.isNotEmpty;
+  }
+
+  void _save() {
+    final schedule = HoursVestingSchedule(
+      id: widget.schedule?.id,
+      investorId: _investorId!,
+      shareholdingId: _shareholdingId!,
+      totalEquityPercent: double.parse(_equityController.text),
+      totalHoursCommitment: int.parse(_hoursController.text),
+      hoursLogged: widget.schedule?.hoursLogged ?? 0,
+      curveType: _curveType,
+      cliffHours:
+          _curveType == HoursVestingCurve.cliff &&
+              _cliffController.text.isNotEmpty
+          ? int.parse(_cliffController.text)
+          : null,
+      startDate: _startDate,
+      logEntries: widget.schedule?.logEntries ?? [],
+      bonusMilestones: widget.schedule?.bonusMilestones ?? [],
+    );
+
+    if (isEditing) {
+      widget.provider.updateHoursVestingSchedule(schedule);
+    } else {
+      widget.provider.addHoursVestingSchedule(schedule);
+    }
+
+    Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    _equityController.dispose();
+    _hoursController.dispose();
+    _cliffController.dispose();
+    super.dispose();
   }
 }
 

@@ -770,6 +770,8 @@ class _ExitedInvestorCard extends StatelessWidget {
         return 'Grant';
       case TransactionType.optionExercise:
         return 'Option Exercise';
+      case TransactionType.conversion:
+        return 'Convertible Conversion';
     }
   }
 }
@@ -1015,6 +1017,8 @@ class _PartialSellerCard extends StatelessWidget {
         return 'Grant';
       case TransactionType.optionExercise:
         return 'Option Exercise';
+      case TransactionType.conversion:
+        return 'Convertible Conversion';
     }
   }
 }
