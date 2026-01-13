@@ -73,8 +73,8 @@ class Milestone {
   /// The investor/shareholder this milestone applies to
   final String? investorId;
 
-  /// The shareholding/transaction this milestone is linked to
-  final String? shareholdingId;
+  /// The transaction this milestone is linked to
+  final String? transactionId;
 
   /// Order for display/priority
   final int order;
@@ -100,7 +100,7 @@ class Milestone {
     this.minValuation,
     this.maxValuation,
     this.investorId,
-    this.shareholdingId,
+    this.transactionId,
     this.order = 0,
     this.notes,
   }) : id = id ?? const Uuid().v4();
@@ -180,7 +180,7 @@ class Milestone {
     'minValuation': minValuation,
     'maxValuation': maxValuation,
     'investorId': investorId,
-    'shareholdingId': shareholdingId,
+    'transactionId': transactionId,
     'order': order,
     'notes': notes,
   };
@@ -207,7 +207,7 @@ class Milestone {
     minValuation: json['minValuation']?.toDouble(),
     maxValuation: json['maxValuation']?.toDouble(),
     investorId: json['investorId'],
-    shareholdingId: json['shareholdingId'],
+    transactionId: json['transactionId'] ?? json['shareholdingId'],
     order: json['order'] ?? 0,
     notes: json['notes'],
   );
@@ -229,7 +229,7 @@ class Milestone {
     double? minValuation,
     double? maxValuation,
     String? investorId,
-    String? shareholdingId,
+    String? transactionId,
     int? order,
     String? notes,
   }) {
@@ -251,7 +251,7 @@ class Milestone {
       minValuation: minValuation ?? this.minValuation,
       maxValuation: maxValuation ?? this.maxValuation,
       investorId: investorId ?? this.investorId,
-      shareholdingId: shareholdingId ?? this.shareholdingId,
+      transactionId: transactionId ?? this.transactionId,
       order: order ?? this.order,
       notes: notes ?? this.notes,
     );

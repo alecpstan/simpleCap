@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/investment_round.dart';
 import '../models/transaction.dart';
+import '../models/convertible_instrument.dart';
+import '../models/share_class.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/avatars.dart';
@@ -115,6 +117,15 @@ class RoundsPage extends StatelessWidget {
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
+                    if (provider.outstandingConvertibles.isNotEmpty)
+                      const PopupMenuItem(
+                        value: 'convert_notes',
+                        child: ListTile(
+                          leading: Icon(Icons.swap_horiz),
+                          title: Text('Convert SAFE/Notes'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                     const PopupMenuItem(
                       value: 'edit',
                       child: ListTile(
@@ -139,6 +150,9 @@ class RoundsPage extends StatelessWidget {
                     switch (value) {
                       case 'add_investor':
                         _showAddInvestorToRoundDialog(context, provider, round);
+                        break;
+                      case 'convert_notes':
+                        _showConvertNotesDialog(context, provider, round);
                         break;
                       case 'edit':
                         _showRoundDialog(context, provider, round: round);
@@ -221,15 +235,6 @@ class RoundsPage extends StatelessWidget {
                     ],
                   ),
                 ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: OutlinedButton.icon(
-                  onPressed: () =>
-                      _showAddInvestorToRoundDialog(context, provider, round),
-                  icon: const Icon(Icons.person_add),
-                  label: const Text('Add Investor to Round'),
-                ),
-              ),
             ],
           ),
         );
@@ -678,6 +683,323 @@ class RoundsPage extends StatelessWidget {
 
     if (confirmed) {
       await provider.deleteInvestment(transaction.id);
+    }
+  }
+
+  Future<void> _showConvertNotesDialog(
+    BuildContext context,
+    CapTableProvider provider,
+    InvestmentRound round,
+  ) async {
+    final outstanding = provider.outstandingConvertibles;
+    if (outstanding.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No outstanding convertibles to convert')),
+      );
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) => _ConvertNotesDialog(
+        provider: provider,
+        round: round,
+        convertibles: outstanding,
+      ),
+    );
+  }
+}
+
+/// Dialog for batch converting SAFEs and Notes at a round
+class _ConvertNotesDialog extends StatefulWidget {
+  final CapTableProvider provider;
+  final InvestmentRound round;
+  final List<ConvertibleInstrument> convertibles;
+
+  const _ConvertNotesDialog({
+    required this.provider,
+    required this.round,
+    required this.convertibles,
+  });
+
+  @override
+  State<_ConvertNotesDialog> createState() => _ConvertNotesDialogState();
+}
+
+class _ConvertNotesDialogState extends State<_ConvertNotesDialog> {
+  // Map of convertible ID to selected share class ID (null = don't convert)
+  final Map<String, String?> _selections = {};
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize all to "None" (not selected for conversion)
+    for (final c in widget.convertibles) {
+      _selections[c.id] = null;
+    }
+  }
+
+  int get selectedCount => _selections.values.where((v) => v != null).length;
+
+  @override
+  Widget build(BuildContext context) {
+    final shareClasses = widget.provider.shareClasses
+        .where((sc) => sc.type != ShareClassType.esop)
+        .toList();
+
+    final issuedBefore = widget.provider.getIssuedSharesBeforeRound(
+      widget.round.id,
+    );
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.swap_horiz, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Convert SAFE/Notes in ${widget.round.name}')),
+        ],
+      ),
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width > 600 ? 550 : double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Select a share class to convert each instrument. '
+                      'Conversion uses the round date (${Formatters.date(widget.round.date)}) '
+                      'and pre-money valuation.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: widget.convertibles.map((convertible) {
+                    final investor = widget.provider.getInvestorById(
+                      convertible.investorId,
+                    );
+
+                    // Calculate estimated shares for preview
+                    final selectedClassId = _selections[convertible.id];
+                    int? estimatedShares;
+                    if (selectedClassId != null &&
+                        issuedBefore > 0 &&
+                        widget.round.preMoneyValuation > 0) {
+                      estimatedShares = convertible.calculateConversionShares(
+                        roundPreMoney: widget.round.preMoneyValuation,
+                        issuedSharesBeforeRound: issuedBefore,
+                      );
+                    }
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor:
+                                      convertible.type == ConvertibleType.safe
+                                      ? Colors.purple
+                                      : Colors.teal,
+                                  child: Icon(
+                                    convertible.type == ConvertibleType.safe
+                                        ? Icons.flash_on
+                                        : Icons.description,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        investor?.name ?? 'Unknown',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${convertible.typeDisplayName} • '
+                                        '${Formatters.currency(convertible.convertibleAmount)}',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (estimatedShares != null)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '≈ ${Formatters.number(estimatedShares)} shares',
+                                      style: const TextStyle(
+                                        color: Colors.green,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                // Terms chips
+                                Expanded(
+                                  child: Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    children: [
+                                      if (convertible.valuationCap != null)
+                                        Chip(
+                                          label: Text(
+                                            'Cap: ${Formatters.compactCurrency(convertible.valuationCap!)}',
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                      if (convertible.discountPercent != null)
+                                        Chip(
+                                          label: Text(
+                                            '${(convertible.discountPercent! * 100).toStringAsFixed(0)}% discount',
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                // Share class dropdown
+                                SizedBox(
+                                  width: 150,
+                                  child: DropdownButtonFormField<String?>(
+                                    initialValue: _selections[convertible.id],
+                                    decoration: const InputDecoration(
+                                      labelText: 'Share Class',
+                                      border: OutlineInputBorder(),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      isDense: true,
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem<String?>(
+                                        value: null,
+                                        child: Text('None'),
+                                      ),
+                                      ...shareClasses.map((sc) {
+                                        return DropdownMenuItem(
+                                          value: sc.id,
+                                          child: Text(sc.name),
+                                        );
+                                      }),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _selections[convertible.id] = value;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: selectedCount > 0 ? _convertSelected : null,
+          child: Text(
+            selectedCount > 0
+                ? 'Convert $selectedCount Instrument${selectedCount > 1 ? 's' : ''}'
+                : 'Select instruments to convert',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _convertSelected() async {
+    int successCount = 0;
+
+    for (final entry in _selections.entries) {
+      final shareClassId = entry.value;
+      if (shareClassId == null) continue;
+
+      try {
+        await widget.provider.convertConvertible(
+          entry.key,
+          shareClassId,
+          widget.round.id,
+          widget.round.date,
+        );
+        successCount++;
+      } catch (e) {
+        debugPrint('Error converting ${entry.key}: $e');
+      }
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Converted $successCount instrument${successCount > 1 ? 's' : ''}',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 }

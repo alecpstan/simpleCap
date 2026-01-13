@@ -88,7 +88,7 @@ class ResultChip extends StatelessWidget {
             label,
             style: Theme.of(
               context,
-            ).textTheme.bodySmall?.copyWith(color: color),
+            ).textTheme.labelSmall?.copyWith(color: color),
           ),
           Text(
             value,
@@ -96,6 +96,61 @@ class ResultChip extends StatelessWidget {
               color: color,
               fontWeight: FontWeight.bold,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A small term/tag chip for displaying attribute labels
+class TermChip extends StatelessWidget {
+  final String label;
+
+  const TermChip({super.key, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+    );
+  }
+}
+
+/// A row displaying a label-value pair, useful for summary dialogs
+class SummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final TextStyle? valueStyle;
+
+  const SummaryRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.valueStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
+          Text(
+            value,
+            style: valueStyle ?? Theme.of(context).textTheme.bodyMedium,
           ),
         ],
       ),

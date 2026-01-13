@@ -701,7 +701,7 @@ class _MilestoneCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: shareClassId,
+                initialValue: shareClassId,
                 decoration: const InputDecoration(
                   labelText: 'Share Class',
                   border: OutlineInputBorder(),
@@ -1516,7 +1516,7 @@ class _HoursVestingDialog extends StatefulWidget {
 
 class _HoursVestingDialogState extends State<_HoursVestingDialog> {
   String? _investorId;
-  String? _shareholdingId;
+  String? _transactionId;
   final _equityController = TextEditingController();
   final _hoursController = TextEditingController();
   final _cliffController = TextEditingController();
@@ -1531,7 +1531,7 @@ class _HoursVestingDialogState extends State<_HoursVestingDialog> {
     if (widget.schedule != null) {
       final s = widget.schedule!;
       _investorId = s.investorId;
-      _shareholdingId = s.shareholdingId;
+      _transactionId = s.transactionId;
       _equityController.text = s.totalEquityPercent.toString();
       _hoursController.text = s.totalHoursCommitment.toString();
       _cliffController.text = s.cliffHours?.toString() ?? '';
@@ -1567,13 +1567,13 @@ class _HoursVestingDialogState extends State<_HoursVestingDialog> {
               }).toList(),
               onChanged: (v) => setState(() {
                 _investorId = v;
-                _shareholdingId = null;
+                _transactionId = null;
               }),
             ),
             if (investorTransactions.isNotEmpty) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: _shareholdingId,
+                initialValue: _transactionId,
                 decoration: const InputDecoration(
                   labelText: 'Shareholding',
                   border: OutlineInputBorder(),
@@ -1586,7 +1586,7 @@ class _HoursVestingDialogState extends State<_HoursVestingDialog> {
                     ),
                   );
                 }).toList(),
-                onChanged: (v) => setState(() => _shareholdingId = v),
+                onChanged: (v) => setState(() => _transactionId = v),
               ),
             ],
             const SizedBox(height: 16),
@@ -1699,7 +1699,7 @@ class _HoursVestingDialogState extends State<_HoursVestingDialog> {
 
   bool _canSave() {
     return _investorId != null &&
-        _shareholdingId != null &&
+        _transactionId != null &&
         _equityController.text.isNotEmpty &&
         _hoursController.text.isNotEmpty;
   }
@@ -1708,7 +1708,7 @@ class _HoursVestingDialogState extends State<_HoursVestingDialog> {
     final schedule = HoursVestingSchedule(
       id: widget.schedule?.id,
       investorId: _investorId!,
-      shareholdingId: _shareholdingId!,
+      transactionId: _transactionId!,
       totalEquityPercent: double.parse(_equityController.text),
       totalHoursCommitment: int.parse(_hoursController.text),
       hoursLogged: widget.schedule?.hoursLogged ?? 0,
@@ -1760,7 +1760,7 @@ class _VestingSummaryCard extends StatelessWidget {
     for (final schedule in vestingSchedules) {
       try {
         final transaction = provider.transactions.firstWhere(
-          (t) => t.id == schedule.shareholdingId,
+          (t) => t.id == schedule.transactionId,
         );
         totalSharesUnderVesting += transaction.numberOfShares;
         final vested =
@@ -1849,7 +1849,7 @@ class _VestingCard extends StatelessWidget {
     Investor? investor;
     try {
       transaction = provider.transactions.firstWhere(
-        (t) => t.id == schedule.shareholdingId,
+        (t) => t.id == schedule.transactionId,
       );
       investor = provider.getInvestorById(transaction.investorId);
     } catch (_) {}
@@ -2343,7 +2343,7 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
     super.initState();
     final existing = widget.existingSchedule;
     _selectedTransactionId =
-        existing?.shareholdingId ??
+        existing?.transactionId ??
         (widget.transactions.isNotEmpty ? widget.transactions.first.id : null);
     _vestingType = existing?.type ?? VestingType.timeBased;
     _startDate = existing?.startDate ?? DateTime.now();
@@ -2658,7 +2658,7 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
 
     final schedule = VestingSchedule(
       id: widget.existingSchedule?.id,
-      shareholdingId: _selectedTransactionId!,
+      transactionId: _selectedTransactionId!,
       type: _vestingType,
       startDate: _startDate,
       vestingPeriodMonths: _vestingPeriodMonths,

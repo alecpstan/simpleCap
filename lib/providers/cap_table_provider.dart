@@ -424,7 +424,7 @@ class CapTableProvider extends ChangeNotifier {
         .map((t) => t.id)
         .toSet();
     _vestingSchedules.removeWhere(
-      (v) => investorTransactionIds.contains(v.shareholdingId),
+      (v) => investorTransactionIds.contains(v.transactionId),
     );
     await _save();
     notifyListeners();
@@ -508,7 +508,7 @@ class CapTableProvider extends ChangeNotifier {
     _transactions.removeWhere((t) => t.roundId == id);
     // Remove vesting schedules linked to these transactions
     _vestingSchedules.removeWhere(
-      (v) => roundTransactionIds.contains(v.shareholdingId),
+      (v) => roundTransactionIds.contains(v.transactionId),
     );
     await _save();
     notifyListeners();
@@ -545,7 +545,7 @@ class CapTableProvider extends ChangeNotifier {
   Future<void> deleteInvestment(String transactionId) async {
     _transactions.removeWhere((t) => t.id == transactionId);
     // Also remove any vesting schedules linked to this transaction
-    _vestingSchedules.removeWhere((v) => v.shareholdingId == transactionId);
+    _vestingSchedules.removeWhere((v) => v.transactionId == transactionId);
     await _save();
     notifyListeners();
   }
@@ -669,7 +669,7 @@ class CapTableProvider extends ChangeNotifier {
   VestingSchedule? getVestingByTransaction(String transactionId) {
     try {
       return _vestingSchedules.firstWhere(
-        (v) => v.shareholdingId == transactionId,
+        (v) => v.transactionId == transactionId,
       );
     } catch (_) {
       return null;
@@ -701,7 +701,7 @@ class CapTableProvider extends ChangeNotifier {
         .map((t) => t.id)
         .toSet();
     return _vestingSchedules
-        .where((v) => investorTransactionIds.contains(v.shareholdingId))
+        .where((v) => investorTransactionIds.contains(v.transactionId))
         .toList();
   }
 

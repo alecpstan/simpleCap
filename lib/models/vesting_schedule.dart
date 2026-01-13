@@ -39,7 +39,7 @@ enum LapseRule {
 
 class VestingSchedule {
   final String id;
-  String shareholdingId; // Links to a specific shareholding
+  String transactionId; // Links to a specific transaction
   VestingType type;
   DateTime startDate;
   int vestingPeriodMonths; // Total vesting period (e.g., 48 for 4 years)
@@ -83,7 +83,7 @@ class VestingSchedule {
 
   VestingSchedule({
     String? id,
-    required this.shareholdingId,
+    required this.transactionId,
     this.type = VestingType.timeBased,
     required this.startDate,
     this.vestingPeriodMonths = 48,
@@ -298,7 +298,7 @@ class VestingSchedule {
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'shareholdingId': shareholdingId,
+    'transactionId': transactionId,
     'type': type.index,
     'startDate': startDate.toIso8601String(),
     'vestingPeriodMonths': vestingPeriodMonths,
@@ -324,7 +324,7 @@ class VestingSchedule {
   factory VestingSchedule.fromJson(Map<String, dynamic> json) =>
       VestingSchedule(
         id: json['id'],
-        shareholdingId: json['shareholdingId'],
+        transactionId: json['transactionId'] ?? json['shareholdingId'],
         type: VestingType.values[json['type'] ?? 0],
         startDate: DateTime.parse(json['startDate']),
         vestingPeriodMonths: json['vestingPeriodMonths'] ?? 48,
@@ -355,7 +355,7 @@ class VestingSchedule {
       );
 
   VestingSchedule copyWith({
-    String? shareholdingId,
+    String? transactionId,
     VestingType? type,
     DateTime? startDate,
     int? vestingPeriodMonths,
@@ -377,7 +377,7 @@ class VestingSchedule {
   }) {
     return VestingSchedule(
       id: id,
-      shareholdingId: shareholdingId ?? this.shareholdingId,
+      transactionId: transactionId ?? this.transactionId,
       type: type ?? this.type,
       startDate: startDate ?? this.startDate,
       vestingPeriodMonths: vestingPeriodMonths ?? this.vestingPeriodMonths,

@@ -5,7 +5,9 @@ import '../providers/cap_table_provider.dart';
 import '../utils/helpers.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/section_card.dart';
+import '../widgets/info_widgets.dart';
 import '../widgets/help_icon.dart';
+import '../widgets/dialogs.dart';
 
 class ConvertiblesPage extends StatelessWidget {
   const ConvertiblesPage({super.key});
@@ -92,17 +94,17 @@ class ConvertiblesPage extends StatelessWidget {
       spacing: 12,
       runSpacing: 12,
       children: [
-        _SummaryChip(
+        ResultChip(
           label: 'Outstanding Principal',
           value: Formatters.compactCurrency(provider.totalConvertiblePrincipal),
           color: Colors.blue,
         ),
-        _SummaryChip(
+        ResultChip(
           label: 'Incl. Interest',
           value: Formatters.compactCurrency(provider.totalConvertibleAmount),
           color: Colors.orange,
         ),
-        _SummaryChip(
+        ResultChip(
           label: 'SAFEs',
           value: outstanding
               .where((c) => c.type == ConvertibleType.safe)
@@ -110,7 +112,7 @@ class ConvertiblesPage extends StatelessWidget {
               .toString(),
           color: Colors.purple,
         ),
-        _SummaryChip(
+        ResultChip(
           label: 'Notes',
           value: outstanding
               .where((c) => c.type == ConvertibleType.convertibleNote)
@@ -154,22 +156,22 @@ class ConvertiblesPage extends StatelessWidget {
                 spacing: 8,
                 children: [
                   if (c.valuationCap != null)
-                    _TermChip(
+                    TermChip(
                       label:
                           'Cap: ${Formatters.compactCurrency(c.valuationCap!)}',
                     ),
                   if (c.discountPercent != null)
-                    _TermChip(
+                    TermChip(
                       label:
                           '${(c.discountPercent! * 100).toStringAsFixed(0)}% Discount',
                     ),
                   if (c.interestRate != null)
-                    _TermChip(
+                    TermChip(
                       label:
                           '${(c.interestRate! * 100).toStringAsFixed(1)}% Interest',
                     ),
-                  if (c.hasMFN) const _TermChip(label: 'MFN'),
-                  if (c.hasProRata) const _TermChip(label: 'Pro-rata'),
+                  if (c.hasMFN) const TermChip(label: 'MFN'),
+                  if (c.hasProRata) const TermChip(label: 'Pro-rata'),
                 ],
               ),
             ],
@@ -313,30 +315,15 @@ class ConvertiblesPage extends StatelessWidget {
     BuildContext context,
     CapTableProvider provider,
     ConvertibleInstrument convertible,
-  ) {
-    showDialog(
+  ) async {
+    final confirmed = await showConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Convertible?'),
-        content: const Text(
-          'This will permanently remove this convertible instrument.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              provider.deleteConvertible(convertible.id);
-              Navigator.pop(context);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      title: 'Delete Convertible?',
+      message: 'This will permanently remove this convertible instrument.',
     );
+    if (confirmed) {
+      provider.deleteConvertible(convertible.id);
+    }
   }
 
   void _showConversionSummaryDialog(
@@ -367,47 +354,44 @@ class ConvertiblesPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _SummaryRow(
-                label: 'Investor',
-                value: investor?.name ?? 'Unknown',
-              ),
-              _SummaryRow(
+              SummaryRow(label: 'Investor', value: investor?.name ?? 'Unknown'),
+              SummaryRow(
                 label: 'Instrument',
                 value: convertible.typeDisplayName,
               ),
-              _SummaryRow(
+              SummaryRow(
                 label: 'Principal',
                 value: Formatters.currency(convertible.principalAmount),
               ),
               if (convertible.type == ConvertibleType.convertibleNote &&
                   convertible.accruedInterest > 0)
-                _SummaryRow(
+                SummaryRow(
                   label: 'Accrued Interest',
                   value: Formatters.currency(convertible.accruedInterest),
                 ),
-              _SummaryRow(
+              SummaryRow(
                 label: 'Total Converted',
                 value: Formatters.currency(convertible.convertibleAmount),
               ),
               const Divider(height: 24),
-              _SummaryRow(
+              SummaryRow(
                 label: 'Converted In',
                 value: round?.name ?? 'Unknown Round',
               ),
               if (convertible.conversionDate != null)
-                _SummaryRow(
+                SummaryRow(
                   label: 'Conversion Date',
                   value: Formatters.date(convertible.conversionDate!),
                 ),
               if (convertible.conversionPricePerShare != null)
-                _SummaryRow(
+                SummaryRow(
                   label: 'Conversion Price',
                   value: Formatters.currency(
                     convertible.conversionPricePerShare!,
                   ),
                 ),
               if (convertible.conversionShares != null)
-                _SummaryRow(
+                SummaryRow(
                   label: 'Shares Received',
                   value: Formatters.number(convertible.conversionShares!),
                   valueStyle: const TextStyle(
@@ -469,100 +453,6 @@ class ConvertiblesPage extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final TextStyle? valueStyle;
-
-  const _SummaryRow({
-    required this.label,
-    required this.value,
-    this.valueStyle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
-            ),
-          ),
-          Text(
-            value,
-            style: valueStyle ?? Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-
-  const _SummaryChip({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: color),
-          ),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: color,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TermChip extends StatelessWidget {
-  final String label;
-
-  const _TermChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
     );
   }
 }

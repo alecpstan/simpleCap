@@ -233,7 +233,7 @@ class _EventsTimelinePageState extends State<EventsTimelinePage> {
           color: schedule.cliffPassed ? Colors.blue : Colors.grey,
           metadata: {
             'scheduleId': schedule.id,
-            'shareholdingId': schedule.shareholdingId,
+            'transactionId': schedule.transactionId,
             'cliffPassed': schedule.cliffPassed,
           },
         ),

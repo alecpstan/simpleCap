@@ -56,8 +56,8 @@ class HoursBonusMilestone {
 class HoursVestingSchedule {
   final String id;
 
-  /// The shareholding/transaction this vesting applies to
-  final String shareholdingId;
+  /// The transaction this vesting applies to
+  final String transactionId;
 
   /// The investor this applies to
   final String investorId;
@@ -97,7 +97,7 @@ class HoursVestingSchedule {
 
   HoursVestingSchedule({
     String? id,
-    required this.shareholdingId,
+    required this.transactionId,
     required this.investorId,
     required this.totalEquityPercent,
     required this.totalHoursCommitment,
@@ -209,7 +209,7 @@ class HoursVestingSchedule {
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'shareholdingId': shareholdingId,
+    'transactionId': transactionId,
     'investorId': investorId,
     'totalEquityPercent': totalEquityPercent,
     'totalHoursCommitment': totalHoursCommitment,
@@ -227,7 +227,7 @@ class HoursVestingSchedule {
   factory HoursVestingSchedule.fromJson(Map<String, dynamic> json) =>
       HoursVestingSchedule(
         id: json['id'],
-        shareholdingId: json['shareholdingId'],
+        transactionId: json['transactionId'] ?? json['shareholdingId'],
         investorId: json['investorId'],
         totalEquityPercent: (json['totalEquityPercent'] ?? 0).toDouble(),
         totalHoursCommitment: json['totalHoursCommitment'] ?? 0,
@@ -253,7 +253,7 @@ class HoursVestingSchedule {
       );
 
   HoursVestingSchedule copyWith({
-    String? shareholdingId,
+    String? transactionId,
     String? investorId,
     double? totalEquityPercent,
     int? totalHoursCommitment,
@@ -269,7 +269,7 @@ class HoursVestingSchedule {
   }) {
     return HoursVestingSchedule(
       id: id,
-      shareholdingId: shareholdingId ?? this.shareholdingId,
+      transactionId: transactionId ?? this.transactionId,
       investorId: investorId ?? this.investorId,
       totalEquityPercent: totalEquityPercent ?? this.totalEquityPercent,
       totalHoursCommitment: totalHoursCommitment ?? this.totalHoursCommitment,
