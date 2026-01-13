@@ -164,6 +164,35 @@ class ShareValuePage extends StatelessWidget {
                   );
                 }),
               ],
+
+              // Partial Sellers Section (investors who have sold some shares but still hold some)
+              if (provider.investorsWithSales
+                  .where((i) => provider.getCurrentSharesByInvestor(i.id) > 0)
+                  .isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Partial Sales',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Investors who have sold some shares',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...provider.investorsWithSales
+                    .where((i) => provider.getCurrentSharesByInvestor(i.id) > 0)
+                    .map((investor) {
+                      return _PartialSellerCard(
+                        investor: investor,
+                        provider: provider,
+                      );
+                    }),
+              ],
             ],
           ),
         );
@@ -181,14 +210,17 @@ class _ShareholderValueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final currentShares = provider.getCurrentSharesByInvestor(investor.id);
     final shareValue = provider.getShareValueByInvestor(investor.id);
-    final shares = provider.getSharesByInvestor(investor.id);
+    final sharesSold = provider.getSharesSoldByInvestor(investor.id);
     final ownership = provider.getOwnershipPercentage(investor.id);
     final invested = provider.getInvestmentByInvestor(investor.id);
     final shareholdings = provider.getShareholdingsByInvestor(investor.id);
+    final saleProceeds = provider.getSaleProceedsByInvestor(investor.id);
 
-    // Calculate gain/loss
-    final gain = shareValue - invested;
+    // Calculate gain/loss (current value + sale proceeds - invested)
+    final totalValue = shareValue + saleProceeds;
+    final gain = totalValue - invested;
     final gainPercent = invested > 0 ? (gain / invested) * 100 : 0.0;
     final isPositive = gain >= 0;
 
@@ -249,8 +281,8 @@ class _ShareholderValueCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _StatItem(
-                        label: 'Total Shares',
-                        value: Formatters.number(shares),
+                        label: 'Current Shares',
+                        value: Formatters.number(currentShares),
                       ),
                     ),
                     Expanded(
@@ -273,7 +305,7 @@ class _ShareholderValueCard extends StatelessWidget {
                     ),
                     Expanded(
                       child: _StatItem(
-                        label: 'Gain/Loss',
+                        label: 'Total Gain/Loss',
                         value:
                             '${isPositive ? '+' : ''}${Formatters.currency(gain)}',
                         valueColor: isPositive ? Colors.green : Colors.red,
@@ -281,6 +313,28 @@ class _ShareholderValueCard extends StatelessWidget {
                     ),
                   ],
                 ),
+
+                // Show sale info if any shares were sold
+                if (sharesSold > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _StatItem(
+                          label: 'Shares Sold',
+                          value: Formatters.number(sharesSold),
+                        ),
+                      ),
+                      Expanded(
+                        child: _StatItem(
+                          label: 'Sale Proceeds',
+                          value: Formatters.currency(saleProceeds),
+                          valueColor: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
 
                 if (shareholdings.isNotEmpty) ...[
                   const SizedBox(height: 16),
@@ -594,6 +648,247 @@ class _ExitedInvestorCard extends StatelessWidget {
                         value:
                             '${isPositive ? '+' : ''}${Formatters.currency(realizedProfit)}',
                         valueColor: isPositive ? Colors.green : Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Sale transactions
+                if (sales.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Sale Transactions',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...sales.map((sale) {
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _getSaleTypeLabel(sale.type),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                Formatters.date(sale.saleDate),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.outline,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Text(
+                                '${Formatters.number(sale.numberOfShares)} shares',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              Text(
+                                ' @ ${Formatters.currency(sale.pricePerShare)}/share',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.outline,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Total: ${Formatters.currency(sale.totalProceeds)}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green,
+                            ),
+                          ),
+                          if (sale.buyerInvestorId != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Buyer: ${provider.getInvestorById(sale.buyerInvestorId!)?.name ?? 'Unknown'}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.outline,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getSaleTypeLabel(SaleType type) {
+    switch (type) {
+      case SaleType.secondary:
+        return 'Secondary Sale';
+      case SaleType.buyback:
+        return 'Company Buyback';
+      case SaleType.exit:
+        return 'Full Exit';
+      case SaleType.partial:
+        return 'Partial Sale';
+    }
+  }
+}
+
+/// Card for investors who have sold some but not all shares
+class _PartialSellerCard extends StatelessWidget {
+  final dynamic investor;
+  final CapTableProvider provider;
+
+  const _PartialSellerCard({required this.investor, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final currentShares = provider.getCurrentSharesByInvestor(investor.id);
+    final totalAcquired = provider.getSharesByInvestor(investor.id);
+    final sharesSold = provider.getSharesSoldByInvestor(investor.id);
+    final proceeds = provider.getSaleProceedsByInvestor(investor.id);
+    final currentValue = currentShares * provider.latestSharePrice;
+    final realizedProfit = provider.getRealizedProfitByInvestor(investor.id);
+    final sales = provider.getSalesByInvestor(investor.id);
+
+    // Calculate percentage sold
+    final percentSold = totalAcquired > 0
+        ? (sharesSold / totalAcquired) * 100
+        : 0.0;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        leading: Stack(
+          children: [
+            InvestorAvatar(name: investor.name, type: investor.type),
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.swap_horiz,
+                  size: 14,
+                  color: theme.colorScheme.tertiary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        title: Row(
+          children: [
+            Text(
+              investor.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.tertiaryContainer,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${Formatters.percent(percentSold)} SOLD',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onTertiaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Text(
+          'Sold ${Formatters.number(sharesSold)} shares for ${Formatters.currency(proceeds)}',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Divider(),
+                const SizedBox(height: 8),
+
+                // Summary stats
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatItem(
+                        label: 'Original Shares',
+                        value: Formatters.number(totalAcquired),
+                      ),
+                    ),
+                    Expanded(
+                      child: _StatItem(
+                        label: 'Shares Sold',
+                        value: Formatters.number(sharesSold),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatItem(
+                        label: 'Current Shares',
+                        value: Formatters.number(currentShares),
+                        valueColor: theme.colorScheme.primary,
+                      ),
+                    ),
+                    Expanded(
+                      child: _StatItem(
+                        label: 'Sale Proceeds',
+                        value: Formatters.currency(proceeds),
+                        valueColor: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatItem(
+                        label: 'Current Value',
+                        value: Formatters.currency(currentValue),
+                      ),
+                    ),
+                    Expanded(
+                      child: _StatItem(
+                        label: 'Realized Profit',
+                        value:
+                            '${realizedProfit >= 0 ? '+' : ''}${Formatters.currency(realizedProfit)}',
+                        valueColor: realizedProfit >= 0
+                            ? Colors.green
+                            : Colors.red,
                       ),
                     ),
                   ],

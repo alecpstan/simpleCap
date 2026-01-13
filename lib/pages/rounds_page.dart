@@ -41,7 +41,9 @@ class RoundsPage extends StatelessWidget {
   }
 
   Widget _buildRoundsList(BuildContext context, CapTableProvider provider) {
-    final sortedRounds = provider.rounds;
+    // Sort rounds by date, oldest first
+    final sortedRounds = List<InvestmentRound>.from(provider.rounds)
+      ..sort((a, b) => a.date.compareTo(b.date));
 
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 80),

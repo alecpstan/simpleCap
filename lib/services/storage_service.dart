@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/investor.dart';
 import '../models/share_class.dart';
@@ -7,6 +8,7 @@ import '../models/investment_round.dart';
 import '../models/shareholding.dart';
 import '../models/vesting_schedule.dart';
 import '../models/share_sale.dart';
+import '../models/transaction.dart';
 
 class StorageService {
   static const String _fileName = 'cap_table_data.json';
@@ -28,9 +30,15 @@ class StorageService {
         final contents = await file.readAsString();
         return jsonDecode(contents) as Map<String, dynamic>;
       }
-    } catch (e) {
-      // Return empty data on error
+    } catch (e, stack) {
+      // Log error in debug mode
+      debugPrint('StorageService.loadData error: $e');
+      debugPrint('Stack trace: $stack');
     }
+    return _defaultData();
+  }
+
+  Map<String, dynamic> _defaultData() {
     return {
       'investors': [],
       'shareClasses': [],
@@ -38,8 +46,8 @@ class StorageService {
       'shareholdings': [],
       'vestingSchedules': [],
       'shareSales': [],
+      'transactions': [],
       'companyName': 'My Company Pty Ltd',
-      'totalAuthorisedShares': 10000000,
       'tableColumnWidths': <String, double>{},
     };
   }
@@ -51,8 +59,8 @@ class StorageService {
     required List<Shareholding> shareholdings,
     required List<VestingSchedule> vestingSchedules,
     required List<ShareSale> shareSales,
+    required List<Transaction> transactions,
     required String companyName,
-    required int totalAuthorisedShares,
     Map<String, double> tableColumnWidths = const {},
   }) async {
     final file = await _localFile;
@@ -63,8 +71,8 @@ class StorageService {
       'shareholdings': shareholdings.map((e) => e.toJson()).toList(),
       'vestingSchedules': vestingSchedules.map((e) => e.toJson()).toList(),
       'shareSales': shareSales.map((e) => e.toJson()).toList(),
+      'transactions': transactions.map((e) => e.toJson()).toList(),
       'companyName': companyName,
-      'totalAuthorisedShares': totalAuthorisedShares,
       'tableColumnWidths': tableColumnWidths,
     };
     await file.writeAsString(jsonEncode(data));

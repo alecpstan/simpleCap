@@ -5,6 +5,7 @@ import '../models/investment_round.dart';
 import '../models/shareholding.dart';
 import '../models/vesting_schedule.dart';
 import '../models/share_sale.dart';
+import '../models/transaction.dart';
 import '../services/storage_service.dart';
 
 class CapTableProvider extends ChangeNotifier {
@@ -16,8 +17,8 @@ class CapTableProvider extends ChangeNotifier {
   List<Shareholding> _shareholdings = [];
   List<VestingSchedule> _vestingSchedules = [];
   List<ShareSale> _shareSales = [];
+  List<Transaction> _transactions = [];
   String _companyName = 'My Company Pty Ltd';
-  int _totalAuthorisedShares = 10000000;
   bool _isLoading = true;
   Map<String, double> _tableColumnWidths = {};
 
@@ -30,23 +31,47 @@ class CapTableProvider extends ChangeNotifier {
   List<VestingSchedule> get vestingSchedules =>
       List.unmodifiable(_vestingSchedules);
   List<ShareSale> get shareSales => List.unmodifiable(_shareSales);
+  List<Transaction> get transactions => List.unmodifiable(_transactions);
+
+  /// Returns all transactions sorted chronologically
+  List<Transaction> get sortedTransactions {
+    final sorted = List<Transaction>.from(_transactions);
+    sorted.sort((a, b) => a.date.compareTo(b.date));
+    return sorted;
+  }
+
   String get companyName => _companyName;
-  int get totalAuthorisedShares => _totalAuthorisedShares;
   bool get isLoading => _isLoading;
   Map<String, double> get tableColumnWidths =>
       Map.unmodifiable(_tableColumnWidths);
 
-  // Calculated properties
-  int get totalIssuedShares =>
-      _shareholdings.fold(0, (sum, s) => sum + s.numberOfShares);
+  // Calculated properties - now transaction-based
 
-  int get totalSharesSold =>
-      _shareSales.fold(0, (sum, s) => sum + s.numberOfShares);
+  /// Total shares ever issued (sum of all acquisition transactions)
+  int get totalIssuedShares {
+    return _transactions
+        .where((t) => t.isAcquisition)
+        .fold(0, (sum, t) => sum + t.numberOfShares);
+  }
 
-  int get totalCurrentShares => totalIssuedShares - totalSharesSold;
+  /// Total shares disposed of (sum of all disposal transactions)
+  int get totalSharesSold {
+    return _transactions
+        .where((t) => t.isDisposal)
+        .fold(0, (sum, t) => sum + t.numberOfShares);
+  }
 
-  double get totalInvested =>
-      _shareholdings.fold(0.0, (sum, s) => sum + s.amountInvested);
+  /// Net current shares outstanding
+  int get totalCurrentShares {
+    return _transactions.fold(0, (sum, t) => sum + t.sharesDelta);
+  }
+
+  /// Total amount invested (sum of acquisition transaction amounts)
+  double get totalInvested {
+    return _transactions
+        .where((t) => t.isAcquisition)
+        .fold(0.0, (sum, t) => sum + t.totalAmount);
+  }
 
   double get latestValuation {
     if (_rounds.isEmpty) return 0;
@@ -65,33 +90,46 @@ class CapTableProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    final data = await _storageService.loadData();
+    try {
+      final data = await _storageService.loadData();
 
-    _investors = (data['investors'] as List)
-        .map((e) => Investor.fromJson(e))
-        .toList();
-    _shareClasses = (data['shareClasses'] as List)
-        .map((e) => ShareClass.fromJson(e))
-        .toList();
-    _rounds = (data['rounds'] as List)
-        .map((e) => InvestmentRound.fromJson(e))
-        .toList();
-    _shareholdings = (data['shareholdings'] as List)
-        .map((e) => Shareholding.fromJson(e))
-        .toList();
-    _vestingSchedules = (data['vestingSchedules'] as List? ?? [])
-        .map((e) => VestingSchedule.fromJson(e))
-        .toList();
-    _shareSales = (data['shareSales'] as List? ?? [])
-        .map((e) => ShareSale.fromJson(e))
-        .toList();
-    _companyName = data['companyName'] ?? 'My Company Pty Ltd';
-    _totalAuthorisedShares = data['totalAuthorisedShares'] ?? 10000000;
-    _tableColumnWidths =
-        (data['tableColumnWidths'] as Map<String, dynamic>?)?.map(
-          (key, value) => MapEntry(key, (value as num).toDouble()),
-        ) ??
-        {};
+      _investors = (data['investors'] as List? ?? [])
+          .map((e) => Investor.fromJson(e))
+          .toList();
+      _shareClasses = (data['shareClasses'] as List? ?? [])
+          .map((e) => ShareClass.fromJson(e))
+          .toList();
+      _rounds = (data['rounds'] as List? ?? [])
+          .map((e) => InvestmentRound.fromJson(e))
+          .toList();
+      _shareholdings = (data['shareholdings'] as List? ?? [])
+          .map((e) => Shareholding.fromJson(e))
+          .toList();
+      _vestingSchedules = (data['vestingSchedules'] as List? ?? [])
+          .map((e) => VestingSchedule.fromJson(e))
+          .toList();
+      _shareSales = (data['shareSales'] as List? ?? [])
+          .map((e) => ShareSale.fromJson(e))
+          .toList();
+      _transactions = (data['transactions'] as List? ?? [])
+          .map((e) => Transaction.fromJson(e))
+          .toList();
+      _companyName = data['companyName'] ?? 'My Company Pty Ltd';
+      _tableColumnWidths =
+          (data['tableColumnWidths'] as Map<String, dynamic>?)?.map(
+            (key, value) => MapEntry(key, (value as num).toDouble()),
+          ) ??
+          {};
+
+      // Migrate legacy data to transactions if transactions list is empty but we have shareholdings/sales
+      if (_transactions.isEmpty &&
+          (_shareholdings.isNotEmpty || _shareSales.isNotEmpty)) {
+        await _migrateToTransactions();
+      }
+    } catch (e) {
+      // If there's any error loading data, start with defaults
+      debugPrint('Error loading data: $e');
+    }
 
     // Initialize default share classes if empty
     if (_shareClasses.isEmpty) {
@@ -122,6 +160,61 @@ class CapTableProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Migrates legacy shareholdings and shareSales to the new transaction system
+  Future<void> _migrateToTransactions() async {
+    final List<Transaction> migratedTransactions = [];
+
+    // Convert shareholdings to purchase transactions
+    for (final holding in _shareholdings) {
+      migratedTransactions.add(
+        Transaction.fromPurchase(
+          investorId: holding.investorId,
+          shareClassId: holding.shareClassId,
+          roundId: holding.roundId,
+          numberOfShares: holding.numberOfShares,
+          pricePerShare: holding.pricePerShare,
+          date: holding.dateAcquired,
+          notes: holding.notes,
+        ),
+      );
+    }
+
+    // Convert shareSales to transactions
+    for (final sale in _shareSales) {
+      if (sale.buyerInvestorId != null) {
+        // Secondary sale with a buyer in the cap table
+        final transactions = Transaction.createSecondarySale(
+          sellerId: sale.investorId,
+          buyerId: sale.buyerInvestorId!,
+          shareClassId: sale.shareClassId,
+          numberOfShares: sale.numberOfShares,
+          pricePerShare: sale.pricePerShare,
+          date: sale.saleDate,
+          notes: sale.notes,
+        );
+        migratedTransactions.addAll(transactions);
+      } else {
+        // Buyback or exit (no buyer in cap table)
+        migratedTransactions.add(
+          Transaction.fromBuyback(
+            investorId: sale.investorId,
+            shareClassId: sale.shareClassId,
+            numberOfShares: sale.numberOfShares,
+            pricePerShare: sale.pricePerShare,
+            date: sale.saleDate,
+            notes: sale.notes,
+          ),
+        );
+      }
+    }
+
+    // Sort by date to maintain chronological order
+    migratedTransactions.sort((a, b) => a.date.compareTo(b.date));
+
+    _transactions = migratedTransactions;
+    await _save();
+  }
+
   Future<void> _save() async {
     await _storageService.saveData(
       investors: _investors,
@@ -130,8 +223,8 @@ class CapTableProvider extends ChangeNotifier {
       shareholdings: _shareholdings,
       vestingSchedules: _vestingSchedules,
       shareSales: _shareSales,
+      transactions: _transactions,
       companyName: _companyName,
-      totalAuthorisedShares: _totalAuthorisedShares,
       tableColumnWidths: _tableColumnWidths,
     );
   }
@@ -139,12 +232,6 @@ class CapTableProvider extends ChangeNotifier {
   // Company settings
   Future<void> updateCompanyName(String name) async {
     _companyName = name;
-    await _save();
-    notifyListeners();
-  }
-
-  Future<void> updateTotalAuthorisedShares(int shares) async {
-    _totalAuthorisedShares = shares;
     await _save();
     notifyListeners();
   }
@@ -256,6 +343,19 @@ class CapTableProvider extends ChangeNotifier {
   // Shareholding CRUD
   Future<void> addShareholding(Shareholding shareholding) async {
     _shareholdings.add(shareholding);
+
+    // Also create a corresponding transaction
+    final transaction = Transaction.fromPurchase(
+      investorId: shareholding.investorId,
+      shareClassId: shareholding.shareClassId,
+      roundId: shareholding.roundId,
+      numberOfShares: shareholding.numberOfShares,
+      pricePerShare: shareholding.pricePerShare,
+      date: shareholding.dateAcquired,
+      notes: shareholding.notes,
+    );
+    _transactions.add(transaction);
+
     await _save();
     notifyListeners();
   }
@@ -273,6 +373,7 @@ class CapTableProvider extends ChangeNotifier {
     _shareholdings.removeWhere((s) => s.id == id);
     // Also remove any vesting schedules linked to this shareholding
     _vestingSchedules.removeWhere((v) => v.shareholdingId == id);
+    // Note: We keep the transaction for audit trail, but could remove if needed
     await _save();
     notifyListeners();
   }
@@ -382,16 +483,12 @@ class CapTableProvider extends ChangeNotifier {
 
   Map<String, double> getOwnershipByShareClass() {
     final Map<String, int> sharesByClass = {};
-    for (var shareholding in _shareholdings) {
-      sharesByClass[shareholding.shareClassId] =
-          (sharesByClass[shareholding.shareClassId] ?? 0) +
-          shareholding.numberOfShares;
-    }
 
-    // Subtract sold shares by class
-    for (var sale in _shareSales) {
-      sharesByClass[sale.shareClassId] =
-          (sharesByClass[sale.shareClassId] ?? 0) - sale.numberOfShares;
+    // Use transactions to calculate current shares by class
+    for (var transaction in _transactions) {
+      sharesByClass[transaction.shareClassId] =
+          (sharesByClass[transaction.shareClassId] ?? 0) +
+          transaction.sharesDelta;
     }
 
     // Remove classes with no current shares
@@ -405,16 +502,18 @@ class CapTableProvider extends ChangeNotifier {
     );
   }
 
+  /// Get total shares ever acquired by investor (ignoring sales)
   int getSharesByInvestor(String investorId) {
-    return _shareholdings
-        .where((s) => s.investorId == investorId)
-        .fold(0, (sum, s) => sum + s.numberOfShares);
+    return _transactions
+        .where((t) => t.investorId == investorId && t.isAcquisition)
+        .fold(0, (sum, t) => sum + t.numberOfShares);
   }
 
+  /// Get total amount invested by investor
   double getInvestmentByInvestor(String investorId) {
-    return _shareholdings
-        .where((s) => s.investorId == investorId)
-        .fold(0.0, (sum, s) => sum + s.amountInvested);
+    return _transactions
+        .where((t) => t.investorId == investorId && t.isAcquisition)
+        .fold(0.0, (sum, t) => sum + t.totalAmount);
   }
 
   double getOwnershipPercentage(String investorId) {
@@ -475,13 +574,93 @@ class CapTableProvider extends ChangeNotifier {
     _shareholdings = [];
     _vestingSchedules = [];
     _shareSales = [];
+    _transactions = [];
     _companyName = 'My Company Pty Ltd';
-    _totalAuthorisedShares = 10000000;
     await _storageService.clearData();
     await loadData(); // Reinitialize defaults
   }
 
-  // Share Sale CRUD
+  // Transaction CRUD
+  Future<void> addTransaction(Transaction transaction) async {
+    _transactions.add(transaction);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> addTransactions(List<Transaction> transactions) async {
+    _transactions.addAll(transactions);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> deleteTransaction(String id) async {
+    // Also delete any related transaction (e.g., the other side of a secondary sale)
+    final transaction = _transactions.firstWhere(
+      (t) => t.id == id,
+      orElse: () => throw Exception('Transaction not found'),
+    );
+    if (transaction.relatedTransactionId != null) {
+      _transactions.removeWhere(
+        (t) => t.id == transaction.relatedTransactionId,
+      );
+    }
+    _transactions.removeWhere((t) => t.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  Transaction? getTransactionById(String id) {
+    try {
+      return _transactions.firstWhere((t) => t.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Records a secondary sale between two investors in the cap table.
+  /// Creates both the sale transaction (for seller) and purchase transaction (for buyer).
+  Future<void> recordSecondarySale({
+    required String sellerId,
+    required String buyerId,
+    required String shareClassId,
+    required int numberOfShares,
+    required double pricePerShare,
+    required DateTime date,
+    String? notes,
+  }) async {
+    final transactions = Transaction.createSecondarySale(
+      sellerId: sellerId,
+      buyerId: buyerId,
+      shareClassId: shareClassId,
+      numberOfShares: numberOfShares,
+      pricePerShare: pricePerShare,
+      date: date,
+      notes: notes,
+    );
+    await addTransactions(transactions);
+  }
+
+  /// Records a company buyback (shares returned to company, not transferred to another investor)
+  Future<void> recordBuyback({
+    required String investorId,
+    required String shareClassId,
+    required int numberOfShares,
+    required double pricePerShare,
+    required DateTime date,
+    String? notes,
+  }) async {
+    final transaction = Transaction.fromBuyback(
+      investorId: investorId,
+      shareClassId: shareClassId,
+      numberOfShares: numberOfShares,
+      pricePerShare: pricePerShare,
+      date: date,
+      notes: notes,
+    );
+    await addTransaction(transaction);
+  }
+
+  // Share Sale CRUD (legacy - kept for compatibility)
   Future<void> addShareSale(ShareSale sale) async {
     _shareSales.add(sale);
     await _save();
@@ -515,39 +694,72 @@ class CapTableProvider extends ChangeNotifier {
     return _shareSales.where((s) => s.investorId == investorId).toList();
   }
 
-  // Get total shares sold by an investor
+  /// Get transactions for an investor, sorted chronologically
+  List<Transaction> getTransactionsByInvestor(String investorId) {
+    final investorTransactions = _transactions
+        .where((t) => t.investorId == investorId)
+        .toList();
+    investorTransactions.sort((a, b) => a.date.compareTo(b.date));
+    return investorTransactions;
+  }
+
+  /// Get total shares sold by an investor (using transactions)
   int getSharesSoldByInvestor(String investorId) {
-    return _shareSales
-        .where((s) => s.investorId == investorId)
-        .fold(0, (sum, s) => sum + s.numberOfShares);
+    return _transactions
+        .where((t) => t.investorId == investorId && t.isDisposal)
+        .fold(0, (sum, t) => sum + t.numberOfShares);
   }
 
-  // Get total proceeds from sales for an investor
+  /// Get total proceeds from sales for an investor
   double getSaleProceedsByInvestor(String investorId) {
-    return _shareSales
-        .where((s) => s.investorId == investorId)
-        .fold(0.0, (sum, s) => sum + s.totalProceeds);
+    return _transactions
+        .where((t) => t.investorId == investorId && t.isDisposal)
+        .fold(0.0, (sum, t) => sum + t.totalAmount);
   }
 
-  // Get current shares (original minus sold)
+  /// Get current shares by stepping through all transactions chronologically.
+  /// Handles buy -> sell -> buy scenarios correctly.
   int getCurrentSharesByInvestor(String investorId) {
-    final acquired = getSharesByInvestor(investorId);
-    final sold = getSharesSoldByInvestor(investorId);
-    return acquired - sold;
+    return _transactions
+        .where((t) => t.investorId == investorId)
+        .fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
-  // Check if investor has fully exited
+  /// Get current shares by share class for an investor
+  int getCurrentSharesByInvestorAndClass(
+    String investorId,
+    String shareClassId,
+  ) {
+    return _transactions
+        .where(
+          (t) => t.investorId == investorId && t.shareClassId == shareClassId,
+        )
+        .fold(0, (sum, t) => sum + t.sharesDelta);
+  }
+
+  /// Check if investor has fully exited (had shares, now has none)
   bool hasInvestorExited(String investorId) {
-    return getCurrentSharesByInvestor(investorId) <= 0 &&
-        getSharesByInvestor(investorId) > 0;
+    final acquired = getSharesByInvestor(investorId);
+    final current = getCurrentSharesByInvestor(investorId);
+    return current <= 0 && acquired > 0;
   }
 
-  // Get exited investors
+  /// Check if investor has ever sold any shares
+  bool hasInvestorSoldShares(String investorId) {
+    return getSharesSoldByInvestor(investorId) > 0;
+  }
+
+  /// Get investors who have fully exited (no current shares)
   List<Investor> get exitedInvestors {
     return _investors.where((i) => hasInvestorExited(i.id)).toList();
   }
 
-  // Get active investors (have current shares)
+  /// Get investors who have sold shares (partial or full exit)
+  List<Investor> get investorsWithSales {
+    return _investors.where((i) => hasInvestorSoldShares(i.id)).toList();
+  }
+
+  /// Get active investors (have current shares)
   List<Investor> get activeInvestors {
     return _investors
         .where((i) => getCurrentSharesByInvestor(i.id) > 0)
@@ -563,29 +775,34 @@ class CapTableProvider extends ChangeNotifier {
     return (proceeds + currentValue) - invested;
   }
 
-  // Calculate realized profit (from sales only)
+  /// Calculate realized profit (from sales only) using transactions
   double getRealizedProfitByInvestor(String investorId) {
-    final sales = getSalesByInvestor(investorId);
-    if (sales.isEmpty) return 0;
+    final soldShares = getSharesSoldByInvestor(investorId);
+    if (soldShares == 0) return 0;
 
-    // Calculate cost basis of sold shares (weighted average)
-    final shareholdings = getShareholdingsByInvestor(investorId);
-    if (shareholdings.isEmpty) return 0;
+    // Calculate cost basis using weighted average from acquisition transactions
+    final acquisitions = _transactions.where(
+      (t) => t.investorId == investorId && t.isAcquisition,
+    );
 
-    final totalShares = shareholdings.fold(
+    final totalAcquired = acquisitions.fold(
       0,
-      (sum, s) => sum + s.numberOfShares,
+      (sum, t) => sum + t.numberOfShares,
     );
-    final totalCost = shareholdings.fold(
-      0.0,
-      (sum, s) => sum + s.amountInvested,
-    );
-    final avgCostPerShare = totalShares > 0 ? totalCost / totalShares : 0;
+    final totalCost = acquisitions.fold(0.0, (sum, t) => sum + t.totalAmount);
+    final avgCostPerShare = totalAcquired > 0 ? totalCost / totalAcquired : 0;
 
-    final totalSold = getSharesSoldByInvestor(investorId);
-    final costOfSoldShares = totalSold * avgCostPerShare;
+    final costOfSoldShares = soldShares * avgCostPerShare;
     final proceeds = getSaleProceedsByInvestor(investorId);
 
     return proceeds - costOfSoldShares;
+  }
+
+  /// Get sale transactions for display
+  List<Transaction> getSaleTransactionsByInvestor(String investorId) {
+    return _transactions
+        .where((t) => t.investorId == investorId && t.isDisposal)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date)); // Most recent first
   }
 }

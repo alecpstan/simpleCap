@@ -5,7 +5,6 @@ import '../widgets/stat_card.dart';
 import '../widgets/ownership_pie_chart.dart';
 import '../widgets/section_card.dart';
 import '../widgets/info_widgets.dart';
-import '../widgets/dialogs.dart';
 import '../widgets/resizable_table.dart';
 import '../utils/helpers.dart';
 
@@ -58,22 +57,11 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildCompanyHeader(BuildContext context, CapTableProvider provider) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            provider.companyName,
-            style: Theme.of(
-              context,
-            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.edit),
-          onPressed: () => _editCompanyName(context, provider),
-          tooltip: 'Edit company name',
-        ),
-      ],
+    return Text(
+      provider.companyName,
+      style: Theme.of(
+        context,
+      ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 
@@ -246,22 +234,5 @@ class _DashboardPageState extends State<DashboardPage> {
         provider.updateColumnWidth(key, width);
       },
     );
-  }
-
-  Future<void> _editCompanyName(
-    BuildContext context,
-    CapTableProvider provider,
-  ) async {
-    final result = await showTextInputDialog(
-      context: context,
-      title: 'Company Name',
-      initialValue: provider.companyName,
-      labelText: 'Company Name',
-      hintText: 'e.g., My Company Pty Ltd',
-    );
-
-    if (result != null && result.isNotEmpty) {
-      await provider.updateCompanyName(result);
-    }
   }
 }

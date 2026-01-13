@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'providers/cap_table_provider.dart';
 import 'pages/dashboard_page.dart';
@@ -10,6 +11,18 @@ import 'pages/scenarios_page.dart';
 import 'widgets/settings_drawer.dart';
 
 void main() {
+  // Ensure Flutter bindings are initialized before any async work
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Catch any errors during startup
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    if (kDebugMode) {
+      debugPrint('Flutter error: ${details.exception}');
+      debugPrint('Stack trace: ${details.stack}');
+    }
+  };
+
   runApp(const MainApp());
 }
 
@@ -68,7 +81,7 @@ class _HomePageState extends State<HomePage> {
     NavigationDestination(
       icon: Icon(Icons.dashboard_outlined),
       selectedIcon: Icon(Icons.dashboard),
-      label: 'Dashboard',
+      label: 'Dash',
     ),
     NavigationDestination(
       icon: Icon(Icons.people_outlined),

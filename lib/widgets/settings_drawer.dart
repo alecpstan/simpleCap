@@ -194,17 +194,6 @@ class SettingsDrawer extends StatelessWidget {
                   onTap: () => _showCompanyNameDialog(context, provider),
                 ),
 
-                ListTile(
-                  leading: const Icon(Icons.numbers),
-                  title: const Text('Authorised Shares'),
-                  subtitle: Text(
-                    provider.totalAuthorisedShares > 0
-                        ? '${provider.totalAuthorisedShares} shares'
-                        : 'Not set',
-                  ),
-                  onTap: () => _showAuthorisedSharesDialog(context, provider),
-                ),
-
                 const Divider(height: 32),
 
                 // Danger Zone
@@ -375,48 +364,6 @@ class SettingsDrawer extends StatelessWidget {
 
     if (result == true) {
       await provider.updateCompanyName(controller.text);
-    }
-  }
-
-  Future<void> _showAuthorisedSharesDialog(
-    BuildContext context,
-    CapTableProvider provider,
-  ) async {
-    final controller = TextEditingController(
-      text: provider.totalAuthorisedShares > 0
-          ? provider.totalAuthorisedShares.toString()
-          : '',
-    );
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Authorised Shares'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Total Authorised Shares',
-            hintText: 'e.g., 10000000',
-          ),
-          keyboardType: TextInputType.number,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == true) {
-      final shares = int.tryParse(controller.text) ?? 0;
-      await provider.updateTotalAuthorisedShares(shares);
     }
   }
 

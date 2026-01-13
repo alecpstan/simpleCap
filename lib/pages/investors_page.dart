@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/investor.dart';
 import '../models/share_sale.dart';
+import '../models/transaction.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/avatars.dart';
@@ -387,46 +388,11 @@ class InvestorsPage extends StatelessWidget {
     CapTableProvider provider,
     Investor investor,
   ) async {
-    final holdings = provider.getShareholdingsByInvestor(investor.id);
-
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${investor.name}\'s Holdings'),
-        content: SizedBox(
-          width: MediaQuery.of(context).size.width > 600
-              ? 500
-              : double.maxFinite,
-          child: holdings.isEmpty
-              ? const Text('No holdings yet')
-              : SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: holdings.map((holding) {
-                      final shareClass = provider.getShareClassById(
-                        holding.shareClassId,
-                      );
-                      final round = provider.getRoundById(holding.roundId);
-                      return ListTile(
-                        title: Text(
-                          '${Formatters.number(holding.numberOfShares)} shares',
-                        ),
-                        subtitle: Text(
-                          '${shareClass?.name ?? 'Unknown'} • ${round?.name ?? 'Unknown Round'}\n'
-                          'Invested: ${Formatters.currency(holding.amountInvested)}',
-                        ),
-                        isThreeLine: true,
-                      );
-                    }).toList(),
-                  ),
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+      builder: (context) => _HoldingsAndTransactionsDialog(
+        investor: investor,
+        provider: provider,
       ),
     );
   }
@@ -525,24 +491,11 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
   int get _availableSharesForClass {
     if (_selectedShareClassId == null) return widget.maxShares;
 
-    final holdings = widget.provider.getShareholdingsByInvestor(
+    // Use the transaction-based method for accurate share counting
+    return widget.provider.getCurrentSharesByInvestorAndClass(
       widget.investor.id,
+      _selectedShareClassId!,
     );
-    final classHoldings = holdings.where(
-      (h) => h.shareClassId == _selectedShareClassId,
-    );
-    final acquired = classHoldings.fold(0, (sum, h) => sum + h.numberOfShares);
-
-    // Subtract already sold shares of this class
-    final sold = widget.provider.shareSales
-        .where(
-          (s) =>
-              s.investorId == widget.investor.id &&
-              s.shareClassId == _selectedShareClassId,
-        )
-        .fold(0, (sum, s) => sum + s.numberOfShares);
-
-    return acquired - sold;
   }
 
   @override
@@ -723,32 +676,60 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
                   },
                 ),
 
-                // Buyer (for secondary sales)
-                if (_saleType == SaleType.secondary &&
-                    otherInvestors.isNotEmpty) ...[
+                // Buyer (required for secondary sales - must be an existing investor)
+                if (_saleType == SaleType.secondary) ...[
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<String?>(
-                    initialValue: _buyerInvestorId,
-                    decoration: const InputDecoration(
-                      labelText: 'Buyer (optional)',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('External buyer'),
+                  if (otherInvestors.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      ...otherInvestors.map((i) {
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.warning_outlined,
+                            size: 20,
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No other investors available. Add the buyer as an investor first.',
+                              style: TextStyle(
+                                color: theme.colorScheme.onErrorContainer,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      initialValue: _buyerInvestorId,
+                      decoration: const InputDecoration(
+                        labelText: 'Buyer',
+                        border: OutlineInputBorder(),
+                        helperText:
+                            'Select the investor purchasing these shares',
+                      ),
+                      items: otherInvestors.map((i) {
                         return DropdownMenuItem(
                           value: i.id,
                           child: Text(i.name),
                         );
-                      }),
-                    ],
-                    onChanged: (value) {
-                      setState(() => _buyerInvestorId = value);
-                    },
-                  ),
+                      }).toList(),
+                      validator: (value) {
+                        if (_saleType == SaleType.secondary && value == null) {
+                          return 'Please select a buyer';
+                        }
+                        return null;
+                      },
+                      onChanged: (value) {
+                        setState(() => _buyerInvestorId = value);
+                      },
+                    ),
                 ],
 
                 const SizedBox(height: 16),
@@ -898,29 +879,682 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedShareClassId == null) return;
 
+    // For secondary sales, buyer is required
+    if (_saleType == SaleType.secondary && _buyerInvestorId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a buyer for secondary sale'),
+        ),
+      );
+      return;
+    }
+
     final shares = int.parse(_sharesController.text);
     final price = double.parse(_priceController.text);
+    final notes = _notesController.text.isEmpty ? null : _notesController.text;
 
-    final sale = ShareSale(
-      investorId: widget.investor.id,
-      buyerInvestorId: _buyerInvestorId,
-      shareClassId: _selectedShareClassId!,
-      numberOfShares: shares,
-      pricePerShare: price,
-      saleDate: _saleDate,
-      type: _saleType,
-      notes: _notesController.text.isEmpty ? null : _notesController.text,
-    );
+    // Use the new transaction-based system
+    if (_saleType == SaleType.secondary && _buyerInvestorId != null) {
+      // Secondary sale: creates both sale and purchase transactions
+      widget.provider.recordSecondarySale(
+        sellerId: widget.investor.id,
+        buyerId: _buyerInvestorId!,
+        shareClassId: _selectedShareClassId!,
+        numberOfShares: shares,
+        pricePerShare: price,
+        date: _saleDate,
+        notes: notes,
+      );
+    } else {
+      // Buyback or exit: shares leave the cap table
+      widget.provider.recordBuyback(
+        investorId: widget.investor.id,
+        shareClassId: _selectedShareClassId!,
+        numberOfShares: shares,
+        pricePerShare: price,
+        date: _saleDate,
+        notes: notes,
+      );
+    }
 
-    widget.provider.addShareSale(sale);
     Navigator.pop(context);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Recorded sale of ${Formatters.number(shares)} shares for ${Formatters.currency(sale.totalProceeds)}',
+          'Recorded sale of ${Formatters.number(shares)} shares for ${Formatters.currency(shares * price)}',
         ),
       ),
     );
+  }
+}
+
+/// Dialog showing investor's holdings summary and transaction history
+class _HoldingsAndTransactionsDialog extends StatefulWidget {
+  final Investor investor;
+  final CapTableProvider provider;
+
+  const _HoldingsAndTransactionsDialog({
+    required this.investor,
+    required this.provider,
+  });
+
+  @override
+  State<_HoldingsAndTransactionsDialog> createState() =>
+      _HoldingsAndTransactionsDialogState();
+}
+
+class _HoldingsAndTransactionsDialogState
+    extends State<_HoldingsAndTransactionsDialog> {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final provider = widget.provider;
+    final investor = widget.investor;
+
+    // Get current holdings summary
+    final currentShares = provider.getCurrentSharesByInvestor(investor.id);
+    final totalAcquired = provider.getSharesByInvestor(investor.id);
+    final sharesSold = provider.getSharesSoldByInvestor(investor.id);
+    final invested = provider.getInvestmentByInvestor(investor.id);
+    final currentValue = currentShares * provider.latestSharePrice;
+    final ownership = provider.getOwnershipPercentage(investor.id);
+
+    // Get all transactions sorted by date (oldest first)
+    final transactions = provider.getTransactionsByInvestor(investor.id);
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          InvestorAvatar(name: investor.name, type: investor.type, radius: 16),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(investor.name),
+                Text(
+                  'Holdings & Transactions',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width > 600 ? 550 : double.maxFinite,
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Holdings Summary Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(
+                  alpha: 0.3,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SummaryItem(
+                          label: 'Current Shares',
+                          value: Formatters.number(currentShares),
+                          valueColor: theme.colorScheme.primary,
+                        ),
+                      ),
+                      Expanded(
+                        child: _SummaryItem(
+                          label: 'Ownership',
+                          value: Formatters.percent(ownership),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SummaryItem(
+                          label: 'Total Invested',
+                          value: Formatters.currency(invested),
+                        ),
+                      ),
+                      Expanded(
+                        child: _SummaryItem(
+                          label: 'Current Value',
+                          value: Formatters.currency(currentValue),
+                          valueColor: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (sharesSold > 0) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _SummaryItem(
+                            label: 'Total Acquired',
+                            value: Formatters.number(totalAcquired),
+                          ),
+                        ),
+                        Expanded(
+                          child: _SummaryItem(
+                            label: 'Shares Sold',
+                            value: Formatters.number(sharesSold),
+                            valueColor: Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Transaction History Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Transaction History',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  '${transactions.length} transactions',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Transaction List
+            Expanded(
+              child: transactions.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No transactions yet',
+                        style: TextStyle(color: theme.colorScheme.outline),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: transactions.length,
+                      itemBuilder: (context, index) {
+                        final transaction = transactions[index];
+                        return _TransactionListItem(
+                          transaction: transaction,
+                          provider: provider,
+                          onEdit: () => _editTransaction(transaction),
+                          onDelete: () => _deleteTransaction(transaction),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _editTransaction(Transaction transaction) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => _EditTransactionDialog(
+        transaction: transaction,
+        provider: widget.provider,
+      ),
+    );
+
+    if (result == true) {
+      setState(() {}); // Refresh the dialog
+    }
+  }
+
+  Future<void> _deleteTransaction(Transaction transaction) async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: 'Delete Transaction',
+      message:
+          'Are you sure you want to delete this ${transaction.typeDisplayName.toLowerCase()}? '
+          'This cannot be undone.',
+    );
+
+    if (confirmed) {
+      await widget.provider.deleteTransaction(transaction.id);
+      setState(() {}); // Refresh the dialog
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Transaction deleted')));
+      }
+    }
+  }
+}
+
+class _SummaryItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _SummaryItem({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: valueColor,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TransactionListItem extends StatelessWidget {
+  final Transaction transaction;
+  final CapTableProvider provider;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _TransactionListItem({
+    required this.transaction,
+    required this.provider,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final shareClass = provider.getShareClassById(transaction.shareClassId);
+    final round = transaction.roundId != null
+        ? provider.getRoundById(transaction.roundId!)
+        : null;
+
+    // Determine icon and color based on transaction type
+    IconData icon;
+    Color color;
+    String sign;
+
+    if (transaction.isAcquisition) {
+      icon = Icons.add_circle_outline;
+      color = Colors.green;
+      sign = '+';
+    } else {
+      icon = Icons.remove_circle_outline;
+      color = Colors.red;
+      sign = '-';
+    }
+
+    // Get counterparty name for secondary transactions
+    String? counterpartyName;
+    if (transaction.counterpartyInvestorId != null) {
+      final counterparty = provider.getInvestorById(
+        transaction.counterpartyInvestorId!,
+      );
+      counterpartyName = counterparty?.name;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Icon
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+
+            // Transaction details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        transaction.typeDisplayName,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        Formatters.date(transaction.date),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$sign${Formatters.number(transaction.numberOfShares)} shares @ ${Formatters.currency(transaction.pricePerShare)}',
+                    style: TextStyle(color: color, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${shareClass?.name ?? 'Unknown Class'}${round != null ? ' • ${round.name}' : ''}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                  if (counterpartyName != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      transaction.isAcquisition
+                          ? 'From: $counterpartyName'
+                          : 'To: $counterpartyName',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                  if (transaction.notes != null &&
+                      transaction.notes!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      transaction.notes!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Actions
+            PopupMenuButton<String>(
+              icon: Icon(
+                Icons.more_vert,
+                color: theme.colorScheme.outline,
+                size: 20,
+              ),
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: ListTile(
+                    leading: Icon(Icons.edit_outlined),
+                    title: Text('Edit'),
+                    contentPadding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: ListTile(
+                    leading: Icon(Icons.delete_outlined, color: Colors.red),
+                    title: Text('Delete', style: TextStyle(color: Colors.red)),
+                    contentPadding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+              onSelected: (value) {
+                if (value == 'edit') {
+                  onEdit();
+                } else if (value == 'delete') {
+                  onDelete();
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dialog for editing a transaction
+class _EditTransactionDialog extends StatefulWidget {
+  final Transaction transaction;
+  final CapTableProvider provider;
+
+  const _EditTransactionDialog({
+    required this.transaction,
+    required this.provider,
+  });
+
+  @override
+  State<_EditTransactionDialog> createState() => _EditTransactionDialogState();
+}
+
+class _EditTransactionDialogState extends State<_EditTransactionDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _sharesController;
+  late TextEditingController _priceController;
+  late TextEditingController _notesController;
+  late DateTime _date;
+
+  @override
+  void initState() {
+    super.initState();
+    _sharesController = TextEditingController(
+      text: widget.transaction.numberOfShares.toString(),
+    );
+    _priceController = TextEditingController(
+      text: widget.transaction.pricePerShare.toStringAsFixed(2),
+    );
+    _notesController = TextEditingController(
+      text: widget.transaction.notes ?? '',
+    );
+    _date = widget.transaction.date;
+  }
+
+  @override
+  void dispose() {
+    _sharesController.dispose();
+    _priceController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      title: Text('Edit ${widget.transaction.typeDisplayName}'),
+      content: SizedBox(
+        width: 400,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Transaction type info (read-only)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        widget.transaction.isAcquisition
+                            ? Icons.add_circle_outline
+                            : Icons.remove_circle_outline,
+                        color: widget.transaction.isAcquisition
+                            ? Colors.green
+                            : Colors.red,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.transaction.typeDisplayName,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Number of shares
+                TextFormField(
+                  controller: _sharesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Number of Shares',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Enter number of shares';
+                    }
+                    final shares = int.tryParse(value);
+                    if (shares == null || shares <= 0) {
+                      return 'Enter a valid number';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Price per share
+                TextFormField(
+                  controller: _priceController,
+                  decoration: const InputDecoration(
+                    labelText: 'Price per Share',
+                    border: OutlineInputBorder(),
+                    prefixText: '\$ ',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Enter price per share';
+                    }
+                    final price = double.tryParse(value);
+                    if (price == null || price < 0) {
+                      return 'Enter a valid price';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Date
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Date'),
+                  subtitle: Text(Formatters.date(_date)),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _date,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setState(() => _date = date);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Notes
+                TextFormField(
+                  controller: _notesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final shares = int.parse(_sharesController.text);
+    final price = double.parse(_priceController.text);
+    final notes = _notesController.text.isEmpty ? null : _notesController.text;
+
+    // Create updated transaction
+    final updated = widget.transaction.copyWith(
+      numberOfShares: shares,
+      pricePerShare: price,
+      totalAmount: shares * price,
+      date: _date,
+      notes: notes,
+    );
+
+    // Delete old and add new (since we don't have an update method)
+    await widget.provider.deleteTransaction(widget.transaction.id);
+    await widget.provider.addTransaction(updated);
+
+    if (mounted) {
+      Navigator.pop(context, true);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Transaction updated')));
+    }
   }
 }
