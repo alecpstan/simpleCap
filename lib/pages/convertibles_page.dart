@@ -5,6 +5,7 @@ import '../providers/cap_table_provider.dart';
 import '../utils/helpers.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/section_card.dart';
+import '../widgets/help_icon.dart';
 
 class ConvertiblesPage extends StatelessWidget {
   const ConvertiblesPage({super.key});
@@ -21,6 +22,7 @@ class ConvertiblesPage extends StatelessWidget {
         final outstanding = provider.outstandingConvertibles;
 
         return Scaffold(
+          appBar: AppBar(title: const Text('Convertibles')),
           body: convertibles.isEmpty
               ? Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -237,7 +239,9 @@ class ConvertiblesPage extends StatelessWidget {
           final investor = provider.getInvestorById(c.investorId);
           return ListTile(
             leading: CircleAvatar(
-              backgroundColor: Colors.grey,
+              backgroundColor: c.status == ConvertibleStatus.converted
+                  ? Colors.green
+                  : Colors.grey,
               child: Icon(
                 _getStatusIcon(c.status),
                 color: Colors.white,
@@ -248,6 +252,9 @@ class ConvertiblesPage extends StatelessWidget {
             subtitle: Text('${c.typeDisplayName} • ${c.statusDisplayName}'),
             trailing: c.conversionShares != null
                 ? Text('${Formatters.number(c.conversionShares!)} shares')
+                : null,
+            onTap: c.status == ConvertibleStatus.converted
+                ? () => _showConversionSummaryDialog(context, provider, c)
                 : null,
           );
         }).toList(),
@@ -326,6 +333,173 @@ class ConvertiblesPage extends StatelessWidget {
               Navigator.pop(context);
             },
             child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showConversionSummaryDialog(
+    BuildContext context,
+    CapTableProvider provider,
+    ConvertibleInstrument convertible,
+  ) {
+    final investor = provider.getInvestorById(convertible.investorId);
+    final round = convertible.conversionRoundId != null
+        ? provider.getRoundById(convertible.conversionRoundId!)
+        : null;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.swap_horiz,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Conversion Summary')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SummaryRow(
+                label: 'Investor',
+                value: investor?.name ?? 'Unknown',
+              ),
+              _SummaryRow(
+                label: 'Instrument',
+                value: convertible.typeDisplayName,
+              ),
+              _SummaryRow(
+                label: 'Principal',
+                value: Formatters.currency(convertible.principalAmount),
+              ),
+              if (convertible.type == ConvertibleType.convertibleNote &&
+                  convertible.accruedInterest > 0)
+                _SummaryRow(
+                  label: 'Accrued Interest',
+                  value: Formatters.currency(convertible.accruedInterest),
+                ),
+              _SummaryRow(
+                label: 'Total Converted',
+                value: Formatters.currency(convertible.convertibleAmount),
+              ),
+              const Divider(height: 24),
+              _SummaryRow(
+                label: 'Converted In',
+                value: round?.name ?? 'Unknown Round',
+              ),
+              if (convertible.conversionDate != null)
+                _SummaryRow(
+                  label: 'Conversion Date',
+                  value: Formatters.date(convertible.conversionDate!),
+                ),
+              if (convertible.conversionPricePerShare != null)
+                _SummaryRow(
+                  label: 'Conversion Price',
+                  value: Formatters.currency(
+                    convertible.conversionPricePerShare!,
+                  ),
+                ),
+              if (convertible.conversionShares != null)
+                _SummaryRow(
+                  label: 'Shares Received',
+                  value: Formatters.number(convertible.conversionShares!),
+                  valueStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Undoing will remove the conversion transaction and restore this instrument to outstanding status.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () async {
+              final success = await provider.undoConversion(convertible.id);
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success
+                          ? 'Conversion undone successfully'
+                          : 'Failed to undo conversion',
+                    ),
+                    backgroundColor: success ? Colors.green : Colors.red,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.undo),
+            label: const Text('Undo Conversion'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final TextStyle? valueStyle;
+
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+    this.valueStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
+          Text(
+            value,
+            style: valueStyle ?? Theme.of(context).textTheme.bodyMedium,
           ),
         ],
       ),
@@ -453,18 +627,28 @@ class _ConvertibleDialogState extends State<_ConvertibleDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Type selection
-            SegmentedButton<ConvertibleType>(
-              segments: const [
-                ButtonSegment(value: ConvertibleType.safe, label: Text('SAFE')),
-                ButtonSegment(
-                  value: ConvertibleType.convertibleNote,
-                  label: Text('Note'),
+            Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<ConvertibleType>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ConvertibleType.safe,
+                        label: Text('SAFE'),
+                      ),
+                      ButtonSegment(
+                        value: ConvertibleType.convertibleNote,
+                        label: Text('Note'),
+                      ),
+                    ],
+                    selected: {_type},
+                    onSelectionChanged: (value) {
+                      setState(() => _type = value.first);
+                    },
+                  ),
                 ),
+                const HelpIcon(helpKey: 'convertibles.safe'),
               ],
-              selected: {_type},
-              onSelectionChanged: (value) {
-                setState(() => _type = value.first);
-              },
             ),
             const SizedBox(height: 16),
 
@@ -500,9 +684,12 @@ class _ConvertibleDialogState extends State<_ConvertibleDialog> {
                 Expanded(
                   child: TextField(
                     controller: _discountController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Discount %',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: const HelpIcon(
+                        helpKey: 'convertibles.discount',
+                      ),
                     ),
                     keyboardType: TextInputType.number,
                   ),
@@ -511,10 +698,13 @@ class _ConvertibleDialogState extends State<_ConvertibleDialog> {
                 Expanded(
                   child: TextField(
                     controller: _capController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Valuation Cap',
                       prefixText: '\$',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: const HelpIcon(
+                        helpKey: 'convertibles.valuationCap',
+                      ),
                     ),
                     keyboardType: TextInputType.number,
                   ),

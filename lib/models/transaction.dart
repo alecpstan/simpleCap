@@ -24,6 +24,9 @@ enum TransactionType {
 
   /// Conversion from convertible instrument (SAFE/Note)
   conversion,
+
+  /// Founder repricing / re-equitization (can add or remove shares)
+  reequitization,
 }
 
 class Transaction {
@@ -60,6 +63,15 @@ class Transaction {
   /// Reference to related transaction (e.g., sale links to purchase by buyer)
   final String? relatedTransactionId;
 
+  /// Exercise/strike price for options (Task 2.4)
+  final double? exercisePrice;
+
+  /// Reference to tax rule for AU startup concessions (Task 2.5)
+  final String? taxRuleId;
+
+  /// For reequitization: whether this adds or removes shares
+  final bool? isReequitizationGrant;
+
   /// Optional notes
   final String? notes;
 
@@ -75,23 +87,47 @@ class Transaction {
     required this.date,
     this.counterpartyInvestorId,
     this.relatedTransactionId,
+    this.exercisePrice,
+    this.taxRuleId,
+    this.isReequitizationGrant,
     this.notes,
   }) : id = id ?? const Uuid().v4(),
        totalAmount = totalAmount ?? (numberOfShares * pricePerShare);
 
   /// Whether this transaction adds shares to the investor's holdings
-  bool get isAcquisition =>
-      type == TransactionType.purchase ||
-      type == TransactionType.secondaryPurchase ||
-      type == TransactionType.grant ||
-      type == TransactionType.optionExercise;
+  bool get isAcquisition {
+    if (type == TransactionType.reequitization) {
+      return isReequitizationGrant ?? true;
+    }
+    return type == TransactionType.purchase ||
+        type == TransactionType.secondaryPurchase ||
+        type == TransactionType.grant ||
+        type == TransactionType.optionExercise ||
+        type == TransactionType.conversion;
+  }
 
   /// Whether this transaction removes shares from the investor's holdings
-  bool get isDisposal =>
-      type == TransactionType.secondarySale || type == TransactionType.buyback;
+  bool get isDisposal {
+    if (type == TransactionType.reequitization) {
+      return !(isReequitizationGrant ?? true);
+    }
+    return type == TransactionType.secondarySale ||
+        type == TransactionType.buyback;
+  }
 
   /// The net effect on share count (positive for acquisitions, negative for disposals)
   int get sharesDelta => isAcquisition ? numberOfShares : -numberOfShares;
+
+  /// For option exercises: calculate the gain (market value - strike)
+  double? get optionGain {
+    if (type != TransactionType.optionExercise || exercisePrice == null) {
+      return null;
+    }
+    return (pricePerShare - exercisePrice!) * numberOfShares;
+  }
+
+  /// Whether this is a repricing event
+  bool get isRepricing => type == TransactionType.reequitization;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -105,6 +141,9 @@ class Transaction {
     'date': date.toIso8601String(),
     'counterpartyInvestorId': counterpartyInvestorId,
     'relatedTransactionId': relatedTransactionId,
+    'exercisePrice': exercisePrice,
+    'taxRuleId': taxRuleId,
+    'isReequitizationGrant': isReequitizationGrant,
     'notes': notes,
   };
 
@@ -120,6 +159,11 @@ class Transaction {
     date: DateTime.parse(json['date']),
     counterpartyInvestorId: json['counterpartyInvestorId'],
     relatedTransactionId: json['relatedTransactionId'],
+    exercisePrice: json['exercisePrice'] != null
+        ? (json['exercisePrice'] as num).toDouble()
+        : null,
+    taxRuleId: json['taxRuleId'],
+    isReequitizationGrant: json['isReequitizationGrant'],
     notes: json['notes'],
   );
 
@@ -134,6 +178,9 @@ class Transaction {
     DateTime? date,
     String? counterpartyInvestorId,
     String? relatedTransactionId,
+    double? exercisePrice,
+    String? taxRuleId,
+    bool? isReequitizationGrant,
     String? notes,
   }) {
     return Transaction(
@@ -149,6 +196,10 @@ class Transaction {
       counterpartyInvestorId:
           counterpartyInvestorId ?? this.counterpartyInvestorId,
       relatedTransactionId: relatedTransactionId ?? this.relatedTransactionId,
+      exercisePrice: exercisePrice ?? this.exercisePrice,
+      taxRuleId: taxRuleId ?? this.taxRuleId,
+      isReequitizationGrant:
+          isReequitizationGrant ?? this.isReequitizationGrant,
       notes: notes ?? this.notes,
     );
   }
@@ -253,6 +304,8 @@ class Transaction {
         return 'Option Exercise';
       case TransactionType.conversion:
         return 'Convertible Conversion';
+      case TransactionType.reequitization:
+        return 'Re-equitization';
     }
   }
 }

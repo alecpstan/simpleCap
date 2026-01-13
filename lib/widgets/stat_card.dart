@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'help_icon.dart';
 
 class StatCard extends StatelessWidget {
   final String title;
@@ -6,6 +7,7 @@ class StatCard extends StatelessWidget {
   final IconData icon;
   final Color? color;
   final String? subtitle;
+  final String? helpKey;
 
   const StatCard({
     super.key,
@@ -14,6 +16,7 @@ class StatCard extends StatelessWidget {
     required this.icon,
     this.color,
     this.subtitle,
+    this.helpKey,
   });
 
   @override
@@ -42,6 +45,7 @@ class StatCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (helpKey != null) HelpIcon(helpKey: helpKey!, size: 14),
               ],
             ),
             const SizedBox(height: 8),

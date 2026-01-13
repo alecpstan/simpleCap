@@ -9,6 +9,7 @@ import '../widgets/avatars.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/investment_dialog.dart';
 import '../widgets/valuation_wizard.dart';
+import '../widgets/help_icon.dart';
 import '../utils/helpers.dart';
 
 class RoundsPage extends StatelessWidget {
@@ -272,9 +273,10 @@ class RoundsPage extends StatelessWidget {
                 children: [
                   DropdownButtonFormField<RoundType>(
                     initialValue: selectedType,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Round Type',
-                      prefixIcon: Icon(Icons.layers),
+                      prefixIcon: const Icon(Icons.layers),
+                      suffixIcon: const HelpIcon(helpKey: 'rounds.roundType'),
                     ),
                     items: RoundType.values.map((type) {
                       return DropdownMenuItem(
@@ -328,14 +330,24 @@ class RoundsPage extends StatelessWidget {
                       labelText: 'Pre-Money Valuation (AUD)',
                       hintText: '1000000',
                       prefixIcon: const Icon(Icons.attach_money),
-                      suffixIcon: ValuationWizardButton(
-                        currentValuation: double.tryParse(
-                          preMoneyController.text,
-                        ),
-                        onValuationSelected: (value) {
-                          preMoneyController.text = value.round().toString();
-                          setState(() {}); // Rebuild to update implied price
-                        },
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const HelpIcon(helpKey: 'rounds.preMoneyValuation'),
+                          ValuationWizardButton(
+                            currentValuation: double.tryParse(
+                              preMoneyController.text,
+                            ),
+                            onValuationSelected: (value) {
+                              preMoneyController.text = value
+                                  .round()
+                                  .toString();
+                              setState(
+                                () {},
+                              ); // Rebuild to update implied price
+                            },
+                          ),
+                        ],
                       ),
                     ),
                     keyboardType: TextInputType.number,

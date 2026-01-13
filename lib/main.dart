@@ -8,10 +8,14 @@ import 'pages/rounds_page.dart';
 import 'pages/share_value_page.dart';
 import 'pages/vesting_page.dart';
 import 'widgets/settings_drawer.dart';
+import 'widgets/help_icon.dart';
 
-void main() {
+void main() async {
   // Ensure Flutter bindings are initialized before any async work
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load help content
+  await HelpContentService.instance.load();
 
   // Catch any errors during startup
   FlutterError.onError = (FlutterErrorDetails details) {

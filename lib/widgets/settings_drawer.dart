@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/share_class.dart';
 import '../pages/scenarios_page.dart';
+import '../pages/events_timeline_page.dart';
+import '../pages/convertibles_page.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/valuation_wizard.dart';
@@ -97,6 +99,36 @@ class SettingsDrawer extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const ScenariosPage(),
+                      ),
+                    );
+                  },
+                ),
+
+                ListTile(
+                  leading: const Icon(Icons.timeline),
+                  title: const Text('Events Timeline'),
+                  subtitle: const Text('Chronological view of all events'),
+                  onTap: () {
+                    Navigator.pop(context); // Close drawer
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const EventsTimelinePage(),
+                      ),
+                    );
+                  },
+                ),
+
+                ListTile(
+                  leading: const Icon(Icons.receipt_long),
+                  title: const Text('Convertibles'),
+                  subtitle: const Text('SAFEs and convertible notes'),
+                  onTap: () {
+                    Navigator.pop(context); // Close drawer
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ConvertiblesPage(),
                       ),
                     );
                   },

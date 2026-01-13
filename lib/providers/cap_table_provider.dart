@@ -7,7 +7,20 @@ import '../models/transaction.dart';
 import '../models/convertible_instrument.dart';
 import '../models/milestone.dart';
 import '../models/hours_vesting.dart';
+import '../models/tax_rule.dart';
 import '../services/storage_service.dart';
+
+/// ESOP dilution calculation methods (Task 2.1)
+enum EsopDilutionMethod {
+  /// Post-round cap table (US-style): new shares = (pool % * post-money shares) / (1 - pool %)
+  postRoundCap,
+
+  /// Pre-round cap table (AU-style): new shares = pool % * pre-round shares
+  preRoundCap,
+
+  /// Fixed number of shares (no percentage calculation)
+  fixedShares,
+}
 
 class CapTableProvider extends ChangeNotifier {
   final StorageService _storageService = StorageService();
@@ -20,10 +33,18 @@ class CapTableProvider extends ChangeNotifier {
   List<ConvertibleInstrument> _convertibles = [];
   List<Milestone> _milestones = [];
   List<HoursVestingSchedule> _hoursVestingSchedules = [];
+  List<TaxRule> _taxRules = [];
   String _companyName = 'My Company Pty Ltd';
   bool _isLoading = true;
   Map<String, double> _tableColumnWidths = {};
   bool _showFullyDiluted = false; // Toggle for FD view
+
+  // === Task 2.1: ESOP dilution settings ===
+  EsopDilutionMethod _esopDilutionMethod = EsopDilutionMethod.preRoundCap;
+  double _esopPoolPercent = 10.0; // Default 10% ESOP pool
+
+  // === Task 2.7: Authorized shares ===
+  int _authorizedShares = 0;
 
   // Getters
   List<Investor> get investors => List.unmodifiable(_investors);
@@ -38,7 +59,15 @@ class CapTableProvider extends ChangeNotifier {
   List<Milestone> get milestones => List.unmodifiable(_milestones);
   List<HoursVestingSchedule> get hoursVestingSchedules =>
       List.unmodifiable(_hoursVestingSchedules);
+  List<TaxRule> get taxRules => List.unmodifiable(_taxRules);
   bool get showFullyDiluted => _showFullyDiluted;
+
+  // ESOP settings getters
+  EsopDilutionMethod get esopDilutionMethod => _esopDilutionMethod;
+  double get esopPoolPercent => _esopPoolPercent;
+
+  // Authorized shares getter
+  int get authorizedShares => _authorizedShares;
 
   /// Returns all transactions sorted chronologically
   List<Transaction> get sortedTransactions {
@@ -73,40 +102,144 @@ class CapTableProvider extends ChangeNotifier {
     return _transactions.fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
-  /// Shares that would be issued if all convertibles converted
+  /// Shares that would be issued if all convertibles converted (Task 1.2 - Fixed)
   int get convertibleShares {
+    if (totalCurrentShares == 0) return 0;
+
     return _convertibles
         .where((c) => c.status == ConvertibleStatus.outstanding)
         .fold(0, (sum, c) {
-      // Use cap-based conversion as default estimate
-      if (c.valuationCap != null && c.valuationCap! > 0) {
-        final capPPS = c.valuationCap! / totalCurrentShares;
-        return sum + (c.convertibleAmount / capPPS).round();
-      }
-      return sum;
-    });
+          double pricePerShare;
+
+          if (c.valuationCap != null && c.valuationCap! > 0) {
+            // Use cap-based conversion
+            pricePerShare = c.valuationCap! / totalCurrentShares;
+          } else if (latestValuation > 0) {
+            // Fallback to latest round valuation (Task 1.2 fix)
+            pricePerShare = latestValuation / totalCurrentShares;
+            // Apply discount if available
+            if (c.discountPercent != null && c.discountPercent! > 0) {
+              pricePerShare *= (1 - c.discountPercent! / 100);
+            }
+          } else {
+            // No valuation available, cannot estimate
+            return sum;
+          }
+
+          if (pricePerShare <= 0) return sum;
+          return sum + (c.convertibleAmount / pricePerShare).round();
+        });
   }
 
-  /// Unallocated ESOP pool shares
+  /// Unallocated ESOP pool shares (total ESOP - allocated to employees)
   int get esopPoolShares {
-    final esopClass = _shareClasses.firstWhere(
-      (s) => s.type == ShareClassType.esop,
-      orElse: () => ShareClass(
-        name: 'ESOP',
-        type: ShareClassType.esop,
-        votingRightsMultiplier: 0,
-        liquidationPreference: 0,
-      ),
-    );
-    // ESOP shares that haven't been allocated to specific holders
+    final esopClasses = _shareClasses
+        .where((s) => s.type == ShareClassType.esop)
+        .map((s) => s.id)
+        .toSet();
+
+    if (esopClasses.isEmpty) return 0;
+
+    // Total ESOP shares created
     return _transactions
-        .where((t) => t.shareClassId == esopClass.id && t.isAcquisition)
-        .fold(0, (sum, t) => sum + t.numberOfShares);
+        .where((t) => esopClasses.contains(t.shareClassId))
+        .fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
-  /// Fully diluted share count (issued + convertibles + ESOP)
+  /// ESOP shares that are unallocated (pool - allocated to specific employees)
+  int get unallocatedEsopShares {
+    final esopClasses = _shareClasses
+        .where((s) => s.type == ShareClassType.esop)
+        .map((s) => s.id)
+        .toSet();
+
+    if (esopClasses.isEmpty) return 0;
+
+    // Find the ESOP pool holder (typically institution or designated holder)
+    final esopPoolHolders = _investors
+        .where(
+          (i) =>
+              i.type == InvestorType.institution ||
+              i.name.toLowerCase().contains('esop'),
+        )
+        .map((i) => i.id)
+        .toSet();
+
+    // Total ESOP in pool (held by pool holder)
+    final poolShares = _transactions
+        .where(
+          (t) =>
+              esopClasses.contains(t.shareClassId) &&
+              esopPoolHolders.contains(t.investorId),
+        )
+        .fold(0, (sum, t) => sum + t.sharesDelta);
+
+    return poolShares > 0 ? poolShares : 0;
+  }
+
+  /// Fully diluted share count (Task 1.1 - Fixed to include ESOP)
   int get fullyDilutedShares {
-    return totalCurrentShares + convertibleShares;
+    // Current issued + convertible estimates + unallocated ESOP pool
+    return totalCurrentShares + convertibleShares + unallocatedEsopShares;
+  }
+
+  /// Calculate ESOP pool size based on dilution method (Task 2.1)
+  int calculateEsopPoolSize({
+    required double targetPercent,
+    int? additionalNewShares,
+  }) {
+    final currentShares = totalCurrentShares;
+    final newShares = additionalNewShares ?? 0;
+
+    switch (_esopDilutionMethod) {
+      case EsopDilutionMethod.postRoundCap:
+        // US-style: pool is % of post-money
+        // poolShares = (targetPercent * postMoneyShares) / (1 - targetPercent)
+        final postMoney = currentShares + newShares;
+        return ((targetPercent / 100) * postMoney / (1 - targetPercent / 100))
+            .round();
+
+      case EsopDilutionMethod.preRoundCap:
+        // AU-style: pool is % of pre-round shares
+        return ((targetPercent / 100) * currentShares).round();
+
+      case EsopDilutionMethod.fixedShares:
+        // Just return current unallocated pool
+        return unallocatedEsopShares;
+    }
+  }
+
+  /// Set ESOP dilution method
+  void setEsopDilutionMethod(EsopDilutionMethod method) {
+    _esopDilutionMethod = method;
+    notifyListeners();
+    _save();
+  }
+
+  /// Set ESOP pool target percentage
+  void setEsopPoolPercent(double percent) {
+    _esopPoolPercent = percent.clamp(0, 30); // Typically 10-15%, max 30%
+    notifyListeners();
+    _save();
+  }
+
+  /// Set authorized shares (Task 2.7)
+  void setAuthorizedShares(int shares) {
+    _authorizedShares = shares;
+    notifyListeners();
+    _save();
+  }
+
+  /// Remaining shares that can be issued (authorized - issued)
+  int get remainingAuthorizedShares {
+    if (_authorizedShares == 0) return 0; // No limit set
+    return _authorizedShares - totalCurrentShares;
+  }
+
+  /// Whether current issuance exceeds authorization
+  bool get isOverAuthorized {
+    if (_authorizedShares == 0) return false; // No limit set
+    return totalCurrentShares > _authorizedShares;
   }
 
   /// Toggle fully diluted view
@@ -180,12 +313,22 @@ class CapTableProvider extends ChangeNotifier {
       _hoursVestingSchedules = (data['hoursVestingSchedules'] as List? ?? [])
           .map((e) => HoursVestingSchedule.fromJson(e))
           .toList();
+      _taxRules = (data['taxRules'] as List? ?? [])
+          .map((e) => TaxRule.fromJson(e))
+          .toList();
       _companyName = data['companyName'] ?? 'My Company Pty Ltd';
       _tableColumnWidths =
           (data['tableColumnWidths'] as Map<String, dynamic>?)?.map(
             (key, value) => MapEntry(key, (value as num).toDouble()),
           ) ??
           {};
+
+      // Load new settings
+      _esopDilutionMethod =
+          EsopDilutionMethod.values[data['esopDilutionMethod'] ??
+              EsopDilutionMethod.preRoundCap.index];
+      _esopPoolPercent = (data['esopPoolPercent'] ?? 10.0).toDouble();
+      _authorizedShares = data['authorizedShares'] ?? 0;
     } catch (e) {
       debugPrint('Error loading data: $e');
     }
@@ -229,8 +372,12 @@ class CapTableProvider extends ChangeNotifier {
       convertibles: _convertibles,
       milestones: _milestones,
       hoursVestingSchedules: _hoursVestingSchedules,
+      taxRules: _taxRules,
       companyName: _companyName,
       tableColumnWidths: _tableColumnWidths,
+      esopDilutionMethod: _esopDilutionMethod.index,
+      esopPoolPercent: _esopPoolPercent,
+      authorizedShares: _authorizedShares,
     );
   }
 
@@ -336,7 +483,7 @@ class CapTableProvider extends ChangeNotifier {
     if (index != -1) {
       final oldRound = _rounds[index];
       _rounds[index] = round;
-      
+
       // If the round date changed, update all associated transaction dates
       if (oldRound.date != round.date) {
         for (int i = 0; i < _transactions.length; i++) {
@@ -345,7 +492,7 @@ class CapTableProvider extends ChangeNotifier {
           }
         }
       }
-      
+
       await _save();
       notifyListeners();
     }
@@ -435,20 +582,22 @@ class CapTableProvider extends ChangeNotifier {
   int getIssuedSharesBeforeRound(String roundId) {
     final targetRound = getRoundById(roundId);
     if (targetRound == null) return totalCurrentShares;
-    
+
     // Get all rounds that came before this one (by order)
     final priorRoundIds = _rounds
         .where((r) => r.order < targetRound.order)
         .map((r) => r.id)
         .toSet();
-    
+
     // Sum shares from transactions in prior rounds
     // Also include any transactions not linked to a round (secondary, grants, etc.)
     // that occurred before this round's date
     return _transactions
-        .where((t) =>
-            (t.roundId != null && priorRoundIds.contains(t.roundId)) ||
-            (t.roundId == null && t.date.isBefore(targetRound.date)))
+        .where(
+          (t) =>
+              (t.roundId != null && priorRoundIds.contains(t.roundId)) ||
+              (t.roundId == null && t.date.isBefore(targetRound.date)),
+        )
         .fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
@@ -457,10 +606,10 @@ class CapTableProvider extends ChangeNotifier {
   double? getImpliedPricePerShare(String roundId) {
     final round = getRoundById(roundId);
     if (round == null || round.preMoneyValuation <= 0) return null;
-    
+
     final sharesBeforeRound = getIssuedSharesBeforeRound(roundId);
     if (sharesBeforeRound <= 0) return null;
-    
+
     return round.preMoneyValuation / sharesBeforeRound;
   }
 
@@ -468,10 +617,10 @@ class CapTableProvider extends ChangeNotifier {
   /// Pre-Money = Price per Share × Issued Shares (pre-round)
   double? getImpliedPreMoneyValuation(String roundId, double pricePerShare) {
     if (pricePerShare <= 0) return null;
-    
+
     final sharesBeforeRound = getIssuedSharesBeforeRound(roundId);
     if (sharesBeforeRound <= 0) return null;
-    
+
     return pricePerShare * sharesBeforeRound;
   }
 
@@ -637,16 +786,18 @@ class CapTableProvider extends ChangeNotifier {
 
     final convertible = _convertibles[index];
     final issuedSharesBeforeRound = getIssuedSharesBeforeRound(roundId);
-    
+
     final shares = convertible.calculateConversionShares(
       roundPreMoney: round.preMoneyValuation,
       issuedSharesBeforeRound: issuedSharesBeforeRound,
     );
-    
-    final pps = convertible.calculateConversionPPS(
-      roundPreMoney: round.preMoneyValuation,
-      issuedSharesBeforeRound: issuedSharesBeforeRound,
-    ) ?? 0;
+
+    final pps =
+        convertible.calculateConversionPPS(
+          roundPreMoney: round.preMoneyValuation,
+          issuedSharesBeforeRound: issuedSharesBeforeRound,
+        ) ??
+        0;
 
     // Create the transaction
     final transaction = Transaction(
@@ -673,6 +824,41 @@ class CapTableProvider extends ChangeNotifier {
 
     await _save();
     notifyListeners();
+  }
+
+  /// Undo a conversion - restore convertible to outstanding and remove the transaction
+  Future<bool> undoConversion(String convertibleId) async {
+    final index = _convertibles.indexWhere((c) => c.id == convertibleId);
+    if (index == -1) return false;
+
+    final convertible = _convertibles[index];
+    if (convertible.status != ConvertibleStatus.converted) return false;
+
+    // Find and remove the conversion transaction
+    final transactionIndex = _transactions.indexWhere(
+      (t) =>
+          t.type == TransactionType.conversion &&
+          t.investorId == convertible.investorId &&
+          t.roundId == convertible.conversionRoundId &&
+          t.numberOfShares == convertible.conversionShares,
+    );
+
+    if (transactionIndex != -1) {
+      _transactions.removeAt(transactionIndex);
+    }
+
+    // Reset convertible to outstanding
+    _convertibles[index] = convertible.copyWith(
+      status: ConvertibleStatus.outstanding,
+      conversionRoundId: null,
+      conversionShares: null,
+      conversionPricePerShare: null,
+      conversionDate: null,
+    );
+
+    await _save();
+    notifyListeners();
+    return true;
   }
 
   // Milestone CRUD
@@ -724,13 +910,13 @@ class CapTableProvider extends ChangeNotifier {
 
     final milestone = _milestones[index];
     if (milestone.investorId == null) return;
-    
+
     // Complete the milestone
     milestone.complete();
-    
+
     // Calculate shares from equity percent
-    final shares =
-        (totalCurrentShares * milestone.earnedEquityPercent / 100).round();
+    final shares = (totalCurrentShares * milestone.earnedEquityPercent / 100)
+        .round();
 
     // Create the transaction
     final transaction = Transaction(
@@ -760,8 +946,7 @@ class CapTableProvider extends ChangeNotifier {
   }
 
   Future<void> updateHoursVestingSchedule(HoursVestingSchedule schedule) async {
-    final index =
-        _hoursVestingSchedules.indexWhere((h) => h.id == schedule.id);
+    final index = _hoursVestingSchedules.indexWhere((h) => h.id == schedule.id);
     if (index != -1) {
       _hoursVestingSchedules[index] = schedule;
       await _save();
@@ -796,20 +981,61 @@ class CapTableProvider extends ChangeNotifier {
     DateTime date,
     String? description,
   ) async {
-    final index =
-        _hoursVestingSchedules.indexWhere((h) => h.id == scheduleId);
+    final index = _hoursVestingSchedules.indexWhere((h) => h.id == scheduleId);
     if (index == -1) return;
 
     final schedule = _hoursVestingSchedules[index];
-    
+
     // logHours mutates the schedule in place
     schedule.logHours(hours, description: description, date: date);
-    
+
     // Trigger save with the mutated schedule
     _hoursVestingSchedules[index] = schedule;
 
     await _save();
     notifyListeners();
+  }
+
+  // Tax Rule CRUD
+  Future<void> addTaxRule(TaxRule rule) async {
+    _taxRules.add(rule);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> updateTaxRule(TaxRule rule) async {
+    final index = _taxRules.indexWhere((t) => t.id == rule.id);
+    if (index != -1) {
+      _taxRules[index] = rule;
+      await _save();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteTaxRule(String id) async {
+    _taxRules.removeWhere((t) => t.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  TaxRule? getTaxRuleById(String id) {
+    try {
+      return _taxRules.firstWhere((t) => t.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Get all transactions with a specific tax rule
+  List<Transaction> getTransactionsByTaxRule(String taxRuleId) {
+    return _transactions.where((t) => t.taxRuleId == taxRuleId).toList();
+  }
+
+  /// Get all reequitization transactions (Task 2.2)
+  List<Transaction> get reequitizationTransactions {
+    return _transactions
+        .where((t) => t.type == TransactionType.reequitization)
+        .toList();
   }
 
   // Analysis methods
@@ -1077,10 +1303,13 @@ class CapTableProvider extends ChangeNotifier {
   }
 
   /// Get the date of the investor's first acquisition for a specific share class
-  DateTime? getFirstPurchaseDateByClass(String investorId, String shareClassId) {
-    final acquisitions = getAcquisitionsByInvestor(investorId)
-        .where((t) => t.shareClassId == shareClassId)
-        .toList();
+  DateTime? getFirstPurchaseDateByClass(
+    String investorId,
+    String shareClassId,
+  ) {
+    final acquisitions = getAcquisitionsByInvestor(
+      investorId,
+    ).where((t) => t.shareClassId == shareClassId).toList();
     if (acquisitions.isEmpty) return null;
     final earliest = acquisitions
         .map((t) => t.date)
@@ -1095,9 +1324,7 @@ class CapTableProvider extends ChangeNotifier {
     // Normalize to end of day to include all transactions on that date
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
     return _transactions
-        .where((t) =>
-            t.investorId == investorId &&
-            !t.date.isAfter(endOfDay))
+        .where((t) => t.investorId == investorId && !t.date.isAfter(endOfDay))
         .fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
@@ -1110,10 +1337,12 @@ class CapTableProvider extends ChangeNotifier {
     // Normalize to end of day to include all transactions on that date
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
     return _transactions
-        .where((t) =>
-            t.investorId == investorId &&
-            t.shareClassId == shareClassId &&
-            !t.date.isAfter(endOfDay))
+        .where(
+          (t) =>
+              t.investorId == investorId &&
+              t.shareClassId == shareClassId &&
+              !t.date.isAfter(endOfDay),
+        )
         .fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
@@ -1179,8 +1408,9 @@ class CapTableProvider extends ChangeNotifier {
       'transactions': _transactions.map((e) => e.toJson()).toList(),
       'convertibles': _convertibles.map((e) => e.toJson()).toList(),
       'milestones': _milestones.map((e) => e.toJson()).toList(),
-      'hoursVestingSchedules':
-          _hoursVestingSchedules.map((e) => e.toJson()).toList(),
+      'hoursVestingSchedules': _hoursVestingSchedules
+          .map((e) => e.toJson())
+          .toList(),
       'companyName': _companyName,
       'tableColumnWidths': _tableColumnWidths,
       'exportedAt': DateTime.now().toIso8601String(),

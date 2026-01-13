@@ -7,6 +7,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/avatars.dart';
 import '../widgets/info_widgets.dart';
 import '../widgets/dialogs.dart';
+import '../widgets/help_icon.dart';
 import '../utils/helpers.dart';
 
 /// Local enum for sale type in the sell shares dialog
@@ -267,9 +268,12 @@ class InvestorsPage extends StatelessWidget {
                   const SizedBox(height: 16),
                   DropdownButtonFormField<InvestorType>(
                     initialValue: selectedType,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Investor Type',
-                      prefixIcon: Icon(Icons.category),
+                      prefixIcon: const Icon(Icons.category),
+                      suffixIcon: const HelpIcon(
+                        helpKey: 'investors.investorType',
+                      ),
                     ),
                     items: InvestorType.values.map((type) {
                       return DropdownMenuItem(
@@ -311,15 +315,22 @@ class InvestorsPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  SwitchListTile(
-                    title: const Text('Pro-rata Rights'),
-                    subtitle: const Text(
-                      'Can maintain ownership in future rounds',
-                    ),
-                    value: hasProRata,
-                    onChanged: (value) {
-                      setState(() => hasProRata = value);
-                    },
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SwitchListTile(
+                          title: const Text('Pro-rata Rights'),
+                          subtitle: const Text(
+                            'Can maintain ownership in future rounds',
+                          ),
+                          value: hasProRata,
+                          onChanged: (value) {
+                            setState(() => hasProRata = value);
+                          },
+                        ),
+                      ),
+                      const HelpIcon(helpKey: 'investors.proRataRights'),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   TextField(

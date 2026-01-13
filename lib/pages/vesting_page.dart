@@ -10,6 +10,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/section_card.dart';
 import '../widgets/avatars.dart';
 import '../widgets/info_widgets.dart';
+import '../widgets/help_icon.dart';
 import '../utils/helpers.dart';
 
 class VestingPage extends StatefulWidget {
@@ -302,97 +303,384 @@ class _MilestoneVestingTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Summary Stats
+          _MilestoneSummaryCard(milestones: milestones, provider: provider),
+          const SizedBox(height: 24),
+
           // Pending milestones
           if (pending.isNotEmpty) ...[
-            _buildMilestoneSection(context, 'Pending', pending, Colors.orange),
-            const SizedBox(height: 16),
+            _buildSectionHeader(context, 'Pending', pending.length),
+            const SizedBox(height: 8),
+            ...pending.map(
+              (m) => _MilestoneCard(milestone: m, provider: provider),
+            ),
+            const SizedBox(height: 24),
           ],
 
           // Completed milestones
           if (completed.isNotEmpty) ...[
-            _buildMilestoneSection(
-              context,
-              'Completed',
-              completed,
-              Colors.green,
+            _buildSectionHeader(context, 'Completed', completed.length),
+            const SizedBox(height: 8),
+            ...completed.map(
+              (m) => _MilestoneCard(milestone: m, provider: provider),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
           ],
 
           // Lapsed milestones
           if (lapsed.isNotEmpty) ...[
-            _buildMilestoneSection(context, 'Lapsed', lapsed, Colors.grey),
+            _buildSectionHeader(context, 'Lapsed', lapsed.length),
+            const SizedBox(height: 8),
+            ...lapsed.map(
+              (m) => _MilestoneCard(milestone: m, provider: provider),
+            ),
           ],
 
+          // Space for FAB
           const SizedBox(height: 80),
         ],
       ),
     );
   }
 
-  Widget _buildMilestoneSection(
-    BuildContext context,
-    String title,
-    List<Milestone> milestones,
-    Color color,
-  ) {
+  Widget _buildSectionHeader(BuildContext context, String title, int count) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            count.toString(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MilestoneSummaryCard extends StatelessWidget {
+  final List<Milestone> milestones;
+  final CapTableProvider provider;
+
+  const _MilestoneSummaryCard({
+    required this.milestones,
+    required this.provider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingCount = milestones
+        .where((m) => !m.isCompleted && !m.isLapsed)
+        .length;
+    final completedCount = milestones.where((m) => m.isCompleted).length;
+
+    final totalEquity = milestones.fold<double>(
+      0,
+      (sum, m) => sum + m.equityPercent,
+    );
+    final earnedEquity = milestones
+        .where((m) => m.isCompleted)
+        .fold<double>(0, (sum, m) => sum + m.earnedEquityPercent);
+    final pendingEquity = milestones
+        .where((m) => !m.isCompleted && !m.isLapsed)
+        .fold<double>(0, (sum, m) => sum + m.equityPercent);
+
     return SectionCard(
-      title: title,
+      title: 'Milestone Summary',
+      icon: Icons.flag,
+      helpKey: 'vesting.milestones',
       child: Column(
-        children: milestones.map((m) {
-          final investor = provider.getInvestorById(m.investorId ?? '');
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: color.withValues(alpha: 0.2),
-              child: Icon(
-                m.isCompleted
-                    ? Icons.check
-                    : m.isLapsed
-                    ? Icons.close
-                    : Icons.flag,
-                color: color,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: MiniStat(
+                  label: 'Total Milestones',
+                  value: milestones.length.toString(),
+                ),
+              ),
+              Expanded(
+                child: MiniStat(
+                  label: 'Pending',
+                  value: pendingCount.toString(),
+                ),
+              ),
+              Expanded(
+                child: MiniStat(
+                  label: 'Completed',
+                  value: completedCount.toString(),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: MiniStat(
+                  label: 'Total Equity',
+                  value: '${totalEquity.toStringAsFixed(2)}%',
+                ),
+              ),
+              Expanded(
+                child: MiniStat(
+                  label: 'Earned',
+                  value: '${earnedEquity.toStringAsFixed(2)}%',
+                ),
+              ),
+              Expanded(
+                child: MiniStat(
+                  label: 'Pending',
+                  value: '${pendingEquity.toStringAsFixed(2)}%',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MilestoneCard extends StatelessWidget {
+  final Milestone milestone;
+  final CapTableProvider provider;
+
+  const _MilestoneCard({required this.milestone, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final investor = provider.getInvestorById(milestone.investorId ?? '');
+
+    // Status color
+    Color statusColor;
+    String statusText;
+    if (milestone.isCompleted) {
+      statusColor = Colors.green;
+      statusText = 'Completed';
+    } else if (milestone.isLapsed) {
+      statusColor = Colors.grey;
+      statusText = 'Lapsed';
+    } else {
+      statusColor = Colors.orange;
+      statusText = 'Pending';
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        leading: CircleAvatar(
+          backgroundColor: statusColor.withValues(alpha: 0.2),
+          child: Icon(
+            milestone.isCompleted
+                ? Icons.check
+                : milestone.isLapsed
+                ? Icons.close
+                : Icons.flag,
+            color: statusColor,
+          ),
+        ),
+        title: Text(
+          milestone.name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Row(
+          children: [
+            // Progress indicator for graded milestones
+            if (milestone.triggerType == MilestoneTriggerType.graded)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: milestone.progress,
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                        color: statusColor,
+                        minHeight: 6,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${(milestone.progress * 100).toStringAsFixed(0)}% complete',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Expanded(
+                child: Text(
+                  '${milestone.equityPercent.toStringAsFixed(2)}% equity',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            const SizedBox(width: 12),
+            // Status badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                statusText,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: statusColor,
+                ),
               ),
             ),
-            title: Text(m.name),
-            subtitle: Column(
+          ],
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (investor != null) Text(investor.name),
-                Text(
-                  '${m.equityPercent.toStringAsFixed(2)}% equity • ${m.triggerTypeDisplayName}',
+                // Milestone info
+                Row(
+                  children: [
+                    Expanded(
+                      child: ResultChip(
+                        label: 'Equity',
+                        value: '${milestone.equityPercent.toStringAsFixed(2)}%',
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ResultChip(
+                        label: 'Trigger',
+                        value: milestone.triggerTypeDisplayName,
+                        color: Colors.blue,
+                      ),
+                    ),
+                    if (milestone.isCompleted) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ResultChip(
+                          label: 'Earned',
+                          value:
+                              '${milestone.earnedEquityPercent.toStringAsFixed(2)}%',
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                if (m.triggerType == MilestoneTriggerType.graded)
-                  LinearProgressIndicator(
-                    value: m.progress,
-                    backgroundColor: Colors.grey.shade200,
+                const SizedBox(height: 16),
+
+                // Details
+                if (investor != null)
+                  _buildDetailRow(context, 'Assignee', investor.name),
+                if (milestone.description != null)
+                  _buildDetailRow(
+                    context,
+                    'Description',
+                    milestone.description!,
                   ),
+                if (milestone.deadline != null)
+                  _buildDetailRow(
+                    context,
+                    'Deadline',
+                    Formatters.date(milestone.deadline!),
+                  ),
+                if (milestone.completedDate != null)
+                  _buildDetailRow(
+                    context,
+                    'Completed',
+                    Formatters.date(milestone.completedDate!),
+                  ),
+
+                const SizedBox(height: 16),
+
+                // Action buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (!milestone.isCompleted && !milestone.isLapsed)
+                      TextButton.icon(
+                        onPressed: () => _showCompleteMilestone(context),
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: const Text('Complete'),
+                      ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => _showEditMilestone(context),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => _showDeleteMilestone(context),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        color: theme.colorScheme.error,
+                      ),
+                      label: Text(
+                        'Delete',
+                        style: TextStyle(color: theme.colorScheme.error),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
-            trailing: m.isCompleted
-                ? Text(
-                    Formatters.date(m.completedDate!),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  )
-                : !m.isLapsed
-                ? IconButton(
-                    icon: const Icon(Icons.check_circle_outline),
-                    onPressed: () =>
-                        _showCompleteMilestone(context, provider, m),
-                  )
-                : null,
-            isThreeLine: true,
-            onTap: () => _showEditMilestone(context, provider, m),
-          );
-        }).toList(),
+          ),
+        ],
       ),
     );
   }
 
-  void _showCompleteMilestone(
-    BuildContext context,
-    CapTableProvider provider,
-    Milestone milestone,
-  ) {
+  Widget _buildDetailRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCompleteMilestone(BuildContext context) {
     String? shareClassId;
     final priceController = TextEditingController(
       text: provider.latestSharePrice.toStringAsFixed(4),
@@ -413,7 +701,7 @@ class _MilestoneVestingTab extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: shareClassId,
+                value: shareClassId,
                 decoration: const InputDecoration(
                   labelText: 'Share Class',
                   border: OutlineInputBorder(),
@@ -460,15 +748,39 @@ class _MilestoneVestingTab extends StatelessWidget {
     );
   }
 
-  void _showEditMilestone(
-    BuildContext context,
-    CapTableProvider provider,
-    Milestone milestone,
-  ) {
+  void _showEditMilestone(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) =>
           _MilestoneDialog(provider: provider, milestone: milestone),
+    );
+  }
+
+  void _showDeleteMilestone(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Milestone'),
+        content: Text(
+          'Are you sure you want to delete "${milestone.name}"? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              provider.deleteMilestone(milestone.id);
+              Navigator.pop(context);
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -491,15 +803,147 @@ class _HoursVestingTab extends StatelessWidget {
       );
     }
 
+    // Group by status
+    final active = schedules.where((s) => s.progress < 1.0).toList();
+    final fullyVested = schedules.where((s) => s.progress >= 1.0).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...schedules.map(
-            (s) => _HoursVestingCard(schedule: s, provider: provider),
-          ),
+          // Summary Stats
+          _HoursSummaryCard(schedules: schedules, provider: provider),
+          const SizedBox(height: 24),
+
+          // Currently Vesting
+          if (active.isNotEmpty) ...[
+            _buildSectionHeader(context, 'Currently Vesting', active.length),
+            const SizedBox(height: 8),
+            ...active.map(
+              (s) => _HoursVestingCard(schedule: s, provider: provider),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // Fully Vested
+          if (fullyVested.isNotEmpty) ...[
+            _buildSectionHeader(context, 'Fully Vested', fullyVested.length),
+            const SizedBox(height: 8),
+            ...fullyVested.map(
+              (s) => _HoursVestingCard(schedule: s, provider: provider),
+            ),
+          ],
+
+          // Space for FAB
           const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(BuildContext context, String title, int count) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            count.toString(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HoursSummaryCard extends StatelessWidget {
+  final List<HoursVestingSchedule> schedules;
+  final CapTableProvider provider;
+
+  const _HoursSummaryCard({required this.schedules, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final totalHoursLogged = schedules.fold<double>(
+      0,
+      (sum, s) => sum + s.hoursLogged,
+    );
+    final totalHoursCommitted = schedules.fold<double>(
+      0,
+      (sum, s) => sum + s.totalHoursCommitment,
+    );
+    final vestedEquity = schedules.fold<double>(
+      0,
+      (sum, s) => sum + (s.totalEquityPercent * s.progress),
+    );
+
+    final activeCount = schedules.where((s) => s.progress < 1.0).length;
+    final vestedCount = schedules.where((s) => s.progress >= 1.0).length;
+
+    return SectionCard(
+      title: 'Hours Summary',
+      icon: Icons.access_time,
+      helpKey: 'vesting.hours',
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: MiniStat(
+                  label: 'Total Schedules',
+                  value: schedules.length.toString(),
+                ),
+              ),
+              Expanded(
+                child: MiniStat(label: 'Active', value: activeCount.toString()),
+              ),
+              Expanded(
+                child: MiniStat(
+                  label: 'Complete',
+                  value: vestedCount.toString(),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: MiniStat(
+                  label: 'Hours Logged',
+                  value: totalHoursLogged.toStringAsFixed(1),
+                ),
+              ),
+              Expanded(
+                child: MiniStat(
+                  label: 'Committed',
+                  value: totalHoursCommitted.toStringAsFixed(0),
+                ),
+              ),
+              Expanded(
+                child: MiniStat(
+                  label: 'Equity Vested',
+                  value: '${vestedEquity.toStringAsFixed(2)}%',
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -514,115 +958,226 @@ class _HoursVestingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final investor = provider.getInvestorById(schedule.investorId);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                CircleAvatar(
-                  child: Text(investor?.name.substring(0, 1) ?? '?'),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        investor?.name ?? 'Unknown',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text(
-                        '${schedule.curveTypeDisplayName} curve',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline),
-                  onPressed: () => _showLogHoursDialog(context),
-                  tooltip: 'Log hours',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+    // Status color
+    Color statusColor;
+    String statusText;
+    if (schedule.progress >= 1.0) {
+      statusColor = Colors.green;
+      statusText = 'Fully Vested';
+    } else if (schedule.cliffHours != null &&
+        schedule.hoursLogged < schedule.cliffHours!) {
+      statusColor = Colors.orange;
+      statusText = 'In Cliff';
+    } else {
+      statusColor = Colors.blue;
+      statusText = 'Vesting';
+    }
 
-            // Progress
-            Column(
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        leading: InvestorAvatar(
+          name: investor?.name ?? '?',
+          type: investor?.type,
+        ),
+        title: Text(
+          investor?.name ?? 'Unknown',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Row(
+          children: [
+            // Progress indicator
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: schedule.progress,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
+                      color: statusColor,
+                      minHeight: 6,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${schedule.hoursLogged.toStringAsFixed(1)} / ${schedule.totalHoursCommitment} hours',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Status badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                statusText,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: statusColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Stats
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '${schedule.hoursLogged.toStringAsFixed(1)} / ${schedule.totalHoursCommitment} hours',
+                    Expanded(
+                      child: ResultChip(
+                        label: 'Total Equity',
+                        value: '${schedule.totalEquityPercent}%',
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
-                    Text(
-                      '${schedule.totalVestedPercent.toStringAsFixed(2)}% vested',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ResultChip(
+                        label: 'Vested',
+                        value:
+                            '${schedule.totalVestedPercent.toStringAsFixed(2)}%',
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ResultChip(
+                        label: 'Curve',
+                        value: schedule.curveTypeDisplayName,
+                        color: Colors.blue,
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: schedule.progress,
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+                const SizedBox(height: 16),
 
-            // Info chips
-            Wrap(
-              spacing: 8,
-              children: [
-                Chip(
-                  avatar: const Icon(Icons.pie_chart, size: 18),
-                  label: Text('${schedule.totalEquityPercent}% total equity'),
+                // Details
+                _buildDetailRow(
+                  context,
+                  'Start Date',
+                  Formatters.date(schedule.startDate),
                 ),
                 if (schedule.cliffHours != null)
-                  Chip(
-                    avatar: const Icon(Icons.vertical_align_bottom, size: 18),
-                    label: Text('${schedule.cliffHours}h cliff'),
+                  _buildDetailRow(
+                    context,
+                    'Cliff Hours',
+                    '${schedule.cliffHours} hours',
                   ),
                 if (schedule.bonusMilestones.isNotEmpty)
-                  Chip(
-                    avatar: const Icon(Icons.stars, size: 18),
-                    label: Text('${schedule.bonusMilestones.length} bonuses'),
+                  _buildDetailRow(
+                    context,
+                    'Bonus Milestones',
+                    '${schedule.bonusMilestones.length} bonus${schedule.bonusMilestones.length > 1 ? 'es' : ''}',
                   ),
-              ],
-            ),
 
-            // Recent logs
-            if (schedule.logEntries.isNotEmpty) ...[
-              const Divider(),
-              Text(
-                'Recent Activity',
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-              const SizedBox(height: 8),
-              ...schedule.logEntries
-                  .take(3)
-                  .map(
-                    (e) => Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(Formatters.date(e.date)),
-                        Text('+${e.hours.toStringAsFixed(1)}h'),
-                      ],
+                // Recent activity
+                if (schedule.logEntries.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Recent Activity',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-            ],
-          ],
-        ),
+                  const SizedBox(height: 8),
+                  ...schedule.logEntries
+                      .take(5)
+                      .map(
+                        (e) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                Formatters.date(e.date),
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              Text(
+                                '+${e.hours.toStringAsFixed(1)}h',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                ],
+
+                const SizedBox(height: 16),
+
+                // Action buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => _showLogHoursDialog(context),
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('Log Hours'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => _showDeleteDialog(context),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        color: theme.colorScheme.error,
+                      ),
+                      label: Text(
+                        'Delete',
+                        style: TextStyle(color: theme.colorScheme.error),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+        ],
       ),
     );
   }
@@ -700,6 +1255,34 @@ class _HoursVestingCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showDeleteDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Schedule'),
+        content: const Text(
+          'Are you sure you want to delete this hours vesting schedule? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              provider.deleteHoursVestingSchedule(schedule.id);
+              Navigator.pop(context);
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
   }
@@ -924,6 +1507,7 @@ class _HoursVestingDialog extends StatefulWidget {
   final CapTableProvider provider;
   final HoursVestingSchedule? schedule;
 
+  // ignore: unused_element_parameter - schedule is for future edit functionality
   const _HoursVestingDialog({required this.provider, this.schedule});
 
   @override
@@ -1199,6 +1783,7 @@ class _VestingSummaryCard extends StatelessWidget {
     return SectionCard(
       title: 'Vesting Summary',
       icon: Icons.schedule,
+      helpKey: 'vesting.vesting',
       child: Column(
         children: [
           Row(
@@ -1521,6 +2106,8 @@ class _VestingCard extends StatelessWidget {
         return 'Milestone-based';
       case VestingType.reverse:
         return 'Reverse vesting';
+      case VestingType.hybrid:
+        return 'Hybrid';
     }
   }
 
@@ -1816,9 +2403,10 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
 
                 // Vesting Type
                 DropdownButtonFormField<VestingType>(
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Vesting Type',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: const HelpIcon(helpKey: 'vesting.vesting'),
                   ),
                   initialValue: _vestingType,
                   items: VestingType.values.map((type) {
@@ -1860,9 +2448,12 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Vesting Period',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: const HelpIcon(
+                            helpKey: 'fields.vestingMonths',
+                          ),
                         ),
                         initialValue: _vestingPeriodMonths,
                         items: [12, 24, 36, 48, 60].map((months) {
@@ -1887,9 +2478,10 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Cliff Period',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: const HelpIcon(helpKey: 'vesting.cliff'),
                         ),
                         initialValue: _cliffMonths,
                         items: [0, 3, 6, 9, 12, 18, 24]
@@ -1937,9 +2529,10 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
 
                 // Acceleration
                 DropdownButtonFormField<double>(
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Acceleration on Liquidity Event',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: const HelpIcon(helpKey: 'vesting.acceleration'),
                   ),
                   initialValue: _accelerationPercent,
                   items: [0.0, 25.0, 50.0, 100.0].map((percent) {
@@ -2043,6 +2636,8 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
         return 'Milestone-based';
       case VestingType.reverse:
         return 'Reverse vesting';
+      case VestingType.hybrid:
+        return 'Hybrid';
     }
   }
 

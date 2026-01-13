@@ -5,6 +5,7 @@ import '../models/investment_round.dart';
 import '../providers/cap_table_provider.dart';
 import 'avatars.dart';
 import 'dialogs.dart';
+import 'help_icon.dart';
 
 /// Result type for investment dialog
 enum InvestmentDialogAction { saved, deleted, cancelled }
@@ -154,9 +155,12 @@ Future<InvestmentDialogResult> showInvestmentDialog({
                 // Share class selection
                 DropdownButtonFormField<String>(
                   initialValue: selectedShareClassId,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Share Class',
-                    prefixIcon: Icon(Icons.category),
+                    prefixIcon: const Icon(Icons.category),
+                    suffixIcon: const HelpIcon(
+                      helpKey: 'shareClasses.shareClass',
+                    ),
                   ),
                   items: provider.shareClasses.map((shareClass) {
                     return DropdownMenuItem(
@@ -173,10 +177,13 @@ Future<InvestmentDialogResult> showInvestmentDialog({
                 // Number of shares
                 TextField(
                   controller: sharesController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Number of Shares *',
                     hintText: '100000',
-                    prefixIcon: Icon(Icons.pie_chart),
+                    prefixIcon: const Icon(Icons.pie_chart),
+                    suffixIcon: const HelpIcon(
+                      helpKey: 'fields.numberOfShares',
+                    ),
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -195,6 +202,7 @@ Future<InvestmentDialogResult> showInvestmentDialog({
                     hintText: '1.00',
                     prefixIcon: const Icon(Icons.monetization_on),
                     helperText: priceSource,
+                    suffixIcon: const HelpIcon(helpKey: 'rounds.pricePerShare'),
                   ),
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,

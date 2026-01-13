@@ -1,22 +1,35 @@
 import 'package:flutter/material.dart';
+import 'help_icon.dart';
 
 /// A small statistic display with label and value
 class MiniStat extends StatelessWidget {
   final String label;
   final String value;
+  final String? helpKey;
 
-  const MiniStat({super.key, required this.label, required this.value});
+  const MiniStat({
+    super.key,
+    required this.label,
+    required this.value,
+    this.helpKey,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: Theme.of(context).colorScheme.outline,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+            if (helpKey != null) HelpIcon(helpKey: helpKey!, size: 12),
+          ],
         ),
         Text(
           value,

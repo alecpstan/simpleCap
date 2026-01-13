@@ -5,6 +5,7 @@ import '../widgets/stat_card.dart';
 import '../widgets/ownership_pie_chart.dart';
 import '../widgets/section_card.dart';
 import '../widgets/resizable_table.dart';
+import '../widgets/help_icon.dart';
 import '../utils/helpers.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -75,6 +76,8 @@ class _DashboardPageState extends State<DashboardPage> {
         Row(
           children: [
             const Spacer(),
+            const HelpIcon(helpKey: 'general.fullyDiluted', size: 14),
+            const SizedBox(width: 4),
             FilterChip(
               label: Text(showFD ? 'Fully Diluted' : 'Issued Only'),
               selected: showFD,
@@ -94,6 +97,7 @@ class _DashboardPageState extends State<DashboardPage> {
               value: Formatters.compactCurrency(provider.latestValuation),
               icon: Icons.trending_up,
               color: Colors.green,
+              helpKey: 'general.valuation',
             ),
             StatCard(
               title: 'Total Raised',
@@ -103,6 +107,7 @@ class _DashboardPageState extends State<DashboardPage> {
               subtitle: provider.outstandingConvertibles.isNotEmpty
                   ? '+ ${Formatters.compactCurrency(provider.totalConvertiblePrincipal)} convertibles'
                   : '${provider.rounds.length} rounds',
+              helpKey: 'rounds.amountRaised',
             ),
             StatCard(
               title: shareLabel,
@@ -112,12 +117,14 @@ class _DashboardPageState extends State<DashboardPage> {
               subtitle: showFD && provider.convertibleShares > 0
                   ? 'Incl. ${Formatters.number(provider.convertibleShares)} from convertibles'
                   : '$activeInvestorCount active investors',
+              helpKey: showFD ? 'general.fullyDiluted' : 'general.issuedShares',
             ),
             StatCard(
               title: 'Share Price',
               value: Formatters.currency(provider.latestSharePrice),
               icon: Icons.monetization_on,
               color: Colors.orange,
+              helpKey: 'general.sharePrice',
             ),
           ],
         ),

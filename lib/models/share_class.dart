@@ -6,6 +6,7 @@ enum ShareClassType {
   preferenceB,
   options,
   esop,
+  performanceRights,
   convertibleNote,
   safe,
   custom,
@@ -71,6 +72,8 @@ class ShareClass {
         return 'Options';
       case ShareClassType.esop:
         return 'ESOP';
+      case ShareClassType.performanceRights:
+        return 'Performance Rights';
       case ShareClassType.convertibleNote:
         return 'Convertible Note';
       case ShareClassType.safe:

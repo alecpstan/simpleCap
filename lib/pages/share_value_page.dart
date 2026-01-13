@@ -77,6 +77,7 @@ class ShareValuePage extends StatelessWidget {
               SectionCard(
                 title: 'Valuation Summary',
                 icon: Icons.insights,
+                helpKey: 'general.valuation',
                 child: Column(
                   children: [
                     Row(
@@ -85,6 +86,7 @@ class ShareValuePage extends StatelessWidget {
                           child: MiniStat(
                             label: 'Share Price',
                             value: Formatters.currency(latestSharePrice),
+                            helpKey: 'general.sharePrice',
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -105,6 +107,7 @@ class ShareValuePage extends StatelessWidget {
                             value: Formatters.compactCurrency(
                               provider.latestValuation,
                             ),
+                            helpKey: 'general.valuation',
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -114,6 +117,7 @@ class ShareValuePage extends StatelessWidget {
                             value: Formatters.number(
                               provider.totalIssuedShares,
                             ),
+                            helpKey: 'general.issuedShares',
                           ),
                         ),
                       ],
@@ -772,6 +776,8 @@ class _ExitedInvestorCard extends StatelessWidget {
         return 'Option Exercise';
       case TransactionType.conversion:
         return 'Convertible Conversion';
+      case TransactionType.reequitization:
+        return 'Re-equitization';
     }
   }
 }
@@ -1019,6 +1025,8 @@ class _PartialSellerCard extends StatelessWidget {
         return 'Option Exercise';
       case TransactionType.conversion:
         return 'Convertible Conversion';
+      case TransactionType.reequitization:
+        return 'Re-equitization';
     }
   }
 }

@@ -1,0 +1,338 @@
+{
+  "general": {
+    "capTable": {
+      "title": "Cap Table",
+      "description": "A capitalisation (cap) table is a record of all the shareholders in a company, showing who owns what percentage. It tracks shares issued, ownership percentages, and the value of equity at different rounds."
+    },
+    "valuation": {
+      "title": "Company Valuation",
+      "description": "The estimated total worth of the company. For startups, this is typically determined during funding rounds based on investor negotiations, comparable companies, or financial projections."
+    },
+    "sharePrice": {
+      "title": "Share Price",
+      "description": "The current value of a single share, calculated by dividing the company valuation by the total number of shares issued (or fully diluted shares)."
+    },
+    "fullyDiluted": {
+      "title": "Fully Diluted Shares",
+      "description": "The total number of shares that would exist if all convertible securities (options, convertible notes, SAFEs, warrants) were converted into ordinary shares. This gives a more complete picture of ownership."
+    },
+    "issuedShares": {
+      "title": "Issued Shares",
+      "description": "The actual number of shares that have been formally issued to shareholders. This excludes options or convertibles that haven't been exercised yet."
+    },
+    "authorizedShares": {
+      "title": "Authorised Shares",
+      "description": "The maximum number of shares the company is allowed to issue as specified in its constitution. This sets an upper limit on total shares that can be created."
+    }
+  },
+  "investors": {
+    "investorType": {
+      "title": "Investor Type",
+      "description": "Categories of investors: Founders (original creators), Angels (high-net-worth individuals), VCs (venture capital firms), Employees (staff with equity), and Strategic investors (corporations investing for strategic reasons)."
+    },
+    "ownership": {
+      "title": "Ownership Percentage",
+      "description": "The proportion of the company owned by a shareholder, calculated as their shares divided by total shares. This determines voting power and share of any exit proceeds."
+    },
+    "proRataRights": {
+      "title": "Pro-Rata Rights",
+      "description": "The contractual right for an existing investor to participate in future funding rounds to maintain their ownership percentage. Without this, their stake would be diluted."
+    },
+    "totalInvested": {
+      "title": "Total Invested",
+      "description": "The total amount of money an investor has contributed to the company in exchange for shares across all funding rounds."
+    },
+    "currentShares": {
+      "title": "Current Shares",
+      "description": "The number of shares currently held by an investor, accounting for any sales, transfers, or exits they may have made."
+    },
+    "exitedInvestor": {
+      "title": "Exited Investor",
+      "description": "An investor who has sold all their shares, either through a secondary sale to another investor, a company buyback, or an exit event like an acquisition."
+    }
+  },
+  "rounds": {
+    "fundingRound": {
+      "title": "Funding Round",
+      "description": "A discrete event where the company raises capital from investors in exchange for equity. Common rounds include Seed, Series A, Series B, etc."
+    },
+    "preMoneyValuation": {
+      "title": "Pre-Money Valuation",
+      "description": "The company's valuation immediately before a new investment. Used with the investment amount to calculate how many shares new investors receive."
+    },
+    "postMoneyValuation": {
+      "title": "Post-Money Valuation",
+      "description": "The company's valuation immediately after investment. Calculated as Pre-Money Valuation + Investment Amount."
+    },
+    "amountRaised": {
+      "title": "Amount Raised",
+      "description": "The total capital received from investors in a funding round in exchange for newly issued shares."
+    },
+    "roundType": {
+      "title": "Round Type",
+      "description": "Seed: Early-stage funding for product development. Series A/B/C: Growth-stage funding rounds. Bridge: Short-term funding between rounds. Pre-Seed: Very early, often from founders/friends."
+    },
+    "leadInvestor": {
+      "title": "Lead Investor",
+      "description": "The investor who negotiates terms and typically invests the largest amount in a round. They often set the valuation and take a board seat."
+    },
+    "pricePerShare": {
+      "title": "Price Per Share",
+      "description": "The amount paid for each share in a funding round. Calculated as Pre-Money Valuation ÷ Pre-Money Shares."
+    }
+  },
+  "shareClasses": {
+    "shareClass": {
+      "title": "Share Class",
+      "description": "Different categories of shares with different rights. Ordinary shares are standard. Preference shares may have liquidation preferences, dividends, or other special rights."
+    },
+    "ordinary": {
+      "title": "Ordinary Shares",
+      "description": "Standard shares that represent basic ownership with voting rights and rights to dividends. Most common type for founders and employees."
+    },
+    "preference": {
+      "title": "Preference Shares",
+      "description": "Shares with special rights, typically held by investors. Often include liquidation preference (get paid first in exit) and may have anti-dilution protection."
+    },
+    "option": {
+      "title": "Options",
+      "description": "The right (but not obligation) to purchase shares at a set price (strike/exercise price) in the future. Common for employee compensation. Must be exercised to become actual shares."
+    },
+    "performanceRights": {
+      "title": "Performance Rights",
+      "description": "A right to receive shares upon meeting performance conditions, with no exercise price required. Common in Australia for employee incentives under ESS rules."
+    },
+    "liquidationPreference": {
+      "title": "Liquidation Preference",
+      "description": "The right for preference shareholders to receive their investment back (often with a multiple) before ordinary shareholders receive anything in an exit or liquidation."
+    }
+  },
+  "transactions": {
+    "transactionType": {
+      "title": "Transaction Type",
+      "description": "The nature of a share movement: Issue (new shares created), Transfer (existing shares change hands), Exercise (option converted to shares), or Sale (shares sold)."
+    },
+    "issue": {
+      "title": "Share Issue",
+      "description": "The creation of new shares, increasing total shares outstanding. Occurs during funding rounds or when options/convertibles are exercised."
+    },
+    "transfer": {
+      "title": "Share Transfer",
+      "description": "When existing shares change ownership between parties. No new shares are created, so total shares remain the same."
+    },
+    "exercise": {
+      "title": "Option Exercise",
+      "description": "When an option holder converts their options into actual shares by paying the exercise/strike price. Creates new shares."
+    },
+    "exercisePrice": {
+      "title": "Exercise/Strike Price",
+      "description": "The price an option holder must pay to convert each option into a share. Usually set at fair market value when the option was granted."
+    },
+    "buyback": {
+      "title": "Share Buyback",
+      "description": "When the company purchases its own shares from shareholders, reducing total shares outstanding. Often used for departing employees or capital returns."
+    },
+    "secondarySale": {
+      "title": "Secondary Sale",
+      "description": "When an existing shareholder sells their shares to another investor (not the company). The company receives no proceeds; shares simply change hands."
+    },
+    "reequitization": {
+      "title": "Re-equitization",
+      "description": "When existing employee options are cancelled and replaced with new options at a different (usually lower) strike price. Common after a down round."
+    }
+  },
+  "vesting": {
+    "vesting": {
+      "title": "Vesting",
+      "description": "The process by which shares or options become fully owned by the recipient over time. Protects the company if the person leaves early."
+    },
+    "cliff": {
+      "title": "Cliff Period",
+      "description": "An initial period (commonly 12 months) during which no shares vest. If the person leaves before the cliff, they forfeit all unvested shares."
+    },
+    "vestingPeriod": {
+      "title": "Vesting Period",
+      "description": "The total time over which shares gradually become fully vested. Standard is 4 years, often with monthly or quarterly vesting after the cliff."
+    },
+    "acceleration": {
+      "title": "Acceleration",
+      "description": "When vesting speeds up due to specific triggers. Single-trigger: vesting accelerates on acquisition. Double-trigger: requires acquisition plus termination."
+    },
+    "timeBased": {
+      "title": "Time-Based Vesting",
+      "description": "Shares vest gradually over time, regardless of performance. The most common vesting type for employees."
+    },
+    "milestoneBased": {
+      "title": "Milestone Vesting",
+      "description": "Shares vest upon achievement of specific goals (revenue targets, product launches, etc.) rather than just passage of time."
+    },
+    "hoursBased": {
+      "title": "Hours-Based Vesting",
+      "description": "Shares vest based on hours worked rather than calendar time. Common for part-time contractors or advisors."
+    },
+    "hybridVesting": {
+      "title": "Hybrid Vesting",
+      "description": "Combines multiple vesting types (time, milestones, hours) with weighted percentages. Provides flexibility for complex arrangements."
+    },
+    "reverseVesting": {
+      "title": "Reverse Vesting",
+      "description": "The recipient owns all shares immediately but they're subject to buyback by the company if they leave before vesting completes. Common for founders."
+    },
+    "goodLeaver": {
+      "title": "Good Leaver",
+      "description": "Someone who leaves under favourable circumstances (retirement, redundancy, disability). May receive accelerated vesting or better buyback terms."
+    },
+    "badLeaver": {
+      "title": "Bad Leaver",
+      "description": "Someone who leaves under unfavourable circumstances (resignation, termination for cause). Usually forfeits unvested shares and may face clawback of vested shares."
+    },
+    "lapsing": {
+      "title": "Lapsing / Forfeiture",
+      "description": "When unvested options or shares are cancelled because the holder has left the company or conditions weren't met. The shares are typically returned to the ESOP pool."
+    }
+  },
+  "convertibles": {
+    "convertibleNote": {
+      "title": "Convertible Note",
+      "description": "A loan that converts into equity at a future funding round. Includes a principal amount, interest rate, and conversion terms (discount and/or cap)."
+    },
+    "safe": {
+      "title": "SAFE",
+      "description": "Simple Agreement for Future Equity. Like a convertible note but simpler - no interest, no maturity date. Converts at the next priced round."
+    },
+    "valuationCap": {
+      "title": "Valuation Cap",
+      "description": "The maximum valuation at which a convertible will convert into shares. Protects early investors if the company's valuation increases significantly."
+    },
+    "discount": {
+      "title": "Conversion Discount",
+      "description": "A percentage discount on the share price that convertible holders receive when converting. Typically 15-25%. Rewards early investment risk."
+    },
+    "maturityDate": {
+      "title": "Maturity Date",
+      "description": "The date when a convertible note must either convert to equity or be repaid. Creates a deadline for the company to raise a qualifying round."
+    },
+    "qualifyingRound": {
+      "title": "Qualifying Round",
+      "description": "A funding round that meets certain criteria (usually minimum amount raised) and triggers automatic conversion of outstanding convertibles."
+    },
+    "conversionShares": {
+      "title": "Estimated Conversion Shares",
+      "description": "The approximate number of shares a convertible will convert into, based on current valuation and conversion terms. May change at actual conversion."
+    }
+  },
+  "dilution": {
+    "dilution": {
+      "title": "Dilution",
+      "description": "The reduction in ownership percentage when new shares are issued. While percentage decreases, the value of shares may increase if the company's valuation grows."
+    },
+    "antiDilution": {
+      "title": "Anti-Dilution Protection",
+      "description": "Rights that protect investors from excessive dilution, especially in down rounds. May result in additional shares being issued to protected investors."
+    },
+    "downRound": {
+      "title": "Down Round",
+      "description": "A funding round at a lower valuation than the previous round. Can trigger anti-dilution provisions and may require employee option repricing."
+    },
+    "proRataCalculation": {
+      "title": "Pro-Rata Investment",
+      "description": "The amount an investor must invest in a new round to maintain their current ownership percentage. Calculated based on their current stake and round size."
+    }
+  },
+  "esop": {
+    "esop": {
+      "title": "ESOP / Option Pool",
+      "description": "Employee Share Option Plan. A pool of shares reserved for employee equity compensation. Typically 10-20% of the company, created before funding rounds."
+    },
+    "esopDilution": {
+      "title": "ESOP Dilution Method",
+      "description": "How the ESOP pool size is calculated: Pre-Round (dilutes existing shareholders), Post-Round (dilutes new and existing), or Fixed (set number of shares)."
+    },
+    "allocated": {
+      "title": "Allocated Options",
+      "description": "Options from the ESOP pool that have been granted to specific employees. These count toward the pool usage."
+    },
+    "unallocated": {
+      "title": "Unallocated Pool",
+      "description": "The remaining options in the ESOP pool that haven't been granted yet. Available for future employee grants."
+    },
+    "poolExpansion": {
+      "title": "Pool Expansion",
+      "description": "Increasing the ESOP pool size, often as part of a funding round. This dilutes all shareholders but provides more options for future employees."
+    }
+  },
+  "tax": {
+    "essTax": {
+      "title": "ESS Tax Rules (Australia)",
+      "description": "Employee Share Scheme tax rules in Australia. Determines when and how equity compensation is taxed. Includes concessional treatment for eligible startups."
+    },
+    "startupConcession": {
+      "title": "ESS Startup Concession",
+      "description": "An Australian tax concession for eligible startup employees. If conditions are met, tax is deferred until a later event (sale, 15 years, etc.)."
+    },
+    "division83A": {
+      "title": "Division 83A",
+      "description": "The section of Australian tax law governing Employee Share Schemes. Determines taxing point, amount, and available deferrals for employee equity."
+    },
+    "taxingPoint": {
+      "title": "Taxing Point",
+      "description": "The point at which employee equity becomes taxable. May be at grant, vesting, exercise, or sale depending on the ESS rules and elections made."
+    }
+  },
+  "scenarios": {
+    "exitWaterfall": {
+      "title": "Exit Waterfall",
+      "description": "How proceeds from a company exit (sale/IPO) flow to shareholders. Liquidation preferences are paid first, then remaining proceeds split by ownership."
+    },
+    "dilutionCalculator": {
+      "title": "Dilution Calculator",
+      "description": "A tool to model how a new funding round affects existing shareholders' ownership percentages."
+    },
+    "roundSimulator": {
+      "title": "Round Simulator",
+      "description": "Models a future funding round to preview ownership changes, including ESOP expansion impact."
+    },
+    "participatingPreferred": {
+      "title": "Participating Preferred",
+      "description": "Preference shares that receive their liquidation preference AND participate in remaining proceeds. More investor-friendly than non-participating."
+    },
+    "nonParticipatingPreferred": {
+      "title": "Non-Participating Preferred",
+      "description": "Preference shares that choose either their liquidation preference OR their pro-rata share of proceeds, whichever is higher."
+    }
+  },
+  "fields": {
+    "companyName": {
+      "title": "Company Name",
+      "description": "The legal name of the company as registered with ASIC."
+    },
+    "investorName": {
+      "title": "Investor Name",
+      "description": "The legal name of the shareholder or investing entity."
+    },
+    "numberOfShares": {
+      "title": "Number of Shares",
+      "description": "The quantity of shares involved in this transaction or holding."
+    },
+    "roundName": {
+      "title": "Round Name",
+      "description": "A descriptive name for the funding round (e.g., 'Seed Round', 'Series A')."
+    },
+    "transactionDate": {
+      "title": "Transaction Date",
+      "description": "The effective date when shares were issued, transferred, or cancelled."
+    },
+    "vestingStartDate": {
+      "title": "Vesting Start Date",
+      "description": "The date from which the vesting clock begins. Typically the employment start date or grant date."
+    },
+    "cliffMonths": {
+      "title": "Cliff (Months)",
+      "description": "The number of months before any shares vest. Standard is 12 months for employees."
+    },
+    "vestingMonths": {
+      "title": "Vesting Period (Months)",
+      "description": "Total months over which shares fully vest. Standard is 48 months (4 years)."
+    }
+  }
+}

@@ -6,6 +6,7 @@ import '../widgets/section_card.dart';
 import '../widgets/info_widgets.dart';
 import '../widgets/avatars.dart';
 import '../widgets/valuation_wizard.dart';
+import '../widgets/help_icon.dart';
 import '../utils/helpers.dart';
 
 class ScenariosPage extends StatefulWidget {
@@ -15,7 +16,11 @@ class ScenariosPage extends StatefulWidget {
   State<ScenariosPage> createState() => _ScenariosPageState();
 }
 
-class _ScenariosPageState extends State<ScenariosPage> {
+class _ScenariosPageState extends State<ScenariosPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  // Dilution Calculator
   final _newSharesController = TextEditingController();
   final _newInvestmentController = TextEditingController();
   final _preMoneyController = TextEditingController();
@@ -23,11 +28,34 @@ class _ScenariosPageState extends State<ScenariosPage> {
   double _newOwnershipPercentage = 0;
   double _impliedSharePrice = 0;
 
+  // Exit Waterfall
+  final _exitValuationController = TextEditingController();
+  List<WaterfallRow> _waterfallResults = [];
+
+  // New Round Simulation
+  final _simRoundNameController = TextEditingController();
+  final _simRaiseAmountController = TextEditingController();
+  final _simPreMoneyController = TextEditingController();
+  double _simEsopExpansion = 0;
+  List<_SimulationResult> _simulationResults = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _exitValuationController.text = '10000000'; // Default $10M exit
+  }
+
   @override
   void dispose() {
+    _tabController.dispose();
     _newSharesController.dispose();
     _newInvestmentController.dispose();
     _preMoneyController.dispose();
+    _exitValuationController.dispose();
+    _simRoundNameController.dispose();
+    _simRaiseAmountController.dispose();
+    _simPreMoneyController.dispose();
     super.dispose();
   }
 
@@ -70,277 +98,842 @@ class _ScenariosPageState extends State<ScenariosPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Scenarios'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Scenarios'),
+        centerTitle: true,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.calculate), text: 'Dilution'),
+            Tab(icon: Icon(Icons.waterfall_chart), text: 'Exit Waterfall'),
+            Tab(icon: Icon(Icons.science), text: 'New Round'),
+          ],
+        ),
+      ),
       body: Consumer<CapTableProvider>(
         builder: (context, provider, child) {
           if (provider.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Dilution Calculator
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.calculate, size: 24),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Dilution Calculator',
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'See how a new funding round would affect existing shareholders',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                        ),
-                        const SizedBox(height: 24),
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _buildDilutionTab(provider),
+              _buildExitWaterfallTab(provider),
+              _buildNewRoundSimulatorTab(provider),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
-                        // Current state info
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
+  Widget _buildDilutionTab(CapTableProvider provider) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Dilution Calculator
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.calculate, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Dilution Calculator',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const HelpIcon(helpKey: 'dilution.dilution'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'See how a new funding round would affect existing shareholders',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Current state info
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Current Shares'),
-                                    Text(
-                                      Formatters.number(
-                                        provider.totalCurrentShares,
-                                      ),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Current Valuation'),
-                                    Text(
-                                      Formatters.compactCurrency(
-                                        provider.latestValuation,
-                                      ),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
+                              const Text('Current Shares'),
+                              Text(
+                                Formatters.number(provider.totalCurrentShares),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 24),
-
-                        // Input method 1: By shares
-                        Text(
-                          'Calculate by New Shares:',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _newSharesController,
-                                decoration: const InputDecoration(
-                                  labelText: 'New Shares to Issue',
-                                  hintText: '1000000',
-                                  prefixIcon: Icon(Icons.pie_chart),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Current Valuation'),
+                              Text(
+                                Formatters.compactCurrency(
+                                  provider.latestValuation,
                                 ),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                onChanged: (_) => _calculateDilution(provider),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: TextField(
-                                controller: _newInvestmentController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Investment Amount (AUD)',
-                                  hintText: '500000',
-                                  prefixIcon: Icon(Icons.attach_money),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                onChanged: (_) => _calculateDilution(provider),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Input method 2: By valuation
-                        Text(
-                          'Or Calculate by Valuation:',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _preMoneyController,
-                                decoration: InputDecoration(
-                                  labelText: 'Pre-Money Valuation (AUD)',
-                                  hintText: '5000000',
-                                  prefixIcon: const Icon(Icons.trending_up),
-                                  suffixIcon: ValuationWizardButton(
-                                    currentValuation: double.tryParse(
-                                      _preMoneyController.text,
-                                    ),
-                                    onValuationSelected: (value) {
-                                      _preMoneyController.text = value
-                                          .round()
-                                          .toString();
-                                      _calculateFromValuation(provider);
-                                    },
-                                  ),
-                                ),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            FilledButton(
-                              onPressed: () =>
-                                  _calculateFromValuation(provider),
-                              child: const Text('Calculate'),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 24),
 
-                // Results
-                if (_dilutionResults.isNotEmpty) ...[
-                  SectionCard(
-                    title: 'New Round Summary',
-                    child: Wrap(
-                      spacing: 16,
-                      runSpacing: 8,
-                      children: [
-                        ResultChip(
-                          label: 'New Investor Ownership',
-                          value: Formatters.percent(_newOwnershipPercentage),
-                          color: Colors.green,
+                  // Input method 1: By shares
+                  Text(
+                    'Calculate by New Shares:',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _newSharesController,
+                          decoration: const InputDecoration(
+                            labelText: 'New Shares to Issue',
+                            hintText: '1000000',
+                            prefixIcon: Icon(Icons.pie_chart),
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          onChanged: (_) => _calculateDilution(provider),
                         ),
-                        if (_impliedSharePrice > 0)
-                          ResultChip(
-                            label: 'Implied Share Price',
-                            value: Formatters.currency(_impliedSharePrice),
-                            color: Colors.blue,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextField(
+                          controller: _newInvestmentController,
+                          decoration: const InputDecoration(
+                            labelText: 'Investment Amount (AUD)',
+                            hintText: '500000',
+                            prefixIcon: Icon(Icons.attach_money),
                           ),
-                        ResultChip(
-                          label: 'Post-Round Shares',
-                          value: Formatters.number(
-                            provider.totalCurrentShares +
-                                (int.tryParse(_newSharesController.text) ?? 0),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          onChanged: (_) => _calculateDilution(provider),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Input method 2: By valuation
+                  Text(
+                    'Or Calculate by Valuation:',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _preMoneyController,
+                          decoration: InputDecoration(
+                            labelText: 'Pre-Money Valuation (AUD)',
+                            hintText: '5000000',
+                            prefixIcon: const Icon(Icons.trending_up),
+                            suffixIcon: ValuationWizardButton(
+                              currentValuation: double.tryParse(
+                                _preMoneyController.text,
+                              ),
+                              onValuationSelected: (value) {
+                                _preMoneyController.text = value
+                                    .round()
+                                    .toString();
+                                _calculateFromValuation(provider);
+                              },
+                            ),
                           ),
-                          color: Colors.purple,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      FilledButton(
+                        onPressed: () => _calculateFromValuation(provider),
+                        child: const Text('Calculate'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Results
+          if (_dilutionResults.isNotEmpty) ...[
+            SectionCard(
+              title: 'New Round Summary',
+              helpKey: 'rounds.fundingRound',
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  ResultChip(
+                    label: 'New Investor Ownership',
+                    value: Formatters.percent(_newOwnershipPercentage),
+                    color: Colors.green,
+                  ),
+                  if (_impliedSharePrice > 0)
+                    ResultChip(
+                      label: 'Implied Share Price',
+                      value: Formatters.currency(_impliedSharePrice),
+                      color: Colors.blue,
+                    ),
+                  ResultChip(
+                    label: 'Post-Round Shares',
+                    value: Formatters.number(
+                      provider.totalCurrentShares +
+                          (int.tryParse(_newSharesController.text) ?? 0),
+                    ),
+                    color: Colors.purple,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            SectionCard(
+              title: 'Dilution Impact on Existing Shareholders',
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('Investor')),
+                    DataColumn(label: Text('Current %'), numeric: true),
+                    DataColumn(label: Text('After Round %'), numeric: true),
+                    DataColumn(label: Text('Dilution'), numeric: true),
+                  ],
+                  rows: _dilutionResults.entries.map((entry) {
+                    final investor = provider.getInvestorById(entry.key);
+                    final currentOwnership = provider.getOwnershipPercentage(
+                      entry.key,
+                    );
+                    final newOwnership = currentOwnership - entry.value;
+
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(investor?.name ?? 'Unknown')),
+                        DataCell(Text(Formatters.percent(currentOwnership))),
+                        DataCell(Text(Formatters.percent(newOwnership))),
+                        DataCell(
+                          Text(
+                            '-${Formatters.percent(entry.value)}',
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+
+          // Pro-rata Calculator
+          SectionCard(
+            title: 'Pro-Rata Rights',
+            icon: Icons.balance,
+            helpKey: 'investors.proRataRights',
+            subtitle:
+                'How much each investor with pro-rata rights can invest to maintain their ownership',
+            child:
+                provider.activeInvestors
+                    .where((i) => i.hasProRataRights)
+                    .isEmpty
+                ? const Text('No active investors with pro-rata rights')
+                : Column(children: _buildProRataList(provider)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // === Exit Waterfall Tab ===
+  Widget _buildExitWaterfallTab(CapTableProvider provider) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.waterfall_chart, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Exit Waterfall Calculator',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const HelpIcon(helpKey: 'scenarios.exitWaterfall'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'See how proceeds would be distributed based on share class preferences',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _exitValuationController,
+                          decoration: const InputDecoration(
+                            labelText: 'Exit Valuation (AUD)',
+                            hintText: '10000000',
+                            prefixIcon: Icon(Icons.attach_money),
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      FilledButton(
+                        onPressed: () => _calculateExitWaterfall(provider),
+                        child: const Text('Calculate Waterfall'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          if (_waterfallResults.isNotEmpty) ...[
+            SectionCard(
+              title: 'Distribution Waterfall',
+              helpKey: 'scenarios.exitWaterfall',
+              child: Column(
+                children: [
+                  // Summary
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Exit Valuation'),
+                              Text(
+                                Formatters.compactCurrency(
+                                  double.tryParse(
+                                        _exitValuationController.text,
+                                      ) ??
+                                      0,
+                                ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Total Distributed'),
+                              Text(
+                                Formatters.compactCurrency(
+                                  _waterfallResults.fold(
+                                    0.0,
+                                    (sum, r) => sum + r.proceeds,
+                                  ),
+                                ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  SectionCard(
-                    title: 'Dilution Impact on Existing Shareholders',
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('Investor')),
-                          DataColumn(label: Text('Current %'), numeric: true),
-                          DataColumn(
-                            label: Text('After Round %'),
-                            numeric: true,
-                          ),
-                          DataColumn(label: Text('Dilution'), numeric: true),
-                        ],
-                        rows: _dilutionResults.entries.map((entry) {
-                          final investor = provider.getInvestorById(entry.key);
-                          final currentOwnership = provider
-                              .getOwnershipPercentage(entry.key);
-                          final newOwnership = currentOwnership - entry.value;
-
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(investor?.name ?? 'Unknown')),
-                              DataCell(
-                                Text(Formatters.percent(currentOwnership)),
-                              ),
-                              DataCell(Text(Formatters.percent(newOwnership))),
-                              DataCell(
-                                Text(
-                                  '-${Formatters.percent(entry.value)}',
-                                  style: const TextStyle(color: Colors.red),
+                  // Waterfall table
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('Investor')),
+                        DataColumn(label: Text('Share Class')),
+                        DataColumn(label: Text('Shares'), numeric: true),
+                        DataColumn(label: Text('% Ownership'), numeric: true),
+                        DataColumn(label: Text('Proceeds'), numeric: true),
+                        DataColumn(label: Text('Multiple'), numeric: true),
+                      ],
+                      rows: _waterfallResults
+                          .map(
+                            (row) => DataRow(
+                              cells: [
+                                DataCell(Text(row.investorName)),
+                                DataCell(Text(row.shareClassName)),
+                                DataCell(Text(Formatters.number(row.shares))),
+                                DataCell(
+                                  Text(
+                                    Formatters.percent(row.ownershipPercent),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
+                                DataCell(
+                                  Text(
+                                    Formatters.currency(row.proceeds),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.multiple.toStringAsFixed(1)}x',
+                                    style: TextStyle(
+                                      color: row.multiple >= 1
+                                          ? Colors.green
+                                          : Colors.red,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                          .toList(),
                     ),
                   ),
                 ],
-                const SizedBox(height: 24),
-
-                // Pro-rata Calculator
-                SectionCard(
-                  title: 'Pro-Rata Rights',
-                  icon: Icons.balance,
-                  subtitle:
-                      'How much each investor with pro-rata rights can invest to maintain their ownership',
-                  child:
-                      provider.activeInvestors
-                          .where((i) => i.hasProRataRights)
-                          .isEmpty
-                      ? const Text('No active investors with pro-rata rights')
-                      : Column(children: _buildProRataList(provider)),
-                ),
-              ],
+              ),
             ),
-          );
-        },
+          ],
+        ],
       ),
     );
+  }
+
+  void _calculateExitWaterfall(CapTableProvider provider) {
+    final exitValue = double.tryParse(_exitValuationController.text) ?? 0;
+    if (exitValue <= 0) return;
+
+    final results = <WaterfallRow>[];
+    final totalShares = provider.totalCurrentShares;
+    if (totalShares == 0) return;
+
+    // Simple pro-rata distribution (can be enhanced for preferences later)
+    final pricePerShare = exitValue / totalShares;
+
+    for (final investor in provider.activeInvestors) {
+      final shares = provider.getCurrentSharesByInvestor(investor.id);
+      if (shares <= 0) continue;
+
+      final ownershipPercent = (shares / totalShares) * 100;
+      final proceeds = shares * pricePerShare;
+
+      // Calculate investment cost for multiple
+      final invested = provider.getInvestmentByInvestor(investor.id);
+      final multiple = invested > 0 ? proceeds / invested : 0.0;
+
+      // Get primary share class for display
+      final transactions = provider.getTransactionsByInvestor(investor.id);
+      String shareClassName = 'Mixed';
+      if (transactions.isNotEmpty) {
+        final shareClass = provider.getShareClassById(
+          transactions.first.shareClassId,
+        );
+        shareClassName = shareClass?.name ?? 'Unknown';
+      }
+
+      results.add(
+        WaterfallRow(
+          investorName: investor.name,
+          shareClassName: shareClassName,
+          shares: shares,
+          ownershipPercent: ownershipPercent,
+          proceeds: proceeds,
+          multiple: multiple,
+        ),
+      );
+    }
+
+    // Sort by proceeds descending
+    results.sort((a, b) => b.proceeds.compareTo(a.proceeds));
+
+    setState(() {
+      _waterfallResults = results;
+    });
+  }
+
+  // === New Round Simulator Tab ===
+  Widget _buildNewRoundSimulatorTab(CapTableProvider provider) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.science, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'New Round Simulator',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const HelpIcon(helpKey: 'scenarios.roundSimulator'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Model a new funding round with ESOP expansion',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: _simRoundNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Round Name',
+                      hintText: 'Series A',
+                      prefixIcon: Icon(Icons.label),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _simRaiseAmountController,
+                          decoration: const InputDecoration(
+                            labelText: 'Raise Amount (AUD)',
+                            hintText: '2000000',
+                            prefixIcon: Icon(Icons.attach_money),
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextField(
+                          controller: _simPreMoneyController,
+                          decoration: const InputDecoration(
+                            labelText: 'Pre-Money Valuation',
+                            hintText: '8000000',
+                            prefixIcon: Icon(Icons.trending_up),
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'ESOP Expansion: ${_simEsopExpansion.toStringAsFixed(1)}%',
+                                ),
+                                const HelpIcon(helpKey: 'esop.poolExpansion'),
+                              ],
+                            ),
+                            Slider(
+                              value: _simEsopExpansion,
+                              min: 0,
+                              max: 15,
+                              divisions: 30,
+                              label: '${_simEsopExpansion.toStringAsFixed(1)}%',
+                              onChanged: (value) {
+                                setState(() {
+                                  _simEsopExpansion = value;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      FilledButton(
+                        onPressed: () => _simulateNewRound(provider),
+                        child: const Text('Simulate Round'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          if (_simulationResults.isNotEmpty) ...[
+            SectionCard(
+              title:
+                  'Simulation Results: ${_simRoundNameController.text.isEmpty ? "New Round" : _simRoundNameController.text}',
+              child: Column(
+                children: [
+                  // Summary cards
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      ResultChip(
+                        label: 'Post-Money Valuation',
+                        value: Formatters.compactCurrency(
+                          (double.tryParse(_simPreMoneyController.text) ?? 0) +
+                              (double.tryParse(
+                                    _simRaiseAmountController.text,
+                                  ) ??
+                                  0),
+                        ),
+                        color: Colors.green,
+                      ),
+                      ResultChip(
+                        label: 'New Investor Ownership',
+                        value: Formatters.percent(
+                          _simulationResults
+                              .firstWhere(
+                                (r) => r.isNewInvestor,
+                                orElse: () => _SimulationResult(
+                                  name: '',
+                                  isNewInvestor: false,
+                                  preShares: 0,
+                                  postShares: 0,
+                                  prePercent: 0,
+                                  postPercent: 0,
+                                  dilutionPercent: 0,
+                                ),
+                              )
+                              .postPercent,
+                        ),
+                        color: Colors.blue,
+                      ),
+                      if (_simEsopExpansion > 0)
+                        ResultChip(
+                          label: 'ESOP Pool',
+                          value: '${_simEsopExpansion.toStringAsFixed(1)}%',
+                          color: Colors.purple,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Results table
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('Stakeholder')),
+                        DataColumn(label: Text('Pre-Round %'), numeric: true),
+                        DataColumn(label: Text('Post-Round %'), numeric: true),
+                        DataColumn(label: Text('Dilution'), numeric: true),
+                      ],
+                      rows: _simulationResults
+                          .map(
+                            (result) => DataRow(
+                              cells: [
+                                DataCell(
+                                  Text(
+                                    result.name,
+                                    style: TextStyle(
+                                      fontWeight: result.isNewInvestor
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: result.isNewInvestor
+                                          ? Colors.green
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(Formatters.percent(result.prePercent)),
+                                ),
+                                DataCell(
+                                  Text(Formatters.percent(result.postPercent)),
+                                ),
+                                DataCell(
+                                  Text(
+                                    result.dilutionPercent >= 0
+                                        ? '+${Formatters.percent(result.dilutionPercent)}'
+                                        : Formatters.percent(
+                                            result.dilutionPercent,
+                                          ),
+                                    style: TextStyle(
+                                      color: result.dilutionPercent >= 0
+                                          ? Colors.green
+                                          : Colors.red,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _simulateNewRound(CapTableProvider provider) {
+    final raiseAmount = double.tryParse(_simRaiseAmountController.text) ?? 0;
+    final preMoney = double.tryParse(_simPreMoneyController.text) ?? 0;
+
+    if (raiseAmount <= 0 || preMoney <= 0) return;
+
+    final postMoney = preMoney + raiseAmount;
+    final newInvestorPercent = (raiseAmount / postMoney) * 100;
+    final currentShares = provider.totalCurrentShares;
+
+    // New shares for investors = current * (new% / (1 - new%))
+    final totalNewPercent = newInvestorPercent + _simEsopExpansion;
+    final newSharesNeeded =
+        currentShares * (totalNewPercent / 100) / (1 - totalNewPercent / 100);
+    final newInvestorShares =
+        (newSharesNeeded * (newInvestorPercent / totalNewPercent)).round();
+    final postRoundShares = currentShares + newSharesNeeded.round();
+
+    final results = <_SimulationResult>[];
+
+    // Existing investors
+    for (final investor in provider.activeInvestors) {
+      final shares = provider.getCurrentSharesByInvestor(investor.id);
+      if (shares <= 0) continue;
+
+      final prePercent = (shares / currentShares) * 100;
+      final postPercent = (shares / postRoundShares) * 100;
+
+      results.add(
+        _SimulationResult(
+          name: investor.name,
+          isNewInvestor: false,
+          preShares: shares,
+          postShares: shares,
+          prePercent: prePercent,
+          postPercent: postPercent,
+          dilutionPercent: postPercent - prePercent,
+        ),
+      );
+    }
+
+    // New investor
+    results.add(
+      _SimulationResult(
+        name: 'New Investor',
+        isNewInvestor: true,
+        preShares: 0,
+        postShares: newInvestorShares,
+        prePercent: 0,
+        postPercent: (newInvestorShares / postRoundShares) * 100,
+        dilutionPercent: (newInvestorShares / postRoundShares) * 100,
+      ),
+    );
+
+    // ESOP expansion
+    if (_simEsopExpansion > 0) {
+      final esopShares = (newSharesNeeded - newInvestorShares).round();
+      results.add(
+        _SimulationResult(
+          name: 'ESOP Pool (Expansion)',
+          isNewInvestor: false,
+          preShares: 0,
+          postShares: esopShares,
+          prePercent: 0,
+          postPercent: (esopShares / postRoundShares) * 100,
+          dilutionPercent: (esopShares / postRoundShares) * 100,
+        ),
+      );
+    }
+
+    // Sort: new investor first, then by post-percent descending
+    results.sort((a, b) {
+      if (a.isNewInvestor && !b.isNewInvestor) return -1;
+      if (!a.isNewInvestor && b.isNewInvestor) return 1;
+      return b.postPercent.compareTo(a.postPercent);
+    });
+
+    setState(() {
+      _simulationResults = results;
+    });
   }
 
   List<Widget> _buildProRataList(CapTableProvider provider) {
@@ -370,4 +963,44 @@ class _ScenariosPageState extends State<ScenariosPage> {
       );
     }).toList();
   }
+}
+
+/// Result row for exit waterfall
+class WaterfallRow {
+  final String investorName;
+  final String shareClassName;
+  final int shares;
+  final double ownershipPercent;
+  final double proceeds;
+  final double multiple;
+
+  WaterfallRow({
+    required this.investorName,
+    required this.shareClassName,
+    required this.shares,
+    required this.ownershipPercent,
+    required this.proceeds,
+    required this.multiple,
+  });
+}
+
+/// Result row for round simulation
+class _SimulationResult {
+  final String name;
+  final bool isNewInvestor;
+  final int preShares;
+  final int postShares;
+  final double prePercent;
+  final double postPercent;
+  final double dilutionPercent;
+
+  _SimulationResult({
+    required this.name,
+    required this.isNewInvestor,
+    required this.preShares,
+    required this.postShares,
+    required this.prePercent,
+    required this.postPercent,
+    required this.dilutionPercent,
+  });
 }

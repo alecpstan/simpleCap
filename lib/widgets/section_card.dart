@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'help_icon.dart';
 
 /// A card with a titled header section
 class SectionCard extends StatelessWidget {
@@ -7,6 +8,7 @@ class SectionCard extends StatelessWidget {
   final Widget? trailing;
   final Widget child;
   final String? subtitle;
+  final String? helpKey;
 
   const SectionCard({
     super.key,
@@ -15,6 +17,7 @@ class SectionCard extends StatelessWidget {
     this.trailing,
     required this.child,
     this.subtitle,
+    this.helpKey,
   });
 
   @override
@@ -57,6 +60,7 @@ class SectionCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        if (helpKey != null) HelpIcon(helpKey: helpKey!, size: 16),
       ],
     );
 

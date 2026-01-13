@@ -10,6 +10,7 @@ import '../models/transaction.dart';
 import '../models/convertible_instrument.dart';
 import '../models/milestone.dart';
 import '../models/hours_vesting.dart';
+import '../models/tax_rule.dart';
 
 class StorageService {
   static const String _fileName = 'cap_table_data.json';
@@ -48,8 +49,12 @@ class StorageService {
       'convertibles': [],
       'milestones': [],
       'hoursVestingSchedules': [],
+      'taxRules': [],
       'companyName': 'My Company Pty Ltd',
       'tableColumnWidths': <String, double>{},
+      'esopDilutionMethod': 1, // preRoundCap
+      'esopPoolPercent': 10.0,
+      'authorizedShares': 0,
     };
   }
 
@@ -62,8 +67,12 @@ class StorageService {
     required List<ConvertibleInstrument> convertibles,
     required List<Milestone> milestones,
     required List<HoursVestingSchedule> hoursVestingSchedules,
+    required List<TaxRule> taxRules,
     required String companyName,
     Map<String, double> tableColumnWidths = const {},
+    int esopDilutionMethod = 1,
+    double esopPoolPercent = 10.0,
+    int authorizedShares = 0,
   }) async {
     final file = await _localFile;
     final data = {
@@ -77,8 +86,12 @@ class StorageService {
       'hoursVestingSchedules': hoursVestingSchedules
           .map((e) => e.toJson())
           .toList(),
+      'taxRules': taxRules.map((e) => e.toJson()).toList(),
       'companyName': companyName,
       'tableColumnWidths': tableColumnWidths,
+      'esopDilutionMethod': esopDilutionMethod,
+      'esopPoolPercent': esopPoolPercent,
+      'authorizedShares': authorizedShares,
     };
     await file.writeAsString(jsonEncode(data));
   }
