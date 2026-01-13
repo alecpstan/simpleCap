@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/investment_round.dart';
-import '../models/shareholding.dart';
+import '../models/transaction.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/avatars.dart';
 import '../widgets/dialogs.dart';
-import '../widgets/shareholding_dialog.dart';
+import '../widgets/investment_dialog.dart';
 import '../widgets/valuation_wizard.dart';
 import '../utils/helpers.dart';
 
@@ -50,10 +50,10 @@ class RoundsPage extends StatelessWidget {
       itemCount: sortedRounds.length,
       itemBuilder: (context, index) {
         final round = sortedRounds[index];
-        final shareholdings = provider.getShareholdingsByRound(round.id);
-        final totalShares = shareholdings.fold(
+        final investments = provider.getInvestmentsByRound(round.id);
+        final totalShares = investments.fold(
           0,
-          (sum, s) => sum + s.numberOfShares,
+          (sum, t) => sum + t.numberOfShares,
         );
 
         return Card(
@@ -88,7 +88,7 @@ class RoundsPage extends StatelessWidget {
                         visualDensity: VisualDensity.compact,
                       ),
                     Chip(
-                      label: Text('${shareholdings.length} investors'),
+                      label: Text('${investments.length} investors'),
                       padding: EdgeInsets.zero,
                       visualDensity: VisualDensity.compact,
                     ),
@@ -151,7 +151,7 @@ class RoundsPage extends StatelessWidget {
               ],
             ),
             children: [
-              if (shareholdings.isEmpty)
+              if (investments.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(16),
                   child: Text('No investors in this round yet'),
@@ -161,12 +161,12 @@ class RoundsPage extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     children: [
-                      ...shareholdings.map((holding) {
+                      ...investments.map((transaction) {
                         final investor = provider.getInvestorById(
-                          holding.investorId,
+                          transaction.investorId,
                         );
                         final shareClass = provider.getShareClassById(
-                          holding.shareClassId,
+                          transaction.shareClassId,
                         );
                         return ListTile(
                           leading: InvestorAvatar(
@@ -180,22 +180,24 @@ class RoundsPage extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text(Formatters.number(holding.numberOfShares)),
                               Text(
-                                Formatters.currency(holding.amountInvested),
+                                Formatters.number(transaction.numberOfShares),
+                              ),
+                              Text(
+                                Formatters.currency(transaction.totalAmount),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
                           ),
-                          onTap: () => _showEditShareholdingDialog(
+                          onTap: () => _showEditInvestmentDialog(
                             context,
                             provider,
-                            holding,
+                            transaction,
                           ),
-                          onLongPress: () => _confirmDeleteShareholding(
+                          onLongPress: () => _confirmDeleteInvestment(
                             context,
                             provider,
-                            holding,
+                            transaction,
                           ),
                         );
                       }),
@@ -332,45 +334,91 @@ class RoundsPage extends StatelessWidget {
                         ),
                         onValuationSelected: (value) {
                           preMoneyController.text = value.round().toString();
+                          setState(() {}); // Rebuild to update implied price
                         },
                       ),
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onChanged: (_) =>
+                        setState(() {}), // Rebuild to update implied price
                   ),
                   if (isEditing) ...[
                     const SizedBox(height: 16),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.payments),
-                      title: const Text('Amount Raised'),
-                      subtitle: Text(
-                        Formatters.currency(
-                          provider.getAmountRaisedByRound(round.id),
-                        ),
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.payments),
+                            title: const Text('Amount Raised'),
+                            subtitle: Text(
+                              Formatters.currency(
+                                provider.getAmountRaisedByRound(round.id),
+                              ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
                             ),
-                      ),
-                      trailing: Text(
-                        '${provider.getShareholdingsByRound(round.id).length} investments',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                          ),
+                        ),
+                        Expanded(
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.pie_chart),
+                            title: const Text('Issued Shares Pre-Round'),
+                            subtitle: Text(
+                              Formatters.number(
+                                provider.getIssuedSharesBeforeRound(round.id),
+                              ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: priceController,
-                    decoration: const InputDecoration(
-                      labelText: 'Price Per Share (optional)',
-                      hintText: '1.00',
-                      prefixIcon: Icon(Icons.monetization_on),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      // Calculate implied price from pre-money valuation
+                      String? helperText;
+                      if (isEditing) {
+                        final preMoneyVal =
+                            double.tryParse(preMoneyController.text) ?? 0;
+                        if (preMoneyVal > 0) {
+                          final sharesBeforeRound = provider
+                              .getIssuedSharesBeforeRound(round.id);
+                          if (sharesBeforeRound > 0) {
+                            final impliedPrice =
+                                preMoneyVal / sharesBeforeRound;
+                            helperText =
+                                'Implied from valuation: ${Formatters.currency(impliedPrice)}';
+                          }
+                        }
+                      }
+
+                      return TextField(
+                        controller: priceController,
+                        decoration: InputDecoration(
+                          labelText: 'Price Per Share (optional)',
+                          hintText: '1.00',
+                          prefixIcon: const Icon(Icons.monetization_on),
+                          helperText: helperText,
+                          helperMaxLines: 2,
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        onChanged: (_) =>
+                            setState(() {}), // Rebuild to update helper text
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -423,14 +471,17 @@ class RoundsPage extends StatelessWidget {
           ? provider.getAmountRaisedByRound(round.id)
           : 0.0;
 
+      final newPreMoney = double.tryParse(preMoneyController.text) ?? 0;
+      final newPricePerShare = double.tryParse(priceController.text);
+
       final newRound = InvestmentRound(
         id: round?.id,
         name: nameController.text,
         type: selectedType,
         date: selectedDate,
-        preMoneyValuation: double.tryParse(preMoneyController.text) ?? 0,
+        preMoneyValuation: newPreMoney,
         amountRaised: calculatedAmount,
-        pricePerShare: double.tryParse(priceController.text),
+        pricePerShare: newPricePerShare,
         leadInvestor: leadController.text.isEmpty ? null : leadController.text,
         notes: notesController.text.isEmpty ? null : notesController.text,
         isClosed: isClosed,
@@ -438,6 +489,71 @@ class RoundsPage extends StatelessWidget {
       );
 
       if (isEditing) {
+        // Check if pre-money valuation changed and there are investments in this round
+        final preMoneyChanged = round.preMoneyValuation != newPreMoney;
+        final hasInvestments = provider
+            .getInvestmentsByRound(round.id)
+            .isNotEmpty;
+
+        if (preMoneyChanged &&
+            hasInvestments &&
+            newPreMoney > 0 &&
+            context.mounted) {
+          // Calculate new implied price
+          final sharesBeforeRound = provider.getIssuedSharesBeforeRound(
+            round.id,
+          );
+          if (sharesBeforeRound > 0) {
+            final impliedPrice = newPreMoney / sharesBeforeRound;
+
+            final updatePrices = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Update Investor Prices?'),
+                content: Text(
+                  'The pre-money valuation has changed.\n\n'
+                  'Based on ${Formatters.number(sharesBeforeRound)} issued shares, '
+                  'the implied price per share is ${Formatters.currency(impliedPrice)}.\n\n'
+                  'Would you like to update all investor prices in this round?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('No, Keep Prices'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Yes, Update Prices'),
+                  ),
+                ],
+              ),
+            );
+
+            if (updatePrices == true) {
+              // Update the round's price per share
+              final updatedRound = InvestmentRound(
+                id: newRound.id,
+                name: newRound.name,
+                type: newRound.type,
+                date: newRound.date,
+                preMoneyValuation: newRound.preMoneyValuation,
+                amountRaised: newRound.amountRaised,
+                pricePerShare: impliedPrice,
+                leadInvestor: newRound.leadInvestor,
+                notes: newRound.notes,
+                isClosed: newRound.isClosed,
+                order: newRound.order,
+              );
+              await provider.updateRound(updatedRound);
+              await provider.updateRoundTransactionPrices(
+                round.id,
+                impliedPrice,
+              );
+              return;
+            }
+          }
+        }
+
         await provider.updateRound(newRound);
       } else {
         await provider.addRound(newRound);
@@ -477,14 +593,15 @@ class RoundsPage extends StatelessWidget {
     CapTableProvider provider,
     InvestmentRound round,
   ) async {
-    final shareholding = await showShareholdingDialog(
+    final result = await showInvestmentDialog(
       context: context,
       provider: provider,
       round: round,
     );
 
-    if (shareholding != null) {
-      await provider.addShareholding(shareholding);
+    if (result.action == InvestmentDialogAction.saved &&
+        result.transaction != null) {
+      await provider.addInvestment(result.transaction!);
     }
   }
 
@@ -498,7 +615,7 @@ class RoundsPage extends StatelessWidget {
       title: 'Delete Round',
       message:
           'Are you sure you want to delete ${round.name}? '
-          'This will also remove all shareholdings in this round.',
+          'This will also remove all investments in this round.',
     );
 
     if (confirmed) {
@@ -506,42 +623,49 @@ class RoundsPage extends StatelessWidget {
     }
   }
 
-  Future<void> _showEditShareholdingDialog(
+  Future<void> _showEditInvestmentDialog(
     BuildContext context,
     CapTableProvider provider,
-    Shareholding holding,
+    Transaction transaction,
   ) async {
-    final round = provider.getRoundById(holding.roundId);
+    final round = provider.getRoundById(transaction.roundId ?? '');
     if (round == null) return;
 
-    final updatedShareholding = await showShareholdingDialog(
+    final result = await showInvestmentDialog(
       context: context,
       provider: provider,
       round: round,
-      existingShareholding: holding,
+      existingTransaction: transaction,
     );
 
-    if (updatedShareholding != null) {
-      await provider.updateShareholding(updatedShareholding);
+    switch (result.action) {
+      case InvestmentDialogAction.saved:
+        if (result.transaction != null) {
+          await provider.updateInvestment(result.transaction!);
+        }
+      case InvestmentDialogAction.deleted:
+        await provider.deleteInvestment(transaction.id);
+      case InvestmentDialogAction.cancelled:
+        break;
     }
   }
 
-  Future<void> _confirmDeleteShareholding(
+  Future<void> _confirmDeleteInvestment(
     BuildContext context,
     CapTableProvider provider,
-    Shareholding holding,
+    Transaction transaction,
   ) async {
-    final investor = provider.getInvestorById(holding.investorId);
+    final investor = provider.getInvestorById(transaction.investorId);
 
     final confirmed = await showConfirmDialog(
       context: context,
-      title: 'Delete Shareholding',
+      title: 'Delete Investment',
       message:
-          'Remove ${investor?.name ?? 'this investor'}\'s ${Formatters.number(holding.numberOfShares)} shares from this round?',
+          'Remove ${investor?.name ?? 'this investor'}\'s ${Formatters.number(transaction.numberOfShares)} shares from this round?',
     );
 
     if (confirmed) {
-      await provider.deleteShareholding(holding.id);
+      await provider.deleteInvestment(transaction.id);
     }
   }
 }

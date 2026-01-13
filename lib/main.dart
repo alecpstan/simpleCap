@@ -7,7 +7,6 @@ import 'pages/investors_page.dart';
 import 'pages/rounds_page.dart';
 import 'pages/share_value_page.dart';
 import 'pages/vesting_page.dart';
-import 'pages/scenarios_page.dart';
 import 'widgets/settings_drawer.dart';
 
 void main() {
@@ -74,7 +73,6 @@ class _HomePageState extends State<HomePage> {
     RoundsPage(),
     ShareValuePage(),
     VestingPage(),
-    ScenariosPage(),
   ];
 
   final List<NavigationDestination> _destinations = const [
@@ -103,11 +101,6 @@ class _HomePageState extends State<HomePage> {
       selectedIcon: Icon(Icons.schedule),
       label: 'Vesting',
     ),
-    NavigationDestination(
-      icon: Icon(Icons.calculate_outlined),
-      selectedIcon: Icon(Icons.calculate),
-      label: 'Scenarios',
-    ),
   ];
 
   @override
@@ -132,29 +125,32 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            tooltip: 'Settings & Tools',
-            onPressed: () => Scaffold.of(context).openDrawer(),
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        appBar: AppBar(
+          leading: Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu),
+              tooltip: 'Settings & Tools',
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
           ),
+          title: const Text('Simple Cap'),
+          centerTitle: true,
+          elevation: 0,
         ),
-        title: const Text('Simple Cap'),
-        centerTitle: true,
-        elevation: 0,
-      ),
-      drawer: const SettingsDrawer(),
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: _onPageChanged,
-        children: _pages,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: _onDestinationSelected,
-        destinations: _destinations,
+        drawer: const SettingsDrawer(),
+        body: PageView(
+          controller: _pageController,
+          onPageChanged: _onPageChanged,
+          children: _pages,
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: _onDestinationSelected,
+          destinations: _destinations,
+        ),
       ),
     );
   }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/cap_table_provider.dart';
 import '../models/vesting_schedule.dart';
-import '../models/shareholding.dart';
+import '../models/transaction.dart';
 import '../models/investor.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/section_card.dart';
@@ -46,15 +46,18 @@ class VestingPage extends StatelessWidget {
   }
 
   void _showAddVestingDialog(BuildContext context, CapTableProvider provider) {
-    // Get shareholdings that don't already have vesting
-    final shareholdingsWithoutVesting = provider.shareholdings.where((s) {
-      return provider.getVestingByShareholding(s.id) == null;
+    // Get acquisition transactions that don't already have vesting
+    final allAcquisitions = provider.transactions
+        .where((t) => t.isAcquisition)
+        .toList();
+    final transactionsWithoutVesting = allAcquisitions.where((t) {
+      return provider.getVestingByTransaction(t.id) == null;
     }).toList();
 
-    if (shareholdingsWithoutVesting.isEmpty) {
+    if (transactionsWithoutVesting.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('All shareholdings already have vesting schedules'),
+          content: Text('All investments already have vesting schedules'),
         ),
       );
       return;
@@ -63,7 +66,7 @@ class VestingPage extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => VestingScheduleDialog(
-        shareholdings: shareholdingsWithoutVesting,
+        transactions: transactionsWithoutVesting,
         provider: provider,
       ),
     );
@@ -192,17 +195,17 @@ class _VestingSummaryCard extends StatelessWidget {
 
     for (final schedule in vestingSchedules) {
       try {
-        final shareholding = provider.shareholdings.firstWhere(
-          (s) => s.id == schedule.shareholdingId,
+        final transaction = provider.transactions.firstWhere(
+          (t) => t.id == schedule.shareholdingId,
         );
-        totalSharesUnderVesting += shareholding.numberOfShares;
+        totalSharesUnderVesting += transaction.numberOfShares;
         final vested =
-            (shareholding.numberOfShares * schedule.vestingPercentage / 100)
+            (transaction.numberOfShares * schedule.vestingPercentage / 100)
                 .round();
         totalVestedShares += vested;
-        totalUnvestedShares += shareholding.numberOfShares - vested;
+        totalUnvestedShares += transaction.numberOfShares - vested;
       } catch (_) {
-        // Shareholding not found
+        // Transaction not found
       }
     }
 
@@ -277,24 +280,23 @@ class _VestingCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     // Get related data
-    Shareholding? shareholding;
+    Transaction? transaction;
     Investor? investor;
     try {
-      shareholding = provider.shareholdings.firstWhere(
-        (s) => s.id == schedule.shareholdingId,
+      transaction = provider.transactions.firstWhere(
+        (t) => t.id == schedule.shareholdingId,
       );
-      investor = provider.getInvestorById(shareholding.investorId);
+      investor = provider.getInvestorById(transaction.investorId);
     } catch (_) {}
 
-    if (shareholding == null || investor == null) {
+    if (transaction == null || investor == null) {
       return const SizedBox.shrink();
     }
 
-    final round = provider.getRoundById(shareholding.roundId);
+    final round = provider.getRoundById(transaction.roundId ?? '');
     final vestedShares =
-        (shareholding.numberOfShares * schedule.vestingPercentage / 100)
-            .round();
-    final unvestedShares = shareholding.numberOfShares - vestedShares;
+        (transaction.numberOfShares * schedule.vestingPercentage / 100).round();
+    final unvestedShares = transaction.numberOfShares - vestedShares;
 
     // Status color
     Color statusColor;
@@ -390,7 +392,7 @@ class _VestingCard extends StatelessWidget {
                     Expanded(
                       child: ResultChip(
                         label: 'Total Shares',
-                        value: Formatters.number(shareholding.numberOfShares),
+                        value: Formatters.number(transaction.numberOfShares),
                         color: theme.colorScheme.primary,
                       ),
                     ),
@@ -557,7 +559,9 @@ class _VestingCard extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => VestingScheduleDialog(
-        shareholdings: provider.shareholdings,
+        transactions: provider.transactions
+            .where((t) => t.isAcquisition)
+            .toList(),
         provider: provider,
         existingSchedule: schedule,
       ),
@@ -740,13 +744,13 @@ class _TerminateVestingDialogState extends State<_TerminateVestingDialog> {
 }
 
 class VestingScheduleDialog extends StatefulWidget {
-  final List<Shareholding> shareholdings;
+  final List<Transaction> transactions;
   final CapTableProvider provider;
   final VestingSchedule? existingSchedule;
 
   const VestingScheduleDialog({
     super.key,
-    required this.shareholdings,
+    required this.transactions,
     required this.provider,
     this.existingSchedule,
   });
@@ -756,7 +760,7 @@ class VestingScheduleDialog extends StatefulWidget {
 }
 
 class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
-  late String? _selectedShareholdingId;
+  late String? _selectedTransactionId;
   late VestingType _vestingType;
   late DateTime _startDate;
   late int _vestingPeriodMonths;
@@ -771,11 +775,9 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
   void initState() {
     super.initState();
     final existing = widget.existingSchedule;
-    _selectedShareholdingId =
+    _selectedTransactionId =
         existing?.shareholdingId ??
-        (widget.shareholdings.isNotEmpty
-            ? widget.shareholdings.first.id
-            : null);
+        (widget.transactions.isNotEmpty ? widget.transactions.first.id : null);
     _vestingType = existing?.type ?? VestingType.timeBased;
     _startDate = existing?.startDate ?? DateTime.now();
     _vestingPeriodMonths = existing?.vestingPeriodMonths ?? 48;
@@ -800,32 +802,34 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Shareholding selection (only for new)
+                // Investment selection (only for new)
                 if (!isEditing) ...[
                   DropdownButtonFormField<String>(
                     decoration: const InputDecoration(
-                      labelText: 'Shareholding',
+                      labelText: 'Investment',
                       border: OutlineInputBorder(),
                     ),
-                    initialValue: _selectedShareholdingId,
-                    items: widget.shareholdings.map((s) {
+                    initialValue: _selectedTransactionId,
+                    items: widget.transactions.map((t) {
                       final investor = widget.provider.getInvestorById(
-                        s.investorId,
+                        t.investorId,
                       );
-                      final round = widget.provider.getRoundById(s.roundId);
+                      final round = widget.provider.getRoundById(
+                        t.roundId ?? '',
+                      );
                       return DropdownMenuItem(
-                        value: s.id,
+                        value: t.id,
                         child: Text(
-                          '${investor?.name ?? 'Unknown'} - ${round?.name ?? 'Unknown'} (${Formatters.number(s.numberOfShares)} shares)',
+                          '${investor?.name ?? 'Unknown'} - ${round?.name ?? 'Unknown'} (${Formatters.number(t.numberOfShares)} shares)',
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
                     }).toList(),
                     onChanged: (value) {
-                      setState(() => _selectedShareholdingId = value);
+                      setState(() => _selectedTransactionId = value);
                     },
                     validator: (value) =>
-                        value == null ? 'Please select a shareholding' : null,
+                        value == null ? 'Please select an investment' : null,
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -1075,11 +1079,11 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedShareholdingId == null) return;
+    if (_selectedTransactionId == null) return;
 
     final schedule = VestingSchedule(
       id: widget.existingSchedule?.id,
-      shareholdingId: _selectedShareholdingId!,
+      shareholdingId: _selectedTransactionId!,
       type: _vestingType,
       startDate: _startDate,
       vestingPeriodMonths: _vestingPeriodMonths,

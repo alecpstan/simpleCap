@@ -2,9 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/investor.dart';
 import '../models/share_class.dart';
 import '../models/investment_round.dart';
-import '../models/shareholding.dart';
 import '../models/vesting_schedule.dart';
-import '../models/share_sale.dart';
 import '../models/transaction.dart';
 import '../services/storage_service.dart';
 
@@ -14,9 +12,7 @@ class CapTableProvider extends ChangeNotifier {
   List<Investor> _investors = [];
   List<ShareClass> _shareClasses = [];
   List<InvestmentRound> _rounds = [];
-  List<Shareholding> _shareholdings = [];
   List<VestingSchedule> _vestingSchedules = [];
-  List<ShareSale> _shareSales = [];
   List<Transaction> _transactions = [];
   String _companyName = 'My Company Pty Ltd';
   bool _isLoading = true;
@@ -27,10 +23,8 @@ class CapTableProvider extends ChangeNotifier {
   List<ShareClass> get shareClasses => List.unmodifiable(_shareClasses);
   List<InvestmentRound> get rounds =>
       List.unmodifiable(_rounds..sort((a, b) => a.order.compareTo(b.order)));
-  List<Shareholding> get shareholdings => List.unmodifiable(_shareholdings);
   List<VestingSchedule> get vestingSchedules =>
       List.unmodifiable(_vestingSchedules);
-  List<ShareSale> get shareSales => List.unmodifiable(_shareSales);
   List<Transaction> get transactions => List.unmodifiable(_transactions);
 
   /// Returns all transactions sorted chronologically
@@ -61,7 +55,7 @@ class CapTableProvider extends ChangeNotifier {
         .fold(0, (sum, t) => sum + t.numberOfShares);
   }
 
-  /// Net current shares outstanding
+  /// Net current issued shares
   int get totalCurrentShares {
     return _transactions.fold(0, (sum, t) => sum + t.sharesDelta);
   }
@@ -102,14 +96,8 @@ class CapTableProvider extends ChangeNotifier {
       _rounds = (data['rounds'] as List? ?? [])
           .map((e) => InvestmentRound.fromJson(e))
           .toList();
-      _shareholdings = (data['shareholdings'] as List? ?? [])
-          .map((e) => Shareholding.fromJson(e))
-          .toList();
       _vestingSchedules = (data['vestingSchedules'] as List? ?? [])
           .map((e) => VestingSchedule.fromJson(e))
-          .toList();
-      _shareSales = (data['shareSales'] as List? ?? [])
-          .map((e) => ShareSale.fromJson(e))
           .toList();
       _transactions = (data['transactions'] as List? ?? [])
           .map((e) => Transaction.fromJson(e))
@@ -120,14 +108,7 @@ class CapTableProvider extends ChangeNotifier {
             (key, value) => MapEntry(key, (value as num).toDouble()),
           ) ??
           {};
-
-      // Migrate legacy data to transactions if transactions list is empty but we have shareholdings/sales
-      if (_transactions.isEmpty &&
-          (_shareholdings.isNotEmpty || _shareSales.isNotEmpty)) {
-        await _migrateToTransactions();
-      }
     } catch (e) {
-      // If there's any error loading data, start with defaults
       debugPrint('Error loading data: $e');
     }
 
@@ -160,69 +141,12 @@ class CapTableProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Migrates legacy shareholdings and shareSales to the new transaction system
-  Future<void> _migrateToTransactions() async {
-    final List<Transaction> migratedTransactions = [];
-
-    // Convert shareholdings to purchase transactions
-    for (final holding in _shareholdings) {
-      migratedTransactions.add(
-        Transaction.fromPurchase(
-          investorId: holding.investorId,
-          shareClassId: holding.shareClassId,
-          roundId: holding.roundId,
-          numberOfShares: holding.numberOfShares,
-          pricePerShare: holding.pricePerShare,
-          date: holding.dateAcquired,
-          notes: holding.notes,
-        ),
-      );
-    }
-
-    // Convert shareSales to transactions
-    for (final sale in _shareSales) {
-      if (sale.buyerInvestorId != null) {
-        // Secondary sale with a buyer in the cap table
-        final transactions = Transaction.createSecondarySale(
-          sellerId: sale.investorId,
-          buyerId: sale.buyerInvestorId!,
-          shareClassId: sale.shareClassId,
-          numberOfShares: sale.numberOfShares,
-          pricePerShare: sale.pricePerShare,
-          date: sale.saleDate,
-          notes: sale.notes,
-        );
-        migratedTransactions.addAll(transactions);
-      } else {
-        // Buyback or exit (no buyer in cap table)
-        migratedTransactions.add(
-          Transaction.fromBuyback(
-            investorId: sale.investorId,
-            shareClassId: sale.shareClassId,
-            numberOfShares: sale.numberOfShares,
-            pricePerShare: sale.pricePerShare,
-            date: sale.saleDate,
-            notes: sale.notes,
-          ),
-        );
-      }
-    }
-
-    // Sort by date to maintain chronological order
-    migratedTransactions.sort((a, b) => a.date.compareTo(b.date));
-
-    _transactions = migratedTransactions;
-    await _save();
-  }
-
   Future<void> _save() async {
     await _storageService.saveData(
       investors: _investors,
       shareClasses: _shareClasses,
       rounds: _rounds,
-      shareholdings: _shareholdings,
       vestingSchedules: _vestingSchedules,
-      shareSales: _shareSales,
       transactions: _transactions,
       companyName: _companyName,
       tableColumnWidths: _tableColumnWidths,
@@ -264,7 +188,16 @@ class CapTableProvider extends ChangeNotifier {
 
   Future<void> deleteInvestor(String id) async {
     _investors.removeWhere((i) => i.id == id);
-    _shareholdings.removeWhere((s) => s.investorId == id);
+    // Remove all transactions for this investor
+    _transactions.removeWhere((t) => t.investorId == id);
+    // Remove vesting schedules for transactions by this investor
+    final investorTransactionIds = _transactions
+        .where((t) => t.investorId == id)
+        .map((t) => t.id)
+        .toSet();
+    _vestingSchedules.removeWhere(
+      (v) => investorTransactionIds.contains(v.shareholdingId),
+    );
     await _save();
     notifyListeners();
   }
@@ -295,7 +228,8 @@ class CapTableProvider extends ChangeNotifier {
 
   Future<void> deleteShareClass(String id) async {
     _shareClasses.removeWhere((s) => s.id == id);
-    _shareholdings.removeWhere((s) => s.shareClassId == id);
+    // Remove all transactions for this share class
+    _transactions.removeWhere((t) => t.shareClassId == id);
     await _save();
     notifyListeners();
   }
@@ -319,7 +253,18 @@ class CapTableProvider extends ChangeNotifier {
   Future<void> updateRound(InvestmentRound round) async {
     final index = _rounds.indexWhere((r) => r.id == round.id);
     if (index != -1) {
+      final oldRound = _rounds[index];
       _rounds[index] = round;
+      
+      // If the round date changed, update all associated transaction dates
+      if (oldRound.date != round.date) {
+        for (int i = 0; i < _transactions.length; i++) {
+          if (_transactions[i].roundId == round.id) {
+            _transactions[i] = _transactions[i].copyWith(date: round.date);
+          }
+        }
+      }
+      
       await _save();
       notifyListeners();
     }
@@ -327,7 +272,16 @@ class CapTableProvider extends ChangeNotifier {
 
   Future<void> deleteRound(String id) async {
     _rounds.removeWhere((r) => r.id == id);
-    _shareholdings.removeWhere((s) => s.roundId == id);
+    // Remove all transactions for this round
+    final roundTransactionIds = _transactions
+        .where((t) => t.roundId == id)
+        .map((t) => t.id)
+        .toSet();
+    _transactions.removeWhere((t) => t.roundId == id);
+    // Remove vesting schedules linked to these transactions
+    _vestingSchedules.removeWhere(
+      (v) => roundTransactionIds.contains(v.shareholdingId),
+    );
     await _save();
     notifyListeners();
   }
@@ -340,40 +294,121 @@ class CapTableProvider extends ChangeNotifier {
     }
   }
 
-  // Shareholding CRUD
-  Future<void> addShareholding(Shareholding shareholding) async {
-    _shareholdings.add(shareholding);
+  // Investment/Transaction methods
 
-    // Also create a corresponding transaction
-    final transaction = Transaction.fromPurchase(
-      investorId: shareholding.investorId,
-      shareClassId: shareholding.shareClassId,
-      roundId: shareholding.roundId,
-      numberOfShares: shareholding.numberOfShares,
-      pricePerShare: shareholding.pricePerShare,
-      date: shareholding.dateAcquired,
-      notes: shareholding.notes,
-    );
+  /// Adds an investment (purchase transaction) to a round
+  Future<void> addInvestment(Transaction transaction) async {
     _transactions.add(transaction);
-
     await _save();
     notifyListeners();
   }
 
-  Future<void> updateShareholding(Shareholding shareholding) async {
-    final index = _shareholdings.indexWhere((s) => s.id == shareholding.id);
+  /// Updates an existing investment transaction
+  Future<void> updateInvestment(Transaction transaction) async {
+    final index = _transactions.indexWhere((t) => t.id == transaction.id);
     if (index != -1) {
-      _shareholdings[index] = shareholding;
+      _transactions[index] = transaction;
       await _save();
       notifyListeners();
     }
   }
 
-  Future<void> deleteShareholding(String id) async {
-    _shareholdings.removeWhere((s) => s.id == id);
-    // Also remove any vesting schedules linked to this shareholding
-    _vestingSchedules.removeWhere((v) => v.shareholdingId == id);
-    // Note: We keep the transaction for audit trail, but could remove if needed
+  /// Deletes an investment transaction (and related vesting)
+  Future<void> deleteInvestment(String transactionId) async {
+    _transactions.removeWhere((t) => t.id == transactionId);
+    // Also remove any vesting schedules linked to this transaction
+    _vestingSchedules.removeWhere((v) => v.shareholdingId == transactionId);
+    await _save();
+    notifyListeners();
+  }
+
+  /// Get all investment transactions for a round
+  List<Transaction> getInvestmentsByRound(String roundId) {
+    return _transactions
+        .where(
+          (t) => t.roundId == roundId && t.type == TransactionType.purchase,
+        )
+        .toList();
+  }
+
+  /// Get amount raised in a round (from transactions)
+  double getAmountRaisedByRound(String roundId) {
+    return _transactions
+        .where(
+          (t) => t.roundId == roundId && t.type == TransactionType.purchase,
+        )
+        .fold(0.0, (sum, t) => sum + t.totalAmount);
+  }
+
+  /// Get shares issued in a round (from transactions)
+  int getSharesIssuedByRound(String roundId) {
+    return _transactions
+        .where(
+          (t) => t.roundId == roundId && t.type == TransactionType.purchase,
+        )
+        .fold(0, (sum, t) => sum + t.numberOfShares);
+  }
+
+  /// Get total issued shares before a specific round
+  /// Uses round order to determine which rounds came before
+  int getIssuedSharesBeforeRound(String roundId) {
+    final targetRound = getRoundById(roundId);
+    if (targetRound == null) return totalCurrentShares;
+    
+    // Get all rounds that came before this one (by order)
+    final priorRoundIds = _rounds
+        .where((r) => r.order < targetRound.order)
+        .map((r) => r.id)
+        .toSet();
+    
+    // Sum shares from transactions in prior rounds
+    // Also include any transactions not linked to a round (secondary, grants, etc.)
+    // that occurred before this round's date
+    return _transactions
+        .where((t) =>
+            (t.roundId != null && priorRoundIds.contains(t.roundId)) ||
+            (t.roundId == null && t.date.isBefore(targetRound.date)))
+        .fold(0, (sum, t) => sum + t.sharesDelta);
+  }
+
+  /// Calculate the implied price per share for a round based on pre-money valuation
+  /// Price = Pre-Money Valuation / Issued Shares (pre-round)
+  double? getImpliedPricePerShare(String roundId) {
+    final round = getRoundById(roundId);
+    if (round == null || round.preMoneyValuation <= 0) return null;
+    
+    final sharesBeforeRound = getIssuedSharesBeforeRound(roundId);
+    if (sharesBeforeRound <= 0) return null;
+    
+    return round.preMoneyValuation / sharesBeforeRound;
+  }
+
+  /// Calculate implied pre-money valuation from price per share
+  /// Pre-Money = Price per Share × Issued Shares (pre-round)
+  double? getImpliedPreMoneyValuation(String roundId, double pricePerShare) {
+    if (pricePerShare <= 0) return null;
+    
+    final sharesBeforeRound = getIssuedSharesBeforeRound(roundId);
+    if (sharesBeforeRound <= 0) return null;
+    
+    return pricePerShare * sharesBeforeRound;
+  }
+
+  /// Update all transaction prices in a round
+  Future<void> updateRoundTransactionPrices(
+    String roundId,
+    double newPricePerShare,
+  ) async {
+    for (int i = 0; i < _transactions.length; i++) {
+      if (_transactions[i].roundId == roundId &&
+          _transactions[i].type == TransactionType.purchase) {
+        final t = _transactions[i];
+        _transactions[i] = t.copyWith(
+          pricePerShare: newPricePerShare,
+          totalAmount: t.numberOfShares * newPricePerShare,
+        );
+      }
+    }
     await _save();
     notifyListeners();
   }
@@ -400,10 +435,11 @@ class CapTableProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  VestingSchedule? getVestingByShareholding(String shareholdingId) {
+  /// Get vesting schedule by transaction ID
+  VestingSchedule? getVestingByTransaction(String transactionId) {
     try {
       return _vestingSchedules.firstWhere(
-        (v) => v.shareholdingId == shareholdingId,
+        (v) => v.shareholdingId == transactionId,
       );
     } catch (_) {
       return null;
@@ -429,38 +465,39 @@ class CapTableProvider extends ChangeNotifier {
   }
 
   List<VestingSchedule> getVestingByInvestor(String investorId) {
-    final investorShareholdings = _shareholdings
-        .where((s) => s.investorId == investorId)
-        .map((s) => s.id)
+    // Get all transaction IDs for this investor
+    final investorTransactionIds = _transactions
+        .where((t) => t.investorId == investorId)
+        .map((t) => t.id)
         .toSet();
     return _vestingSchedules
-        .where((v) => investorShareholdings.contains(v.shareholdingId))
+        .where((v) => investorTransactionIds.contains(v.shareholdingId))
         .toList();
   }
 
-  // Get vested shares for a shareholding
-  int getVestedShares(String shareholdingId) {
-    final shareholding = _shareholdings.firstWhere(
-      (s) => s.id == shareholdingId,
-      orElse: () => throw Exception('Shareholding not found'),
+  // Get vested shares for a transaction
+  int getVestedShares(String transactionId) {
+    final transaction = _transactions.firstWhere(
+      (t) => t.id == transactionId,
+      orElse: () => throw Exception('Transaction not found'),
     );
-    final vesting = getVestingByShareholding(shareholdingId);
+    final vesting = getVestingByTransaction(transactionId);
     if (vesting == null) {
-      return shareholding.numberOfShares; // No vesting = fully vested
+      return transaction.numberOfShares; // No vesting = fully vested
     }
-    return (shareholding.numberOfShares * vesting.vestingPercentage / 100)
+    return (transaction.numberOfShares * vesting.vestingPercentage / 100)
         .round();
   }
 
-  // Get unvested shares for a shareholding
-  int getUnvestedShares(String shareholdingId) {
-    final shareholding = _shareholdings.firstWhere(
-      (s) => s.id == shareholdingId,
-      orElse: () => throw Exception('Shareholding not found'),
+  // Get unvested shares for a transaction
+  int getUnvestedShares(String transactionId) {
+    final transaction = _transactions.firstWhere(
+      (t) => t.id == transactionId,
+      orElse: () => throw Exception('Transaction not found'),
     );
-    final vesting = getVestingByShareholding(shareholdingId);
+    final vesting = getVestingByTransaction(transactionId);
     if (vesting == null) return 0; // No vesting = fully vested
-    return shareholding.numberOfShares - getVestedShares(shareholdingId);
+    return transaction.numberOfShares - getVestedShares(transactionId);
   }
 
   // Analysis methods
@@ -525,26 +562,6 @@ class CapTableProvider extends ChangeNotifier {
     return getCurrentSharesByInvestor(investorId) * latestSharePrice;
   }
 
-  List<Shareholding> getShareholdingsByInvestor(String investorId) {
-    return _shareholdings.where((s) => s.investorId == investorId).toList();
-  }
-
-  List<Shareholding> getShareholdingsByRound(String roundId) {
-    return _shareholdings.where((s) => s.roundId == roundId).toList();
-  }
-
-  double getAmountRaisedByRound(String roundId) {
-    return _shareholdings
-        .where((s) => s.roundId == roundId)
-        .fold(0.0, (sum, s) => sum + s.amountInvested);
-  }
-
-  int getSharesIssuedByRound(String roundId) {
-    return _shareholdings
-        .where((s) => s.roundId == roundId)
-        .fold(0, (sum, s) => sum + s.numberOfShares);
-  }
-
   // Pro-rata calculations
   double calculateProRataAllocation(String investorId, double newRoundSize) {
     final ownership = getOwnershipPercentage(investorId);
@@ -571,9 +588,7 @@ class CapTableProvider extends ChangeNotifier {
     _investors = [];
     _shareClasses = [];
     _rounds = [];
-    _shareholdings = [];
     _vestingSchedules = [];
-    _shareSales = [];
     _transactions = [];
     _companyName = 'My Company Pty Ltd';
     await _storageService.clearData();
@@ -660,40 +675,6 @@ class CapTableProvider extends ChangeNotifier {
     await addTransaction(transaction);
   }
 
-  // Share Sale CRUD (legacy - kept for compatibility)
-  Future<void> addShareSale(ShareSale sale) async {
-    _shareSales.add(sale);
-    await _save();
-    notifyListeners();
-  }
-
-  Future<void> updateShareSale(ShareSale sale) async {
-    final index = _shareSales.indexWhere((s) => s.id == sale.id);
-    if (index != -1) {
-      _shareSales[index] = sale;
-      await _save();
-      notifyListeners();
-    }
-  }
-
-  Future<void> deleteShareSale(String id) async {
-    _shareSales.removeWhere((s) => s.id == id);
-    await _save();
-    notifyListeners();
-  }
-
-  ShareSale? getShareSaleById(String id) {
-    try {
-      return _shareSales.firstWhere((s) => s.id == id);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  List<ShareSale> getSalesByInvestor(String investorId) {
-    return _shareSales.where((s) => s.investorId == investorId).toList();
-  }
-
   /// Get transactions for an investor, sorted chronologically
   List<Transaction> getTransactionsByInvestor(String investorId) {
     final investorTransactions = _transactions
@@ -701,6 +682,24 @@ class CapTableProvider extends ChangeNotifier {
         .toList();
     investorTransactions.sort((a, b) => a.date.compareTo(b.date));
     return investorTransactions;
+  }
+
+  /// Get acquisition transactions (purchases, grants, etc.) for an investor
+  /// This replaces the old getShareholdingsByInvestor method
+  List<Transaction> getAcquisitionsByInvestor(String investorId) {
+    return _transactions
+        .where((t) => t.investorId == investorId && t.isAcquisition)
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+  }
+
+  /// Get sale/disposal transactions for an investor
+  /// This replaces the old getSalesByInvestor method
+  List<Transaction> getSalesByInvestor(String investorId) {
+    return _transactions
+        .where((t) => t.investorId == investorId && t.isDisposal)
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
   }
 
   /// Get total shares sold by an investor (using transactions)
@@ -754,6 +753,58 @@ class CapTableProvider extends ChangeNotifier {
     return _investors.where((i) => hasInvestorExited(i.id)).toList();
   }
 
+  /// Get the date of the investor's first acquisition
+  DateTime? getFirstPurchaseDate(String investorId) {
+    final acquisitions = getAcquisitionsByInvestor(investorId);
+    if (acquisitions.isEmpty) return null;
+    final earliest = acquisitions
+        .map((t) => t.date)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    // Normalize to start of day
+    return DateTime(earliest.year, earliest.month, earliest.day);
+  }
+
+  /// Get the date of the investor's first acquisition for a specific share class
+  DateTime? getFirstPurchaseDateByClass(String investorId, String shareClassId) {
+    final acquisitions = getAcquisitionsByInvestor(investorId)
+        .where((t) => t.shareClassId == shareClassId)
+        .toList();
+    if (acquisitions.isEmpty) return null;
+    final earliest = acquisitions
+        .map((t) => t.date)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    // Normalize to start of day
+    return DateTime(earliest.year, earliest.month, earliest.day);
+  }
+
+  /// Get shares owned by investor at a specific date
+  /// Sums all transactions (acquisitions and sales) up to and including the date
+  int getSharesAtDate(String investorId, DateTime date) {
+    // Normalize to end of day to include all transactions on that date
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+    return _transactions
+        .where((t) =>
+            t.investorId == investorId &&
+            !t.date.isAfter(endOfDay))
+        .fold(0, (sum, t) => sum + t.sharesDelta);
+  }
+
+  /// Get shares owned by investor for a specific share class at a specific date
+  int getSharesAtDateByClass(
+    String investorId,
+    String shareClassId,
+    DateTime date,
+  ) {
+    // Normalize to end of day to include all transactions on that date
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+    return _transactions
+        .where((t) =>
+            t.investorId == investorId &&
+            t.shareClassId == shareClassId &&
+            !t.date.isAfter(endOfDay))
+        .fold(0, (sum, t) => sum + t.sharesDelta);
+  }
+
   /// Get investors who have sold shares (partial or full exit)
   List<Investor> get investorsWithSales {
     return _investors.where((i) => hasInvestorSoldShares(i.id)).toList();
@@ -804,5 +855,46 @@ class CapTableProvider extends ChangeNotifier {
         .where((t) => t.investorId == investorId && t.isDisposal)
         .toList()
       ..sort((a, b) => b.date.compareTo(a.date)); // Most recent first
+  }
+
+  /// Export all data as a Map for backup
+  Map<String, dynamic> exportData() {
+    return {
+      'investors': _investors.map((e) => e.toJson()).toList(),
+      'shareClasses': _shareClasses.map((e) => e.toJson()).toList(),
+      'rounds': _rounds.map((e) => e.toJson()).toList(),
+      'vestingSchedules': _vestingSchedules.map((e) => e.toJson()).toList(),
+      'transactions': _transactions.map((e) => e.toJson()).toList(),
+      'companyName': _companyName,
+      'tableColumnWidths': _tableColumnWidths,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'version': '1.0',
+    };
+  }
+
+  /// Import data from a backup Map
+  Future<void> importData(Map<String, dynamic> data) async {
+    _investors = (data['investors'] as List? ?? [])
+        .map((e) => Investor.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _shareClasses = (data['shareClasses'] as List? ?? [])
+        .map((e) => ShareClass.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _rounds = (data['rounds'] as List? ?? [])
+        .map((e) => InvestmentRound.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _vestingSchedules = (data['vestingSchedules'] as List? ?? [])
+        .map((e) => VestingSchedule.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _transactions = (data['transactions'] as List? ?? [])
+        .map((e) => Transaction.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _companyName = data['companyName'] as String? ?? 'My Company Pty Ltd';
+    _tableColumnWidths = Map<String, double>.from(
+      data['tableColumnWidths'] as Map? ?? {},
+    );
+
+    await _save();
+    notifyListeners();
   }
 }

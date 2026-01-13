@@ -4,7 +4,6 @@ import '../providers/cap_table_provider.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/ownership_pie_chart.dart';
 import '../widgets/section_card.dart';
-import '../widgets/info_widgets.dart';
 import '../widgets/resizable_table.dart';
 import '../utils/helpers.dart';
 
@@ -39,10 +38,6 @@ class _DashboardPageState extends State<DashboardPage> {
               _buildStatsGrid(provider),
               const SizedBox(height: 24),
 
-              // Summary Row
-              _buildSummaryChips(provider),
-              const SizedBox(height: 24),
-
               // Ownership Chart
               _buildOwnershipChart(context),
               const SizedBox(height: 24),
@@ -66,6 +61,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildStatsGrid(CapTableProvider provider) {
+    final activeInvestorCount = provider.activeInvestors.length;
     return StatsGrid(
       stats: [
         StatCard(
@@ -79,37 +75,20 @@ class _DashboardPageState extends State<DashboardPage> {
           value: Formatters.compactCurrency(provider.totalInvested),
           icon: Icons.attach_money,
           color: Colors.blue,
+          subtitle: '${provider.rounds.length} rounds',
         ),
         StatCard(
           title: 'Shares Issued',
           value: Formatters.number(provider.totalCurrentShares),
           icon: Icons.pie_chart,
           color: Colors.purple,
+          subtitle: '$activeInvestorCount active investors',
         ),
         StatCard(
           title: 'Share Price',
           value: Formatters.currency(provider.latestSharePrice),
           icon: Icons.monetization_on,
           color: Colors.orange,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSummaryChips(CapTableProvider provider) {
-    final activeInvestorCount = provider.activeInvestors.length;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        InfoChip(
-          label: '$activeInvestorCount Active Investors',
-          icon: Icons.people,
-        ),
-        InfoChip(label: '${provider.rounds.length} Rounds', icon: Icons.layers),
-        InfoChip(
-          label: '${provider.shareClasses.length} Share Classes',
-          icon: Icons.category,
         ),
       ],
     );
@@ -139,7 +118,7 @@ class _DashboardPageState extends State<DashboardPage> {
         },
       ),
       child: SizedBox(
-        height: 250,
+        height: 300,
         child: OwnershipPieChart(showByShareClass: _showByShareClass),
       ),
     );

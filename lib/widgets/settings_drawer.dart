@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/share_class.dart';
+import '../pages/scenarios_page.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/valuation_wizard.dart';
@@ -83,37 +87,19 @@ class SettingsDrawer extends StatelessWidget {
                   },
                 ),
 
-                // Placeholder for future tools
                 ListTile(
-                  leading: Icon(
-                    Icons.timeline,
-                    color: theme.colorScheme.outline,
-                  ),
-                  title: Text(
-                    'Funding Timeline',
-                    style: TextStyle(color: theme.colorScheme.outline),
-                  ),
-                  subtitle: Text(
-                    'Coming soon',
-                    style: TextStyle(color: theme.colorScheme.outline),
-                  ),
-                  enabled: false,
-                ),
-
-                ListTile(
-                  leading: Icon(
-                    Icons.file_download,
-                    color: theme.colorScheme.outline,
-                  ),
-                  title: Text(
-                    'Export Cap Table',
-                    style: TextStyle(color: theme.colorScheme.outline),
-                  ),
-                  subtitle: Text(
-                    'Coming soon',
-                    style: TextStyle(color: theme.colorScheme.outline),
-                  ),
-                  enabled: false,
+                  leading: const Icon(Icons.calculate),
+                  title: const Text('Scenarios'),
+                  subtitle: const Text('Model exits and dilution'),
+                  onTap: () {
+                    Navigator.pop(context); // Close drawer
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ScenariosPage(),
+                      ),
+                    );
+                  },
                 ),
 
                 const Divider(height: 32),
@@ -192,6 +178,38 @@ class SettingsDrawer extends StatelessWidget {
                         : provider.companyName,
                   ),
                   onTap: () => _showCompanyNameDialog(context, provider),
+                ),
+
+                const Divider(height: 32),
+
+                // Data Management Section
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Text(
+                    'DATA',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+
+                ListTile(
+                  leading: const Icon(Icons.save_alt),
+                  title: const Text('Export Data'),
+                  subtitle: const Text('Save data to a backup file'),
+                  onTap: () => _exportData(context, provider),
+                ),
+
+                ListTile(
+                  leading: const Icon(Icons.file_upload),
+                  title: const Text('Import Data'),
+                  subtitle: const Text('Load data from a backup file'),
+                  onTap: () => _importData(context, provider),
                 ),
 
                 const Divider(height: 32),
@@ -383,6 +401,113 @@ class SettingsDrawer extends StatelessWidget {
     if (confirmed && context.mounted) {
       Navigator.pop(context); // Close drawer
       await provider.resetData();
+    }
+  }
+
+  Future<void> _exportData(
+    BuildContext context,
+    CapTableProvider provider,
+  ) async {
+    try {
+      final timestamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(':', '-')
+          .split('.')
+          .first;
+      final defaultFileName = 'simple_cap_backup_$timestamp.json';
+
+      final data = provider.exportData();
+      final jsonString = jsonEncode(data);
+      final bytes = utf8.encode(jsonString);
+
+      // Use file picker to save with bytes (required for iOS)
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Backup File',
+        fileName: defaultFileName,
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: Uint8List.fromList(bytes),
+      );
+
+      if (result == null) return; // User cancelled
+
+      if (context.mounted) {
+        Navigator.pop(context); // Close drawer
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Data exported to: ${result.split('/').last}'),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _importData(
+    BuildContext context,
+    CapTableProvider provider,
+  ) async {
+    try {
+      // Use file picker to select file (with bytes for cross-platform support)
+      final result = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Select Backup File',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        withData: true, // Load file bytes directly
+      );
+
+      if (result == null || result.files.isEmpty) return; // User cancelled
+
+      final bytes = result.files.single.bytes;
+      if (bytes == null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Could not read file')));
+        }
+        return;
+      }
+
+      if (!context.mounted) return;
+
+      final confirmed = await showConfirmDialog(
+        context: context,
+        title: 'Import Data',
+        message:
+            'This will replace all current data with the backup. Continue?',
+        confirmText: 'Import',
+      );
+
+      if (!confirmed || !context.mounted) return;
+
+      final contents = utf8.decode(bytes);
+      final data = jsonDecode(contents) as Map<String, dynamic>;
+      await provider.importData(data);
+
+      if (context.mounted) {
+        Navigator.pop(context); // Close drawer
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Data imported successfully')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

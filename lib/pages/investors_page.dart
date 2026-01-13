@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/investor.dart';
-import '../models/share_sale.dart';
 import '../models/transaction.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/empty_state.dart';
@@ -9,6 +8,14 @@ import '../widgets/avatars.dart';
 import '../widgets/info_widgets.dart';
 import '../widgets/dialogs.dart';
 import '../utils/helpers.dart';
+
+/// Local enum for sale type in the sell shares dialog
+enum SaleType {
+  secondary, // Sale to another investor
+  buyback, // Company buys back shares
+  exit, // Full exit (acquisition, IPO)
+  partial, // Partial sale
+}
 
 class InvestorsPage extends StatelessWidget {
   const InvestorsPage({super.key});
@@ -138,18 +145,18 @@ class InvestorsPage extends StatelessWidget {
               children: [
                 Text(investor.typeDisplayName),
                 const SizedBox(height: 4),
-                Row(
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 4,
                   children: [
                     MiniStat(
                       label: 'Shares',
                       value: Formatters.number(currentShares),
                     ),
-                    const SizedBox(width: 16),
                     MiniStat(
                       label: 'Ownership',
                       value: Formatters.percent(ownership),
                     ),
-                    const SizedBox(width: 16),
                     MiniStat(
                       label: 'Invested',
                       value: Formatters.compactCurrency(invested),
@@ -212,8 +219,7 @@ class InvestorsPage extends StatelessWidget {
               },
             ),
             isThreeLine: true,
-            onTap: () =>
-                _showInvestorDialog(context, provider, investor: investor),
+            onTap: () => _showHoldingsDialog(context, provider, investor),
           ),
         );
       },
@@ -461,7 +467,7 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
   final _notesController = TextEditingController();
 
   SaleType _saleType = SaleType.secondary;
-  DateTime _saleDate = DateTime.now();
+  late DateTime _saleDate;
   String? _buyerInvestorId;
   String? _selectedShareClassId;
 
@@ -472,12 +478,33 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
     _priceController.text = widget.provider.latestSharePrice.toStringAsFixed(2);
 
     // Get available share classes from holdings
-    final holdings = widget.provider.getShareholdingsByInvestor(
+    final acquisitions = widget.provider.getAcquisitionsByInvestor(
       widget.investor.id,
     );
-    if (holdings.isNotEmpty) {
-      _selectedShareClassId = holdings.first.shareClassId;
+    if (acquisitions.isNotEmpty) {
+      _selectedShareClassId = acquisitions.first.shareClassId;
     }
+
+    // Default sale date to today or latest transaction date (whichever is later)
+    // This handles cases where transactions are dated in the future
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final latestTxnDate = _getLatestTransactionDate();
+    _saleDate = latestTxnDate != null && latestTxnDate.isAfter(today)
+        ? latestTxnDate
+        : today;
+  }
+
+  DateTime? _getLatestTransactionDate() {
+    final acquisitions = widget.provider.getAcquisitionsByInvestor(
+      widget.investor.id,
+    );
+    if (acquisitions.isEmpty) return null;
+    // Find the latest date, normalized to start of day
+    final latest = acquisitions
+        .map((t) => t.date)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    return DateTime(latest.year, latest.month, latest.day);
   }
 
   @override
@@ -488,25 +515,27 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
     super.dispose();
   }
 
-  int get _availableSharesForClass {
-    if (_selectedShareClassId == null) return widget.maxShares;
-
-    // Use the transaction-based method for accurate share counting
-    return widget.provider.getCurrentSharesByInvestorAndClass(
+  /// Get available shares at the selected sale date for the selected share class
+  int get _availableSharesAtDate {
+    if (_selectedShareClassId == null) {
+      return widget.provider.getSharesAtDate(widget.investor.id, _saleDate);
+    }
+    return widget.provider.getSharesAtDateByClass(
       widget.investor.id,
       _selectedShareClassId!,
+      _saleDate,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final holdings = widget.provider.getShareholdingsByInvestor(
+    final acquisitions = widget.provider.getAcquisitionsByInvestor(
       widget.investor.id,
     );
 
     // Get unique share classes from holdings
-    final shareClassIds = holdings.map((h) => h.shareClassId).toSet();
+    final shareClassIds = acquisitions.map((t) => t.shareClassId).toSet();
 
     // Get other investors as potential buyers
     final otherInvestors = widget.provider.investors
@@ -568,8 +597,8 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
                       setState(() {
                         _saleType = value;
                         if (value == SaleType.exit) {
-                          // For full exit, default to all shares
-                          _sharesController.text = _availableSharesForClass
+                          // For full exit, default to all shares at selected date
+                          _sharesController.text = _availableSharesAtDate
                               .toString();
                         }
                       });
@@ -594,7 +623,9 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
                       );
                     }).toList(),
                     onChanged: (value) {
-                      setState(() => _selectedShareClassId = value);
+                      setState(() {
+                        _selectedShareClassId = value;
+                      });
                     },
                   ),
                   const SizedBox(height: 16),
@@ -607,10 +638,10 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
                     labelText: 'Number of Shares',
                     border: const OutlineInputBorder(),
                     helperText:
-                        'Available: ${Formatters.number(_availableSharesForClass)}',
+                        'Available at selected date: ${Formatters.number(_availableSharesAtDate)}',
                     suffixIcon: TextButton(
                       onPressed: () {
-                        _sharesController.text = _availableSharesForClass
+                        _sharesController.text = _availableSharesAtDate
                             .toString();
                       },
                       child: const Text('All'),
@@ -625,8 +656,8 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
                     if (shares == null || shares <= 0) {
                       return 'Enter a valid number';
                     }
-                    if (shares > _availableSharesForClass) {
-                      return 'Cannot exceed ${Formatters.number(_availableSharesForClass)} shares';
+                    if (shares > _availableSharesAtDate) {
+                      return 'Cannot exceed ${Formatters.number(_availableSharesAtDate)} shares at selected date';
                     }
                     return null;
                   },
@@ -658,22 +689,26 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
                 const SizedBox(height: 16),
 
                 // Sale Date
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Sale Date'),
-                  subtitle: Text(Formatters.date(_saleDate)),
-                  trailing: const Icon(Icons.calendar_today),
+                InkWell(
                   onTap: () async {
                     final date = await showDatePicker(
                       context: context,
                       initialDate: _saleDate,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime.now(),
+                      firstDate: DateTime(1950),
+                      lastDate: DateTime(2100),
                     );
                     if (date != null) {
                       setState(() => _saleDate = date);
                     }
                   },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Sale Date',
+                      border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.calendar_today),
+                    ),
+                    child: Text(Formatters.date(_saleDate)),
+                  ),
                 ),
 
                 // Buyer (required for secondary sales - must be an existing investor)
@@ -772,12 +807,15 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
 
     final theme = Theme.of(context);
 
-    // Calculate profit
-    final holdings = widget.provider.getShareholdingsByInvestor(
+    // Calculate profit using transactions
+    final acquisitions = widget.provider.getAcquisitionsByInvestor(
       widget.investor.id,
     );
-    final totalShares = holdings.fold(0, (sum, h) => sum + h.numberOfShares);
-    final totalCost = holdings.fold(0.0, (sum, h) => sum + h.amountInvested);
+    final totalShares = acquisitions.fold(
+      0,
+      (sum, t) => sum + t.numberOfShares,
+    );
+    final totalCost = acquisitions.fold(0.0, (sum, t) => sum + t.totalAmount);
     final avgCost = totalShares > 0 ? totalCost / totalShares : 0.0;
     final costBasis = shares * avgCost;
     final profit = total - costBasis;
@@ -829,7 +867,7 @@ class _SellSharesDialogState extends State<_SellSharesDialog> {
               ),
             ],
           ),
-          if (shares == _availableSharesForClass) ...[
+          if (shares == _availableSharesAtDate) ...[
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1257,12 +1295,16 @@ class _TransactionListItem extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        transaction.typeDisplayName,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                      Flexible(
+                        child: Text(
+                          transaction.typeDisplayName,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         Formatters.date(transaction.date),
                         style: theme.textTheme.bodySmall?.copyWith(

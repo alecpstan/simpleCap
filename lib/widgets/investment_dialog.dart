@@ -1,23 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../models/shareholding.dart';
+import '../models/transaction.dart';
 import '../models/investment_round.dart';
 import '../providers/cap_table_provider.dart';
 import 'avatars.dart';
+import 'dialogs.dart';
 
-/// Shows a dialog for adding or editing a shareholding.
-/// Returns the created/updated Shareholding or null if cancelled.
-Future<Shareholding?> showShareholdingDialog({
+/// Result type for investment dialog
+enum InvestmentDialogAction { saved, deleted, cancelled }
+
+/// Wrapper for investment dialog result
+class InvestmentDialogResult {
+  final InvestmentDialogAction action;
+  final Transaction? transaction;
+
+  InvestmentDialogResult.saved(this.transaction)
+    : action = InvestmentDialogAction.saved;
+  InvestmentDialogResult.deleted()
+    : action = InvestmentDialogAction.deleted,
+      transaction = null;
+  InvestmentDialogResult.cancelled()
+    : action = InvestmentDialogAction.cancelled,
+      transaction = null;
+}
+
+/// Shows a dialog for adding or editing an investment (purchase transaction).
+/// Returns an InvestmentDialogResult indicating the action taken.
+Future<InvestmentDialogResult> showInvestmentDialog({
   required BuildContext context,
   required CapTableProvider provider,
   required InvestmentRound round,
-  Shareholding? existingShareholding,
+  Transaction? existingTransaction,
 }) async {
-  final isEditing = existingShareholding != null;
+  final isEditing = existingTransaction != null;
 
   // For editing, we lock the investor
   final existingInvestor = isEditing
-      ? provider.getInvestorById(existingShareholding.investorId)
+      ? provider.getInvestorById(existingTransaction.investorId)
       : null;
 
   // Check if we have investors to add
@@ -27,28 +46,45 @@ Future<Shareholding?> showShareholdingDialog({
         content: Text('Add investors first before adding them to a round'),
       ),
     );
-    return null;
+    return InvestmentDialogResult.cancelled();
   }
 
   String? selectedInvestorId =
-      existingShareholding?.investorId ?? provider.investors.first.id;
+      existingTransaction?.investorId ?? provider.investors.first.id;
   String? selectedShareClassId =
-      existingShareholding?.shareClassId ??
+      existingTransaction?.shareClassId ??
       (provider.shareClasses.isNotEmpty
           ? provider.shareClasses.first.id
           : null);
 
+  // Calculate default price per share:
+  // 1. Use existing transaction price if editing
+  // 2. Use round's explicit price per share if set
+  // 3. Calculate from pre-money valuation / issued shares
+  // 4. Fall back to 1.0
+  String? priceSource;
+  String getDefaultPrice() {
+    if (existingTransaction != null) {
+      return existingTransaction.pricePerShare.toString();
+    }
+    if (round.pricePerShare != null) {
+      priceSource = 'From round settings';
+      return round.pricePerShare.toString();
+    }
+    final impliedPrice = provider.getImpliedPricePerShare(round.id);
+    if (impliedPrice != null && impliedPrice > 0) {
+      priceSource = 'Calculated from pre-money valuation';
+      return impliedPrice.toStringAsFixed(4);
+    }
+    return '1.0';
+  }
+
   final sharesController = TextEditingController(
-    text: existingShareholding?.numberOfShares.toString() ?? '',
+    text: existingTransaction?.numberOfShares.toString() ?? '',
   );
-  final priceController = TextEditingController(
-    text:
-        existingShareholding?.pricePerShare.toString() ??
-        round.pricePerShare?.toString() ??
-        '1.0',
-  );
+  final priceController = TextEditingController(text: getDefaultPrice());
   final amountController = TextEditingController(
-    text: existingShareholding?.amountInvested.toStringAsFixed(2) ?? '',
+    text: existingTransaction?.totalAmount.toStringAsFixed(2) ?? '',
   );
 
   void recalculateFromSharesAndPrice() {
@@ -65,7 +101,7 @@ Future<Shareholding?> showShareholdingDialog({
     }
   }
 
-  final result = await showDialog<bool>(
+  final result = await showDialog<String>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
@@ -154,10 +190,11 @@ Future<Shareholding?> showShareholdingDialog({
                 // Price per share
                 TextField(
                   controller: priceController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Price Per Share (AUD)',
                     hintText: '1.00',
-                    prefixIcon: Icon(Icons.monetization_on),
+                    prefixIcon: const Icon(Icons.monetization_on),
+                    helperText: priceSource,
                   ),
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -199,12 +236,28 @@ Future<Shareholding?> showShareholdingDialog({
           ),
         ),
         actions: [
+          if (isEditing)
+            TextButton.icon(
+              onPressed: () async {
+                final confirmed = await showConfirmDialog(
+                  context: context,
+                  title: 'Remove from Round',
+                  message:
+                      'Remove ${existingInvestor?.name ?? "this investor"} from this round? This will delete their investment.',
+                );
+                if (confirmed && context.mounted) {
+                  Navigator.pop(context, 'delete');
+                }
+              },
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              label: const Text('Remove', style: TextStyle(color: Colors.red)),
+            ),
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(context, 'cancel'),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(context, 'save'),
             child: Text(isEditing ? 'Save' : 'Add'),
           ),
         ],
@@ -212,35 +265,44 @@ Future<Shareholding?> showShareholdingDialog({
     ),
   );
 
-  if (result == true &&
+  if (result == 'delete') {
+    return InvestmentDialogResult.deleted();
+  }
+
+  if (result == 'save' &&
       selectedInvestorId != null &&
       selectedShareClassId != null &&
       sharesController.text.isNotEmpty) {
     final numberOfShares = int.parse(sharesController.text);
     final pricePerShare = double.tryParse(priceController.text) ?? 1.0;
-    final amountInvested =
+    final totalAmount =
         double.tryParse(amountController.text) ??
         (numberOfShares * pricePerShare);
 
     if (isEditing) {
-      return existingShareholding.copyWith(
-        shareClassId: selectedShareClassId,
-        numberOfShares: numberOfShares,
-        pricePerShare: pricePerShare,
-        amountInvested: amountInvested,
+      return InvestmentDialogResult.saved(
+        existingTransaction.copyWith(
+          shareClassId: selectedShareClassId,
+          numberOfShares: numberOfShares,
+          pricePerShare: pricePerShare,
+          totalAmount: totalAmount,
+        ),
       );
     } else {
-      return Shareholding(
-        investorId: selectedInvestorId!,
-        shareClassId: selectedShareClassId!,
-        roundId: round.id,
-        numberOfShares: numberOfShares,
-        pricePerShare: pricePerShare,
-        amountInvested: amountInvested,
-        dateAcquired: round.date,
+      return InvestmentDialogResult.saved(
+        Transaction(
+          investorId: selectedInvestorId!,
+          shareClassId: selectedShareClassId!,
+          roundId: round.id,
+          type: TransactionType.purchase,
+          numberOfShares: numberOfShares,
+          pricePerShare: pricePerShare,
+          totalAmount: totalAmount,
+          date: round.date,
+        ),
       );
     }
   }
 
-  return null;
+  return InvestmentDialogResult.cancelled();
 }

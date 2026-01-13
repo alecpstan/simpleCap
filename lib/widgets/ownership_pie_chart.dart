@@ -84,6 +84,8 @@ class OwnershipPieChart extends StatelessWidget {
         return LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth > 400;
+            final chartRadius = isWide ? 80.0 : 60.0;
+            final centerRadius = isWide ? 40.0 : 25.0;
 
             if (isWide) {
               return Row(
@@ -92,8 +94,18 @@ class OwnershipPieChart extends StatelessWidget {
                     flex: 2,
                     child: PieChart(
                       PieChartData(
-                        sections: sections,
-                        centerSpaceRadius: 40,
+                        sections: sections
+                            .map(
+                              (s) => PieChartSectionData(
+                                value: s.value,
+                                title: s.title,
+                                color: s.color,
+                                radius: chartRadius,
+                                titleStyle: s.titleStyle,
+                              ),
+                            )
+                            .toList(),
+                        centerSpaceRadius: centerRadius,
                         sectionsSpace: 2,
                       ),
                     ),
@@ -111,20 +123,39 @@ class OwnershipPieChart extends StatelessWidget {
                 ],
               );
             } else {
+              // Narrow layout - chart on top, legend below
               return Column(
                 children: [
-                  Expanded(
-                    flex: 2,
+                  SizedBox(
+                    height: 180,
                     child: PieChart(
                       PieChartData(
-                        sections: sections,
-                        centerSpaceRadius: 30,
+                        sections: sections
+                            .map(
+                              (s) => PieChartSectionData(
+                                value: s.value,
+                                title: s.title,
+                                color: s.color,
+                                radius: chartRadius,
+                                titleStyle: s.titleStyle,
+                              ),
+                            )
+                            .toList(),
+                        centerSpaceRadius: centerRadius,
                         sectionsSpace: 2,
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Wrap(spacing: 16, runSpacing: 4, children: legendItems),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 16,
+                        runSpacing: 4,
+                        children: legendItems,
+                      ),
+                    ),
+                  ),
                 ],
               );
             }

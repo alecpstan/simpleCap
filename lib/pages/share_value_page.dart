@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/cap_table_provider.dart';
-import '../models/share_sale.dart';
+import '../models/transaction.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/avatars.dart';
 import '../widgets/section_card.dart';
@@ -215,7 +215,7 @@ class _ShareholderValueCard extends StatelessWidget {
     final sharesSold = provider.getSharesSoldByInvestor(investor.id);
     final ownership = provider.getOwnershipPercentage(investor.id);
     final invested = provider.getInvestmentByInvestor(investor.id);
-    final shareholdings = provider.getShareholdingsByInvestor(investor.id);
+    final acquisitions = provider.getAcquisitionsByInvestor(investor.id);
     final saleProceeds = provider.getSaleProceedsByInvestor(investor.id);
 
     // Calculate gain/loss (current value + sale proceeds - invested)
@@ -336,26 +336,46 @@ class _ShareholderValueCard extends StatelessWidget {
                   ),
                 ],
 
-                if (shareholdings.isNotEmpty) ...[
+                if (acquisitions.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Text(
-                    'Breakdown by Round',
+                    'Acquisition Breakdown',
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  ...shareholdings.map((holding) {
-                    final round = provider.getRoundById(holding.roundId);
+                  ...acquisitions.map((transaction) {
+                    final round = transaction.roundId != null
+                        ? provider.getRoundById(transaction.roundId!)
+                        : null;
                     final shareClass = provider.getShareClassById(
-                      holding.shareClassId,
+                      transaction.shareClassId,
                     );
                     final holdingValue =
-                        holding.numberOfShares * provider.latestSharePrice;
-                    final holdingGain = holdingValue - holding.amountInvested;
-                    final holdingGainPercent = holding.amountInvested > 0
-                        ? (holdingGain / holding.amountInvested) * 100
+                        transaction.numberOfShares * provider.latestSharePrice;
+                    final holdingGain = holdingValue - transaction.totalAmount;
+                    final holdingGainPercent = transaction.totalAmount > 0
+                        ? (holdingGain / transaction.totalAmount) * 100
                         : 0.0;
+
+                    // Determine the transaction label
+                    String transactionLabel;
+                    if (round != null) {
+                      transactionLabel = round.name;
+                    } else {
+                      // Use transaction type for non-round acquisitions
+                      switch (transaction.type) {
+                        case TransactionType.grant:
+                          transactionLabel = 'Share Grant';
+                        case TransactionType.secondaryPurchase:
+                          transactionLabel = 'Secondary Purchase';
+                        case TransactionType.optionExercise:
+                          transactionLabel = 'Option Exercise';
+                        default:
+                          transactionLabel = 'Direct Purchase';
+                      }
+                    }
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
@@ -376,13 +396,13 @@ class _ShareholderValueCard extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      round?.name ?? 'Unknown Round',
+                                      transactionLabel,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     Text(
-                                      shareClass?.name ?? 'Unknown Class',
+                                      '${shareClass?.name ?? 'Unknown Class'} • ${Formatters.date(transaction.date)}',
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(
                                             color: theme.colorScheme.outline,
@@ -418,12 +438,12 @@ class _ShareholderValueCard extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  '${Formatters.number(holding.numberOfShares)} shares',
+                                  '${Formatters.number(transaction.numberOfShares)} shares',
                                   style: theme.textTheme.bodySmall,
                                 ),
                               ),
                               Text(
-                                'Paid: ${Formatters.currency(holding.amountInvested)}',
+                                'Paid: ${Formatters.currency(transaction.totalAmount)}',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.outline,
                                 ),
@@ -435,7 +455,7 @@ class _ShareholderValueCard extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  'Price: ${Formatters.currency(holding.pricePerShare)}/share',
+                                  'Price: ${Formatters.currency(transaction.pricePerShare)}/share',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: theme.colorScheme.outline,
                                   ),
@@ -517,7 +537,7 @@ class _ExitedInvestorCard extends StatelessWidget {
     DateTime? exitDate;
     if (sales.isNotEmpty) {
       exitDate = sales
-          .map((s) => s.saleDate)
+          .map((s) => s.date)
           .reduce((a, b) => a.isAfter(b) ? a : b);
     }
 
@@ -678,13 +698,13 @@ class _ExitedInvestorCard extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                _getSaleTypeLabel(sale.type),
+                                _getTransactionTypeLabel(sale.type),
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                               Text(
-                                Formatters.date(sale.saleDate),
+                                Formatters.date(sale.date),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.outline,
                                 ),
@@ -708,16 +728,16 @@ class _ExitedInvestorCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Total: ${Formatters.currency(sale.totalProceeds)}',
+                            'Total: ${Formatters.currency(sale.totalAmount)}',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                               color: Colors.green,
                             ),
                           ),
-                          if (sale.buyerInvestorId != null) ...[
+                          if (sale.counterpartyInvestorId != null) ...[
                             const SizedBox(height: 4),
                             Text(
-                              'Buyer: ${provider.getInvestorById(sale.buyerInvestorId!)?.name ?? 'Unknown'}',
+                              'Buyer: ${provider.getInvestorById(sale.counterpartyInvestorId!)?.name ?? 'Unknown'}',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.outline,
                               ),
@@ -736,16 +756,20 @@ class _ExitedInvestorCard extends StatelessWidget {
     );
   }
 
-  String _getSaleTypeLabel(SaleType type) {
+  String _getTransactionTypeLabel(TransactionType type) {
     switch (type) {
-      case SaleType.secondary:
+      case TransactionType.secondarySale:
         return 'Secondary Sale';
-      case SaleType.buyback:
+      case TransactionType.buyback:
         return 'Company Buyback';
-      case SaleType.exit:
-        return 'Full Exit';
-      case SaleType.partial:
-        return 'Partial Sale';
+      case TransactionType.purchase:
+        return 'Purchase';
+      case TransactionType.secondaryPurchase:
+        return 'Secondary Purchase';
+      case TransactionType.grant:
+        return 'Grant';
+      case TransactionType.optionExercise:
+        return 'Option Exercise';
     }
   }
 }
@@ -919,13 +943,13 @@ class _PartialSellerCard extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                _getSaleTypeLabel(sale.type),
+                                _getTransactionTypeLabel(sale.type),
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                               Text(
-                                Formatters.date(sale.saleDate),
+                                Formatters.date(sale.date),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.outline,
                                 ),
@@ -949,16 +973,16 @@ class _PartialSellerCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Total: ${Formatters.currency(sale.totalProceeds)}',
+                            'Total: ${Formatters.currency(sale.totalAmount)}',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                               color: Colors.green,
                             ),
                           ),
-                          if (sale.buyerInvestorId != null) ...[
+                          if (sale.counterpartyInvestorId != null) ...[
                             const SizedBox(height: 4),
                             Text(
-                              'Buyer: ${provider.getInvestorById(sale.buyerInvestorId!)?.name ?? 'Unknown'}',
+                              'Buyer: ${provider.getInvestorById(sale.counterpartyInvestorId!)?.name ?? 'Unknown'}',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.outline,
                               ),
@@ -977,16 +1001,20 @@ class _PartialSellerCard extends StatelessWidget {
     );
   }
 
-  String _getSaleTypeLabel(SaleType type) {
+  String _getTransactionTypeLabel(TransactionType type) {
     switch (type) {
-      case SaleType.secondary:
+      case TransactionType.secondarySale:
         return 'Secondary Sale';
-      case SaleType.buyback:
+      case TransactionType.buyback:
         return 'Company Buyback';
-      case SaleType.exit:
-        return 'Full Exit';
-      case SaleType.partial:
-        return 'Partial Sale';
+      case TransactionType.purchase:
+        return 'Purchase';
+      case TransactionType.secondaryPurchase:
+        return 'Secondary Purchase';
+      case TransactionType.grant:
+        return 'Grant';
+      case TransactionType.optionExercise:
+        return 'Option Exercise';
     }
   }
 }

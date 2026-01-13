@@ -5,6 +5,7 @@ class StatCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color? color;
+  final String? subtitle;
 
   const StatCard({
     super.key,
@@ -12,6 +13,7 @@ class StatCard extends StatelessWidget {
     required this.value,
     required this.icon,
     this.color,
+    this.subtitle,
   });
 
   @override
@@ -54,6 +56,16 @@ class StatCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ],
         ),
       ),
