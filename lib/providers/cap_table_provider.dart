@@ -10,18 +10,13 @@ import '../models/hours_vesting.dart';
 import '../models/tax_rule.dart';
 import '../models/option_grant.dart';
 import '../services/storage_service.dart';
+import '../utils/esop_helpers.dart' as esop;
 
-/// ESOP dilution calculation methods (Task 2.1)
-enum EsopDilutionMethod {
-  /// Post-round cap table (US-style): new shares = (pool % * post-money shares) / (1 - pool %)
-  postRoundCap,
+// Re-export EsopDilutionMethod for backward compatibility
+export '../utils/esop_helpers.dart' show EsopDilutionMethod;
 
-  /// Pre-round cap table (AU-style): new shares = pool % * pre-round shares
-  preRoundCap,
-
-  /// Fixed number of shares (no percentage calculation)
-  fixedShares,
-}
+// Use the enum directly via re-export
+typedef EsopDilutionMethod = esop.EsopDilutionMethod;
 
 class CapTableProvider extends ChangeNotifier {
   final StorageService _storageService = StorageService();
@@ -206,29 +201,18 @@ class CapTableProvider extends ChangeNotifier {
   }
 
   /// Calculate ESOP pool size based on dilution method (Task 2.1)
+  /// Uses helper function from esop_helpers.dart
   int calculateEsopPoolSize({
     required double targetPercent,
     int? additionalNewShares,
   }) {
-    final currentShares = totalCurrentShares;
-    final newShares = additionalNewShares ?? 0;
-
-    switch (_esopDilutionMethod) {
-      case EsopDilutionMethod.postRoundCap:
-        // US-style: pool is % of post-money
-        // poolShares = (targetPercent * postMoneyShares) / (1 - targetPercent)
-        final postMoney = currentShares + newShares;
-        return ((targetPercent / 100) * postMoney / (1 - targetPercent / 100))
-            .round();
-
-      case EsopDilutionMethod.preRoundCap:
-        // AU-style: pool is % of pre-round shares
-        return ((targetPercent / 100) * currentShares).round();
-
-      case EsopDilutionMethod.fixedShares:
-        // Just return current unallocated pool
-        return unallocatedEsopShares;
-    }
+    return esop.calculateEsopPoolSize(
+      method: _esopDilutionMethod,
+      targetPercent: targetPercent,
+      currentShares: totalCurrentShares,
+      additionalNewShares: additionalNewShares ?? 0,
+      currentUnallocatedPool: unallocatedEsopShares,
+    );
   }
 
   /// Set ESOP dilution method

@@ -36,8 +36,8 @@ class _DashboardPageState extends State<DashboardPage> {
             // Ownership chart section
             SliverToBoxAdapter(child: _buildOwnershipChart(context, provider)),
 
-            // Voting chart section
-            SliverToBoxAdapter(child: _buildVotingChart(context, provider)),
+            // Dividend chart section
+            SliverToBoxAdapter(child: _buildDividendChart(context, provider)),
 
             // Bottom padding
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
@@ -183,27 +183,34 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildVotingChart(BuildContext context, CapTableProvider provider) {
+  Widget _buildDividendChart(BuildContext context, CapTableProvider provider) {
     if (provider.activeInvestors.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    // Check if any share classes have non-1x voting
-    final hasVotingDifferences = provider.shareClasses.any(
-      (sc) => sc.votingRightsMultiplier != 1.0,
+    // Check if any share classes have dividend rates
+    final hasDividendRates = provider.shareClasses.any(
+      (sc) => sc.dividendRate > 0,
     );
 
-    // Get voting data
-    final votingData = <String, double>{};
+    // Get total accrued dividends
+    final totalDividends = provider.totalAccruedDividends;
+
+    // Get dividend data per investor
+    final dividendData = <String, double>{};
     for (final investor in provider.activeInvestors) {
-      final votePct = provider.getVotingPercentage(investor.id);
-      if (votePct > 0) {
-        votingData[investor.name] = votePct;
+      final dividends = provider.getAccruedDividendsByInvestor(investor.id);
+      if (dividends > 0) {
+        // Calculate percentage of total dividends
+        final pct = totalDividends > 0
+            ? (dividends / totalDividends) * 100
+            : 0.0;
+        dividendData[investor.name] = pct;
       }
     }
 
-    // Sort by voting power descending
-    final sortedEntries = votingData.entries.toList()
+    // Sort by dividend share descending
+    final sortedEntries = dividendData.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     final theme = Theme.of(context);
@@ -223,8 +230,8 @@ class _DashboardPageState extends State<DashboardPage> {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: SectionCard(
-        title: 'Voting Power',
-        trailing: hasVotingDifferences
+        title: 'Dividend Split',
+        trailing: hasDividendRates && totalDividends > 0
             ? Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -232,7 +239,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'Weighted',
+                  '\$${(totalDividends / 1000).toStringAsFixed(1)}k accrued',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.onPrimaryContainer,
                   ),
@@ -242,11 +249,21 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!hasVotingDifferences)
+            if (!hasDividendRates)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
-                  'All shares have equal voting rights (1:1)',
+                  'No share classes have dividend rates configured',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              )
+            else if (sortedEntries.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'No dividends have accrued yet',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.outline,
                   ),

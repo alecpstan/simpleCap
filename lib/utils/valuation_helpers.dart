@@ -1,5 +1,5 @@
-/// Valuation helper enums and extensions
-/// These provide data and calculations for valuation wizards
+// Valuation helper enums and extensions
+// These provide data and calculations for valuation wizards
 
 /// Valuation method types based on common startup valuation approaches
 enum ValuationMethod { benchmarkMultiple, preSeedRange, manualEntry }
