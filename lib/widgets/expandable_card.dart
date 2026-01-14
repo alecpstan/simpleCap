@@ -18,6 +18,9 @@ class ExpandableCard extends StatefulWidget {
   /// Summary chips to show below title when collapsed
   final List<Widget>? chips;
 
+  /// Status badges to show below chips (always on separate row)
+  final List<Widget>? badges;
+
   /// Content to show when expanded
   final Widget expandedContent;
 
@@ -43,6 +46,7 @@ class ExpandableCard extends StatefulWidget {
     this.subtitle,
     this.trailing,
     this.chips,
+    this.badges,
     required this.expandedContent,
     this.initiallyExpanded = false,
     this.onTap,
@@ -166,6 +170,10 @@ class _ExpandableCardState extends State<ExpandableCard>
                   if (widget.chips != null && widget.chips!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Wrap(spacing: 6, runSpacing: 4, children: widget.chips!),
+                  ],
+                  if (widget.badges != null && widget.badges!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(spacing: 6, runSpacing: 4, children: widget.badges!),
                   ],
                 ],
               ),

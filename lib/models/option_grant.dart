@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 /// Status of an option grant
@@ -19,6 +20,24 @@ enum OptionGrantStatus {
 
   /// Options forfeited (unvested portion on termination)
   forfeited,
+}
+
+/// Extension for status colors
+extension OptionGrantStatusColor on OptionGrantStatus {
+  Color get color {
+    switch (this) {
+      case OptionGrantStatus.active:
+      case OptionGrantStatus.partiallyExercised:
+        return Colors.blue;
+      case OptionGrantStatus.fullyExercised:
+        return Colors.green;
+      case OptionGrantStatus.expired:
+        return Colors.grey;
+      case OptionGrantStatus.cancelled:
+      case OptionGrantStatus.forfeited:
+        return Colors.red;
+    }
+  }
 }
 
 /// Represents an employee stock option grant (ESOP/ESS)

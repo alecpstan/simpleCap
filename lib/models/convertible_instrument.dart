@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 /// Type of convertible instrument
@@ -22,6 +23,22 @@ enum ConvertibleStatus {
 
   /// Cancelled/terminated
   cancelled,
+}
+
+/// Extension for status colors
+extension ConvertibleStatusColor on ConvertibleStatus {
+  Color get color {
+    switch (this) {
+      case ConvertibleStatus.outstanding:
+        return Colors.blue;
+      case ConvertibleStatus.converted:
+        return Colors.green;
+      case ConvertibleStatus.repaid:
+        return Colors.teal;
+      case ConvertibleStatus.cancelled:
+        return Colors.red;
+    }
+  }
 }
 
 /// Represents a SAFE or Convertible Note instrument

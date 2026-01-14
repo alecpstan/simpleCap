@@ -364,6 +364,7 @@ class VestingSchedule {
     double? accelerationPercent,
     LeaverStatus? leaverStatus,
     DateTime? terminationDate,
+    bool clearTerminationDate = false,
     String? notes,
     double? timeWeight,
     double? milestonesWeight,
@@ -385,7 +386,9 @@ class VestingSchedule {
       frequency: frequency ?? this.frequency,
       accelerationPercent: accelerationPercent ?? this.accelerationPercent,
       leaverStatus: leaverStatus ?? this.leaverStatus,
-      terminationDate: terminationDate ?? this.terminationDate,
+      terminationDate: clearTerminationDate
+          ? null
+          : (terminationDate ?? this.terminationDate),
       notes: notes ?? this.notes,
       timeWeight: timeWeight ?? this.timeWeight,
       milestonesWeight: milestonesWeight ?? this.milestonesWeight,

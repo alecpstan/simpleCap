@@ -4,6 +4,7 @@ import '../models/convertible_instrument.dart';
 import '../models/investor.dart';
 import '../models/option_grant.dart';
 import '../models/transaction.dart';
+import '../models/vesting_schedule.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/avatars.dart';
@@ -11,6 +12,8 @@ import '../widgets/expandable_card.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/help_icon.dart';
 import '../widgets/transaction_editor.dart';
+
+import '../widgets/stat_pill.dart';
 import '../utils/helpers.dart';
 
 class InvestorsPage extends StatelessWidget {
@@ -74,21 +77,21 @@ class InvestorsPage extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                _StatPill(
+                StatPill(
                   label: 'Active',
                   value: active.length.toString(),
                   color: Colors.green,
                 ),
                 const SizedBox(width: 8),
                 if (exited.isNotEmpty)
-                  _StatPill(
+                  StatPill(
                     label: 'Exited',
                     value: exited.length.toString(),
                     color: Colors.grey,
                   ),
                 if (noShares.isNotEmpty) ...[
                   const SizedBox(width: 8),
-                  _StatPill(
+                  StatPill(
                     label: 'No Shares',
                     value: noShares.length.toString(),
                     color: Colors.orange,
@@ -423,50 +426,6 @@ class InvestorsPage extends StatelessWidget {
   }
 }
 
-/// Stat pill for quick overview
-class _StatPill extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-
-  const _StatPill({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelMedium?.copyWith(color: color),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Expandable investor card with transaction list
 class _InvestorCard extends StatefulWidget {
   final Investor investor;
@@ -504,6 +463,23 @@ class _InvestorCardState extends State<_InvestorCard> {
     final optionGrants = provider.getOptionGrantsByInvestor(investor.id);
     final convertibles = provider.getConvertiblesByInvestor(investor.id);
 
+    // Get vesting schedules for this investor's transactions
+    final investorTransactionIds = transactions.map((t) => t.id).toSet();
+    final vestingSchedules = provider.vestingSchedules
+        .where((v) => investorTransactionIds.contains(v.transactionId))
+        .toList();
+    final hasActiveVesting = vestingSchedules.any(
+      (v) => v.leaverStatus == LeaverStatus.active && v.vestingPercentage < 100,
+    );
+    final hasActiveOptions = optionGrants.any(
+      (g) =>
+          g.status == OptionGrantStatus.active ||
+          g.status == OptionGrantStatus.partiallyExercised,
+    );
+    final hasActiveConvertibles = convertibles.any(
+      (c) => c.status == ConvertibleStatus.outstanding,
+    );
+
     // Status tag
     Widget? statusTag;
     if (hasExited) {
@@ -530,6 +506,7 @@ class _InvestorCardState extends State<_InvestorCard> {
               ),
             ),
       chips: [
+        // Row 1: Shares and Invested info
         if (currentShares > 0)
           InfoTag(
             label: 'Shares',
@@ -543,26 +520,22 @@ class _InvestorCardState extends State<_InvestorCard> {
             icon: Icons.attach_money,
             color: Colors.blue,
           ),
+      ],
+      badges: [
+        // Row 2: Status badges (always below)
         if (investor.hasProRataRights)
           InfoTag(label: 'Pro-rata', icon: Icons.verified, color: Colors.green),
-        if (optionGrants.isNotEmpty)
+        if (hasActiveVesting)
+          InfoTag(label: 'Vesting', icon: Icons.schedule, color: Colors.indigo),
+        if (hasActiveOptions)
           InfoTag(
             label: 'Options',
-            value: Formatters.compactNumber(
-              optionGrants.fold(0, (sum, g) => sum + g.remainingOptions),
-            ),
             icon: Icons.workspace_premium,
             color: Colors.orange,
           ),
-        if (convertibles
-            .where((c) => c.status == ConvertibleStatus.outstanding)
-            .isNotEmpty)
+        if (hasActiveConvertibles)
           InfoTag(
             label: 'Convertibles',
-            value: convertibles
-                .where((c) => c.status == ConvertibleStatus.outstanding)
-                .length
-                .toString(),
             icon: Icons.sync_alt,
             color: Colors.purple,
           ),
@@ -1599,7 +1572,7 @@ class _OptionGrantDetailsDialog extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: _getStatusColor(grant.status),
+                            color: grant.status.color,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -1614,19 +1587,25 @@ class _OptionGrantDetailsDialog extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _DetailRow(
-                      'Options Granted',
-                      Formatters.number(grant.numberOfOptions),
+                    DetailRow(
+                      label: 'Options Granted',
+                      value: Formatters.number(grant.numberOfOptions),
                     ),
-                    _DetailRow(
-                      'Strike Price',
-                      Formatters.currency(grant.strikePrice),
+                    DetailRow(
+                      label: 'Strike Price',
+                      value: Formatters.currency(grant.strikePrice),
                     ),
-                    _DetailRow('Share Class', shareClass?.name ?? 'Unknown'),
-                    _DetailRow('Grant Date', Formatters.date(grant.grantDate)),
-                    _DetailRow(
-                      'Expiry Date',
-                      Formatters.date(grant.expiryDate),
+                    DetailRow(
+                      label: 'Share Class',
+                      value: shareClass?.name ?? 'Unknown',
+                    ),
+                    DetailRow(
+                      label: 'Grant Date',
+                      value: Formatters.date(grant.grantDate),
+                    ),
+                    DetailRow(
+                      label: 'Expiry Date',
+                      value: Formatters.date(grant.expiryDate),
                     ),
                   ],
                 ),
@@ -1651,21 +1630,22 @@ class _OptionGrantDetailsDialog extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     if (vesting != null)
-                      _DetailRow(
-                        'Vested',
-                        '${vestedPercent.toStringAsFixed(0)}% (${Formatters.number(vestedOptions)} options)',
+                      DetailRow(
+                        label: 'Vested',
+                        value:
+                            '${vestedPercent.toStringAsFixed(0)}% (${Formatters.number(vestedOptions)} options)',
                       ),
-                    _DetailRow(
-                      'Exercised',
-                      Formatters.number(grant.exercisedCount),
+                    DetailRow(
+                      label: 'Exercised',
+                      value: Formatters.number(grant.exercisedCount),
                     ),
-                    _DetailRow(
-                      'Exercisable',
-                      Formatters.number(exercisableOptions),
+                    DetailRow(
+                      label: 'Exercisable',
+                      value: Formatters.number(exercisableOptions),
                     ),
-                    _DetailRow(
-                      'Remaining',
-                      Formatters.number(grant.remainingOptions),
+                    DetailRow(
+                      label: 'Remaining',
+                      value: Formatters.number(grant.remainingOptions),
                     ),
                   ],
                 ),
@@ -1759,21 +1739,6 @@ class _OptionGrantDetailsDialog extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  Color _getStatusColor(OptionGrantStatus status) {
-    switch (status) {
-      case OptionGrantStatus.active:
-      case OptionGrantStatus.partiallyExercised:
-        return Colors.blue;
-      case OptionGrantStatus.fullyExercised:
-        return Colors.green;
-      case OptionGrantStatus.expired:
-        return Colors.grey;
-      case OptionGrantStatus.cancelled:
-      case OptionGrantStatus.forfeited:
-        return Colors.red;
-    }
   }
 }
 
@@ -1912,10 +1877,13 @@ class _ExerciseOptionsDialogInlineState
               ),
               child: Column(
                 children: [
-                  _DetailRow('Exercise Cost', Formatters.currency(totalCost)),
-                  _DetailRow(
-                    'Current Value',
-                    Formatters.currency(currentValue),
+                  DetailRow(
+                    label: 'Exercise Cost',
+                    value: Formatters.currency(totalCost),
+                  ),
+                  DetailRow(
+                    label: 'Current Value',
+                    value: Formatters.currency(currentValue),
                   ),
                   const Divider(height: 12),
                   Row(
@@ -2038,7 +2006,7 @@ class _ConvertibleDetailsDialogInline extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: _getStatusColor(convertible.status),
+                            color: convertible.status.color,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -2053,18 +2021,18 @@ class _ConvertibleDetailsDialogInline extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _DetailRow(
-                      'Principal',
-                      Formatters.currency(convertible.principalAmount),
+                    DetailRow(
+                      label: 'Principal',
+                      value: Formatters.currency(convertible.principalAmount),
                     ),
-                    _DetailRow(
-                      'Issue Date',
-                      Formatters.date(convertible.issueDate),
+                    DetailRow(
+                      label: 'Issue Date',
+                      value: Formatters.date(convertible.issueDate),
                     ),
                     if (convertible.maturityDate != null)
-                      _DetailRow(
-                        'Maturity Date',
-                        Formatters.date(convertible.maturityDate!),
+                      DetailRow(
+                        label: 'Maturity Date',
+                        value: Formatters.date(convertible.maturityDate!),
                       ),
                   ],
                 ),
@@ -2089,27 +2057,31 @@ class _ConvertibleDetailsDialogInline extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     if (convertible.valuationCap != null)
-                      _DetailRow(
-                        'Valuation Cap',
-                        Formatters.currency(convertible.valuationCap!),
+                      DetailRow(
+                        label: 'Valuation Cap',
+                        value: Formatters.currency(convertible.valuationCap!),
                       ),
                     if (convertible.discountPercent != null)
-                      _DetailRow(
-                        'Discount',
-                        '${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
+                      DetailRow(
+                        label: 'Discount',
+                        value:
+                            '${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
                       ),
                     if (convertible.interestRate != null) ...[
-                      _DetailRow(
-                        'Interest Rate',
-                        '${(convertible.interestRate! * 100).toStringAsFixed(1)}%',
+                      DetailRow(
+                        label: 'Interest Rate',
+                        value:
+                            '${(convertible.interestRate! * 100).toStringAsFixed(1)}%',
                       ),
-                      _DetailRow(
-                        'Accrued Interest',
-                        Formatters.currency(convertible.accruedInterest),
+                      DetailRow(
+                        label: 'Accrued Interest',
+                        value: Formatters.currency(convertible.accruedInterest),
                       ),
-                      _DetailRow(
-                        'Total Amount',
-                        Formatters.currency(convertible.convertibleAmount),
+                      DetailRow(
+                        label: 'Total Amount',
+                        value: Formatters.currency(
+                          convertible.convertibleAmount,
+                        ),
                       ),
                     ],
                   ],
@@ -2139,21 +2111,23 @@ class _ConvertibleDetailsDialogInline extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       if (convertible.conversionDate != null)
-                        _DetailRow(
-                          'Date',
-                          Formatters.date(convertible.conversionDate!),
+                        DetailRow(
+                          label: 'Date',
+                          value: Formatters.date(convertible.conversionDate!),
                         ),
                       if (convertible.conversionPricePerShare != null)
-                        _DetailRow(
-                          'Price/Share',
-                          Formatters.currency(
+                        DetailRow(
+                          label: 'Price/Share',
+                          value: Formatters.currency(
                             convertible.conversionPricePerShare!,
                           ),
                         ),
                       if (convertible.conversionShares != null)
-                        _DetailRow(
-                          'Shares Issued',
-                          Formatters.number(convertible.conversionShares!),
+                        DetailRow(
+                          label: 'Shares Issued',
+                          value: Formatters.number(
+                            convertible.conversionShares!,
+                          ),
                         ),
                     ],
                   ),
@@ -2204,19 +2178,6 @@ class _ConvertibleDetailsDialogInline extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  Color _getStatusColor(ConvertibleStatus status) {
-    switch (status) {
-      case ConvertibleStatus.outstanding:
-        return Colors.blue;
-      case ConvertibleStatus.converted:
-        return Colors.green;
-      case ConvertibleStatus.repaid:
-        return Colors.teal;
-      case ConvertibleStatus.cancelled:
-        return Colors.red;
-    }
   }
 }
 
@@ -2396,26 +2357,5 @@ class _ConversionDialogInlineState extends State<_ConversionDialogInline> {
       round?.date ?? DateTime.now(),
     );
     Navigator.pop(context);
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _DetailRow(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
   }
 }

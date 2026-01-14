@@ -36,6 +36,9 @@ class _DashboardPageState extends State<DashboardPage> {
             // Ownership chart section
             SliverToBoxAdapter(child: _buildOwnershipChart(context, provider)),
 
+            // Voting chart section
+            SliverToBoxAdapter(child: _buildVotingChart(context, provider)),
+
             // Bottom padding
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
@@ -175,6 +178,124 @@ class _DashboardPageState extends State<DashboardPage> {
         child: SizedBox(
           height: 280,
           child: OwnershipPieChart(showByShareClass: _showByShareClass),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVotingChart(BuildContext context, CapTableProvider provider) {
+    if (provider.activeInvestors.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Check if any share classes have non-1x voting
+    final hasVotingDifferences = provider.shareClasses.any(
+      (sc) => sc.votingRightsMultiplier != 1.0,
+    );
+
+    // Get voting data
+    final votingData = <String, double>{};
+    for (final investor in provider.activeInvestors) {
+      final votePct = provider.getVotingPercentage(investor.id);
+      if (votePct > 0) {
+        votingData[investor.name] = votePct;
+      }
+    }
+
+    // Sort by voting power descending
+    final sortedEntries = votingData.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final theme = Theme.of(context);
+    final colors = [
+      Colors.indigo,
+      Colors.blue,
+      Colors.teal,
+      Colors.green,
+      Colors.amber,
+      Colors.orange,
+      Colors.red,
+      Colors.purple,
+      Colors.pink,
+      Colors.cyan,
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: SectionCard(
+        title: 'Voting Power',
+        trailing: hasVotingDifferences
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Weighted',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              )
+            : null,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!hasVotingDifferences)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'All shares have equal voting rights (1:1)',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ),
+            ...sortedEntries.take(10).toList().asMap().entries.map((entry) {
+              final index = entry.key;
+              final data = entry.value;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: colors[index % colors.length],
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        data.key,
+                        style: theme.textTheme.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '${data.value.toStringAsFixed(1)}%',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            if (sortedEntries.length > 10)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '+ ${sortedEntries.length - 10} more investors',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

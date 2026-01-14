@@ -12,6 +12,7 @@ import '../widgets/section_card.dart';
 import '../widgets/info_widgets.dart';
 import '../widgets/avatars.dart';
 import '../widgets/dialogs.dart';
+import '../widgets/expandable_card.dart';
 
 class OptionsPage extends StatelessWidget {
   const OptionsPage({super.key});
@@ -210,10 +211,10 @@ class OptionsPage extends StatelessWidget {
           final investor = provider.getInvestorById(g.investorId);
           return ListTile(
             leading: CircleAvatar(
-              backgroundColor: _getStatusColor(g.status).withValues(alpha: 0.2),
+              backgroundColor: g.status.color.withValues(alpha: 0.2),
               child: Icon(
                 _getStatusIcon(g.status),
-                color: _getStatusColor(g.status),
+                color: g.status.color,
                 size: 20,
               ),
             ),
@@ -230,21 +231,6 @@ class OptionsPage extends StatelessWidget {
         }).toList(),
       ),
     );
-  }
-
-  Color _getStatusColor(OptionGrantStatus status) {
-    switch (status) {
-      case OptionGrantStatus.active:
-      case OptionGrantStatus.partiallyExercised:
-        return Colors.blue;
-      case OptionGrantStatus.fullyExercised:
-        return Colors.green;
-      case OptionGrantStatus.expired:
-        return Colors.grey;
-      case OptionGrantStatus.cancelled:
-      case OptionGrantStatus.forfeited:
-        return Colors.red;
-    }
   }
 
   IconData _getStatusIcon(OptionGrantStatus status) {
@@ -901,7 +887,7 @@ class _GrantDetailsDialog extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: _getStatusColor(grant.status),
+                            color: grant.status.color,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -916,19 +902,25 @@ class _GrantDetailsDialog extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _DetailRow(
-                      'Options Granted',
-                      Formatters.number(grant.numberOfOptions),
+                    DetailRow(
+                      label: 'Options Granted',
+                      value: Formatters.number(grant.numberOfOptions),
                     ),
-                    _DetailRow(
-                      'Strike Price',
-                      Formatters.currency(grant.strikePrice),
+                    DetailRow(
+                      label: 'Strike Price',
+                      value: Formatters.currency(grant.strikePrice),
                     ),
-                    _DetailRow('Share Class', shareClass?.name ?? 'Unknown'),
-                    _DetailRow('Grant Date', Formatters.date(grant.grantDate)),
-                    _DetailRow(
-                      'Expiry Date',
-                      Formatters.date(grant.expiryDate),
+                    DetailRow(
+                      label: 'Share Class',
+                      value: shareClass?.name ?? 'Unknown',
+                    ),
+                    DetailRow(
+                      label: 'Grant Date',
+                      value: Formatters.date(grant.grantDate),
+                    ),
+                    DetailRow(
+                      label: 'Expiry Date',
+                      value: Formatters.date(grant.expiryDate),
                     ),
                   ],
                 ),
@@ -953,31 +945,33 @@ class _GrantDetailsDialog extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     if (vesting != null)
-                      _DetailRow(
-                        'Vested',
-                        '${vestedPercent.toStringAsFixed(0)}% (${Formatters.number(vestedOptions)} options)',
+                      DetailRow(
+                        label: 'Vested',
+                        value:
+                            '${vestedPercent.toStringAsFixed(0)}% (${Formatters.number(vestedOptions)} options)',
                       ),
-                    _DetailRow(
-                      'Exercised',
-                      Formatters.number(grant.exercisedCount),
+                    DetailRow(
+                      label: 'Exercised',
+                      value: Formatters.number(grant.exercisedCount),
                     ),
-                    _DetailRow(
-                      'Exercisable',
-                      Formatters.number(exercisableOptions),
+                    DetailRow(
+                      label: 'Exercisable',
+                      value: Formatters.number(exercisableOptions),
                     ),
-                    _DetailRow(
-                      'Cancelled/Forfeited',
-                      Formatters.number(grant.cancelledCount),
+                    DetailRow(
+                      label: 'Cancelled/Forfeited',
+                      value: Formatters.number(grant.cancelledCount),
                     ),
-                    _DetailRow(
-                      'Remaining',
-                      Formatters.number(grant.remainingOptions),
+                    DetailRow(
+                      label: 'Remaining',
+                      value: Formatters.number(grant.remainingOptions),
                     ),
                     if (vesting != null) ...[
                       const Divider(height: 16),
-                      _DetailRow(
-                        'Vesting',
-                        '${vesting.vestingPeriodMonths ~/ 12}yr / ${vesting.cliffMonths}mo cliff',
+                      DetailRow(
+                        label: 'Vesting',
+                        value:
+                            '${vesting.vestingPeriodMonths ~/ 12}yr / ${vesting.cliffMonths}mo cliff',
                       ),
                     ],
                   ],
@@ -1108,7 +1102,6 @@ class _GrantDetailsDialog extends StatelessWidget {
           style: TextButton.styleFrom(foregroundColor: Colors.red),
           child: const Text('Delete'),
         ),
-        const Spacer(),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
@@ -1181,42 +1174,6 @@ class _GrantDetailsDialog extends StatelessWidget {
             Icon(Icons.edit, size: 16, color: theme.colorScheme.outline),
           ],
         ),
-      ),
-    );
-  }
-
-  Color _getStatusColor(OptionGrantStatus status) {
-    switch (status) {
-      case OptionGrantStatus.active:
-      case OptionGrantStatus.partiallyExercised:
-        return Colors.blue;
-      case OptionGrantStatus.fullyExercised:
-        return Colors.green;
-      case OptionGrantStatus.expired:
-        return Colors.grey;
-      case OptionGrantStatus.cancelled:
-      case OptionGrantStatus.forfeited:
-        return Colors.red;
-    }
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _DetailRow(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
       ),
     );
   }
@@ -1362,10 +1319,13 @@ class _ExerciseOptionsDialogState extends State<_ExerciseOptionsDialog> {
               ),
               child: Column(
                 children: [
-                  _DetailRow('Exercise Cost', Formatters.currency(totalCost)),
-                  _DetailRow(
-                    'Current Value',
-                    Formatters.currency(currentValue),
+                  DetailRow(
+                    label: 'Exercise Cost',
+                    value: Formatters.currency(totalCost),
+                  ),
+                  DetailRow(
+                    label: 'Current Value',
+                    value: Formatters.currency(currentValue),
                   ),
                   const Divider(height: 12),
                   Row(
@@ -1564,7 +1524,10 @@ class _EditExerciseTransactionDialogState
               ),
               child: Column(
                 children: [
-                  _DetailRow('Exercise Cost', Formatters.currency(totalCost)),
+                  DetailRow(
+                    label: 'Exercise Cost',
+                    value: Formatters.currency(totalCost),
+                  ),
                 ],
               ),
             ),
@@ -1581,7 +1544,6 @@ class _EditExerciseTransactionDialogState
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        const Spacer(),
         FilledButton(onPressed: _save, child: const Text('Save')),
       ],
     );

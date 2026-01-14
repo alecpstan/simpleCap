@@ -8,7 +8,6 @@ import '../models/milestone.dart';
 import '../models/hours_vesting.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/section_card.dart';
-import '../widgets/avatars.dart';
 import '../widgets/info_widgets.dart';
 import '../widgets/help_icon.dart';
 import '../utils/helpers.dart';
@@ -20,21 +19,11 @@ class VestingPage extends StatefulWidget {
   State<VestingPage> createState() => _VestingPageState();
 }
 
-class _VestingPageState extends State<VestingPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+class _VestingPageState extends State<VestingPage> {
+  // Track which sections are expanded
+  bool _activeExpanded = true;
+  bool _completedExpanded = false;
+  bool _terminatedExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -44,32 +33,93 @@ class _VestingPageState extends State<VestingPage>
           return const Center(child: CircularProgressIndicator());
         }
 
+        // Combine all vesting types into unified lists by status
+        final allItems = _buildVestingItems(provider);
+        final activeItems = allItems
+            .where((i) => i.status == _VestingStatus.active)
+            .toList();
+        final completedItems = allItems
+            .where((i) => i.status == _VestingStatus.completed)
+            .toList();
+        final terminatedItems = allItems
+            .where((i) => i.status == _VestingStatus.terminated)
+            .toList();
+
+        final hasAny = allItems.isNotEmpty;
+
         return Scaffold(
-          appBar: TabBar(
-            controller: _tabController,
-            tabs: [
-              Tab(
-                icon: const Icon(Icons.schedule),
-                text: 'Time-based (${provider.vestingSchedules.length})',
-              ),
-              Tab(
-                icon: const Icon(Icons.flag),
-                text: 'Milestones (${provider.milestones.length})',
-              ),
-              Tab(
-                icon: const Icon(Icons.access_time),
-                text: 'Hours (${provider.hoursVestingSchedules.length})',
-              ),
-            ],
-          ),
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              _TimeBasedVestingTab(provider: provider),
-              _MilestoneVestingTab(provider: provider),
-              _HoursVestingTab(provider: provider),
-            ],
-          ),
+          body: hasAny
+              ? SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Summary Card
+                      _UnifiedSummaryCard(
+                        activeCount: activeItems.length,
+                        completedCount: completedItems.length,
+                        terminatedCount: terminatedItems.length,
+                        provider: provider,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Active/Vesting Section
+                      if (activeItems.isNotEmpty)
+                        _buildCollapsibleSection(
+                          context,
+                          title: 'Active',
+                          count: activeItems.length,
+                          color: Colors.blue,
+                          icon: Icons.trending_up,
+                          isExpanded: _activeExpanded,
+                          onToggle: () => setState(
+                            () => _activeExpanded = !_activeExpanded,
+                          ),
+                          children: activeItems,
+                          provider: provider,
+                        ),
+
+                      // Completed Section
+                      if (completedItems.isNotEmpty)
+                        _buildCollapsibleSection(
+                          context,
+                          title: 'Completed',
+                          count: completedItems.length,
+                          color: Colors.green,
+                          icon: Icons.check_circle,
+                          isExpanded: _completedExpanded,
+                          onToggle: () => setState(
+                            () => _completedExpanded = !_completedExpanded,
+                          ),
+                          children: completedItems,
+                          provider: provider,
+                        ),
+
+                      // Terminated Section
+                      if (terminatedItems.isNotEmpty)
+                        _buildCollapsibleSection(
+                          context,
+                          title: 'Terminated',
+                          count: terminatedItems.length,
+                          color: Colors.grey,
+                          icon: Icons.person_off,
+                          isExpanded: _terminatedExpanded,
+                          onToggle: () => setState(
+                            () => _terminatedExpanded = !_terminatedExpanded,
+                          ),
+                          children: terminatedItems,
+                          provider: provider,
+                        ),
+
+                      const SizedBox(height: 80), // FAB space
+                    ],
+                  ),
+                )
+              : const EmptyState(
+                  icon: Icons.schedule_outlined,
+                  title: 'No vesting schedules',
+                  subtitle: 'Add time-based, milestone, or hours vesting',
+                ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _showAddMenu(context, provider),
             icon: const Icon(Icons.add),
@@ -78,6 +128,175 @@ class _VestingPageState extends State<VestingPage>
         );
       },
     );
+  }
+
+  Widget _buildCollapsibleSection(
+    BuildContext context, {
+    required String title,
+    required int count,
+    required Color color,
+    required IconData icon,
+    required bool isExpanded,
+    required VoidCallback onToggle,
+    required List<_VestingItem> children,
+    required CapTableProvider provider,
+  }) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(icon, color: color, size: 20),
+                  const SizedBox(width: 12),
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      count.toString(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: theme.colorScheme.outline,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (isExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: Column(
+                children: children
+                    .map(
+                      (item) =>
+                          _UnifiedVestingCard(item: item, provider: provider),
+                    )
+                    .toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<_VestingItem> _buildVestingItems(CapTableProvider provider) {
+    final items = <_VestingItem>[];
+
+    // Time-based vesting
+    for (final schedule in provider.vestingSchedules) {
+      final transaction = provider.transactions.cast<Transaction?>().firstWhere(
+        (t) => t?.id == schedule.transactionId,
+        orElse: () => null,
+      );
+      final investor = transaction != null
+          ? provider.getInvestorById(transaction.investorId)
+          : null;
+
+      _VestingStatus status;
+      if (schedule.leaverStatus != LeaverStatus.active) {
+        status = _VestingStatus.terminated;
+      } else if (schedule.vestingPercentage >= 100) {
+        status = _VestingStatus.completed;
+      } else {
+        status = _VestingStatus.active;
+      }
+
+      items.add(
+        _VestingItem(
+          type: _VestingType.timeBased,
+          id: schedule.id,
+          investorName: investor?.name ?? 'Unknown',
+          investorType: investor?.type,
+          progress: schedule.vestingPercentage / 100,
+          subtitle:
+              '${schedule.vestingPeriodMonths}mo with ${schedule.cliffMonths}mo cliff',
+          status: status,
+          schedule: schedule,
+        ),
+      );
+    }
+
+    // Milestone vesting
+    for (final milestone in provider.milestones) {
+      final investor = provider.getInvestorById(milestone.investorId ?? '');
+
+      _VestingStatus status;
+      if (milestone.isLapsed) {
+        status = _VestingStatus.terminated;
+      } else if (milestone.isCompleted) {
+        status = _VestingStatus.completed;
+      } else {
+        status = _VestingStatus.active;
+      }
+
+      items.add(
+        _VestingItem(
+          type: _VestingType.milestone,
+          id: milestone.id,
+          investorName: investor?.name ?? 'Unknown',
+          investorType: investor?.type,
+          progress: milestone.progress,
+          subtitle: milestone.name,
+          status: status,
+          milestone: milestone,
+        ),
+      );
+    }
+
+    // Hours-based vesting
+    for (final hours in provider.hoursVestingSchedules) {
+      final investor = provider.getInvestorById(hours.investorId);
+
+      _VestingStatus status;
+      if (hours.progress >= 1.0) {
+        status = _VestingStatus.completed;
+      } else {
+        status = _VestingStatus.active;
+      }
+
+      items.add(
+        _VestingItem(
+          type: _VestingType.hours,
+          id: hours.id,
+          investorName: investor?.name ?? 'Unknown',
+          investorType: investor?.type,
+          progress: hours.progress,
+          subtitle:
+              '${hours.hoursLogged.toStringAsFixed(0)}/${hours.totalHoursCommitment}h',
+          status: status,
+          hoursSchedule: hours,
+        ),
+      );
+    }
+
+    return items;
   }
 
   void _showAddMenu(BuildContext context, CapTableProvider provider) {
@@ -164,261 +383,97 @@ class _VestingPageState extends State<VestingPage>
   }
 }
 
-// Time-based vesting tab (original content)
-class _TimeBasedVestingTab extends StatelessWidget {
-  final CapTableProvider provider;
+// ============ Helper Types ============
 
-  const _TimeBasedVestingTab({required this.provider});
+enum _VestingType { timeBased, milestone, hours }
 
-  @override
-  Widget build(BuildContext context) {
-    final vestingSchedules = provider.vestingSchedules;
+enum _VestingStatus { active, completed, terminated }
 
-    if (vestingSchedules.isEmpty) {
-      return const EmptyState(
-        icon: Icons.schedule_outlined,
-        title: 'No time-based vesting',
-        subtitle: 'Add schedules to track cliff + linear vesting',
-      );
+class _VestingItem {
+  final _VestingType type;
+  final String id;
+  final String investorName;
+  final InvestorType? investorType;
+  final double progress;
+  final String subtitle;
+  final _VestingStatus status;
+  final VestingSchedule? schedule;
+  final Milestone? milestone;
+  final HoursVestingSchedule? hoursSchedule;
+
+  _VestingItem({
+    required this.type,
+    required this.id,
+    required this.investorName,
+    this.investorType,
+    required this.progress,
+    required this.subtitle,
+    required this.status,
+    this.schedule,
+    this.milestone,
+    this.hoursSchedule,
+  });
+
+  IconData get typeIcon {
+    switch (type) {
+      case _VestingType.timeBased:
+        return Icons.schedule;
+      case _VestingType.milestone:
+        return Icons.flag;
+      case _VestingType.hours:
+        return Icons.access_time;
     }
-
-    // Group vesting by status
-    final active = vestingSchedules
-        .where((v) => v.leaverStatus == LeaverStatus.active)
-        .toList();
-    final fullyVested = active
-        .where((v) => v.vestingPercentage >= 100)
-        .toList();
-    final vesting = active.where((v) => v.vestingPercentage < 100).toList();
-    final terminated = vestingSchedules
-        .where((v) => v.leaverStatus != LeaverStatus.active)
-        .toList();
-
-    vesting.sort((a, b) => a.vestingPercentage.compareTo(b.vestingPercentage));
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Summary Stats
-          _VestingSummaryCard(
-            vestingSchedules: vestingSchedules,
-            provider: provider,
-          ),
-          const SizedBox(height: 24),
-
-          // Currently Vesting
-          if (vesting.isNotEmpty) ...[
-            _buildSectionHeader(context, 'Currently Vesting', vesting.length),
-            const SizedBox(height: 8),
-            ...vesting.map(
-              (v) => _VestingCard(schedule: v, provider: provider),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // Fully Vested
-          if (fullyVested.isNotEmpty) ...[
-            _buildSectionHeader(context, 'Fully Vested', fullyVested.length),
-            const SizedBox(height: 8),
-            ...fullyVested.map(
-              (v) => _VestingCard(schedule: v, provider: provider),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // Terminated
-          if (terminated.isNotEmpty) ...[
-            _buildSectionHeader(context, 'Terminated', terminated.length),
-            const SizedBox(height: 8),
-            ...terminated.map(
-              (v) => _VestingCard(schedule: v, provider: provider),
-            ),
-          ],
-
-          // Space for FAB
-          const SizedBox(height: 80),
-        ],
-      ),
-    );
   }
 
-  Widget _buildSectionHeader(BuildContext context, String title, int count) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            count.toString(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
-            ),
-          ),
-        ),
-      ],
-    );
+  Color get typeColor {
+    switch (type) {
+      case _VestingType.timeBased:
+        return Colors.indigo;
+      case _VestingType.milestone:
+        return Colors.orange;
+      case _VestingType.hours:
+        return Colors.teal;
+    }
+  }
+
+  String get typeName {
+    switch (type) {
+      case _VestingType.timeBased:
+        return 'Time';
+      case _VestingType.milestone:
+        return 'Milestone';
+      case _VestingType.hours:
+        return 'Hours';
+    }
   }
 }
 
-// Milestone vesting tab
-class _MilestoneVestingTab extends StatelessWidget {
+// ============ Unified Summary Card ============
+
+class _UnifiedSummaryCard extends StatelessWidget {
+  final int activeCount;
+  final int completedCount;
+  final int terminatedCount;
   final CapTableProvider provider;
 
-  const _MilestoneVestingTab({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final milestones = provider.milestones;
-
-    if (milestones.isEmpty) {
-      return const EmptyState(
-        icon: Icons.flag_outlined,
-        title: 'No milestone vesting',
-        subtitle: 'Add milestones to award equity on goal achievement',
-      );
-    }
-
-    final pending = milestones
-        .where((m) => !m.isCompleted && !m.isLapsed)
-        .toList();
-    final completed = milestones.where((m) => m.isCompleted).toList();
-    final lapsed = milestones.where((m) => m.isLapsed).toList();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Summary Stats
-          _MilestoneSummaryCard(milestones: milestones, provider: provider),
-          const SizedBox(height: 24),
-
-          // Pending milestones
-          if (pending.isNotEmpty) ...[
-            _buildSectionHeader(context, 'Pending', pending.length),
-            const SizedBox(height: 8),
-            ...pending.map(
-              (m) => _MilestoneCard(milestone: m, provider: provider),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // Completed milestones
-          if (completed.isNotEmpty) ...[
-            _buildSectionHeader(context, 'Completed', completed.length),
-            const SizedBox(height: 8),
-            ...completed.map(
-              (m) => _MilestoneCard(milestone: m, provider: provider),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // Lapsed milestones
-          if (lapsed.isNotEmpty) ...[
-            _buildSectionHeader(context, 'Lapsed', lapsed.length),
-            const SizedBox(height: 8),
-            ...lapsed.map(
-              (m) => _MilestoneCard(milestone: m, provider: provider),
-            ),
-          ],
-
-          // Space for FAB
-          const SizedBox(height: 80),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(BuildContext context, String title, int count) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            count.toString(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MilestoneSummaryCard extends StatelessWidget {
-  final List<Milestone> milestones;
-  final CapTableProvider provider;
-
-  const _MilestoneSummaryCard({
-    required this.milestones,
+  const _UnifiedSummaryCard({
+    required this.activeCount,
+    required this.completedCount,
+    required this.terminatedCount,
     required this.provider,
   });
 
   @override
   Widget build(BuildContext context) {
-    final pendingCount = milestones
-        .where((m) => !m.isCompleted && !m.isLapsed)
-        .length;
-    final completedCount = milestones.where((m) => m.isCompleted).length;
-
-    final totalEquity = milestones.fold<double>(
-      0,
-      (sum, m) => sum + m.equityPercent,
-    );
-    final earnedEquity = milestones
-        .where((m) => m.isCompleted)
-        .fold<double>(0, (sum, m) => sum + m.earnedEquityPercent);
-    final pendingEquity = milestones
-        .where((m) => !m.isCompleted && !m.isLapsed)
-        .fold<double>(0, (sum, m) => sum + m.equityPercent);
-
     return SectionCard(
-      title: 'Milestone Summary',
-      icon: Icons.flag,
-      helpKey: 'vesting.milestones',
+      title: 'Vesting Overview',
+      icon: Icons.pie_chart,
       child: Column(
         children: [
           Row(
             children: [
               Expanded(
-                child: MiniStat(
-                  label: 'Total Milestones',
-                  value: milestones.length.toString(),
-                ),
-              ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Pending',
-                  value: pendingCount.toString(),
-                ),
+                child: MiniStat(label: 'Active', value: activeCount.toString()),
               ),
               Expanded(
                 child: MiniStat(
@@ -426,28 +481,36 @@ class _MilestoneSummaryCard extends StatelessWidget {
                   value: completedCount.toString(),
                 ),
               ),
+              Expanded(
+                child: MiniStat(
+                  label: 'Terminated',
+                  value: terminatedCount.toString(),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: MiniStat(
-                  label: 'Total Equity',
-                  value: '${totalEquity.toStringAsFixed(2)}%',
-                ),
+              _TypeIndicator(
+                Icons.schedule,
+                'Time',
+                Colors.indigo,
+                provider.vestingSchedules.length,
               ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Earned',
-                  value: '${earnedEquity.toStringAsFixed(2)}%',
-                ),
+              const SizedBox(width: 12),
+              _TypeIndicator(
+                Icons.flag,
+                'Milestone',
+                Colors.orange,
+                provider.milestones.length,
               ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Pending',
-                  value: '${pendingEquity.toStringAsFixed(2)}%',
-                ),
+              const SizedBox(width: 12),
+              _TypeIndicator(
+                Icons.access_time,
+                'Hours',
+                Colors.teal,
+                provider.hoursVestingSchedules.length,
               ),
             ],
           ),
@@ -457,18 +520,443 @@ class _MilestoneSummaryCard extends StatelessWidget {
   }
 }
 
-class _MilestoneCard extends StatelessWidget {
+class _TypeIndicator extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final int count;
+
+  const _TypeIndicator(this.icon, this.label, this.color, this.count);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ Unified Vesting Card ============
+
+class _UnifiedVestingCard extends StatelessWidget {
+  final _VestingItem item;
+  final CapTableProvider provider;
+
+  const _UnifiedVestingCard({required this.item, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    Color statusColor;
+    switch (item.status) {
+      case _VestingStatus.active:
+        statusColor = Colors.blue;
+      case _VestingStatus.completed:
+        statusColor = Colors.green;
+      case _VestingStatus.terminated:
+        statusColor = Colors.grey;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        onTap: () => _showDetails(context),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Type indicator
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: item.typeColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(item.typeIcon, size: 18, color: item.typeColor),
+              ),
+              const SizedBox(width: 12),
+              // Main content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.investorName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Progress
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${(item.progress * 100).toStringAsFixed(0)}%',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: 60,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: item.progress.clamp(0, 1),
+                        backgroundColor: statusColor.withValues(alpha: 0.1),
+                        color: statusColor,
+                        minHeight: 4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDetails(BuildContext context) {
+    switch (item.type) {
+      case _VestingType.timeBased:
+        if (item.schedule != null) {
+          _showTimeBasedDetails(context, item.schedule!);
+        }
+      case _VestingType.milestone:
+        if (item.milestone != null) {
+          _showMilestoneDetails(context, item.milestone!);
+        }
+      case _VestingType.hours:
+        if (item.hoursSchedule != null) {
+          _showHoursDetails(context, item.hoursSchedule!);
+        }
+    }
+  }
+
+  void _showTimeBasedDetails(BuildContext context, VestingSchedule schedule) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          _TimeBasedDetailDialog(schedule: schedule, provider: provider),
+    );
+  }
+
+  void _showMilestoneDetails(BuildContext context, Milestone milestone) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          _MilestoneDetailDialog(milestone: milestone, provider: provider),
+    );
+  }
+
+  void _showHoursDetails(BuildContext context, HoursVestingSchedule schedule) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          _HoursDetailDialog(schedule: schedule, provider: provider),
+    );
+  }
+}
+
+// ============ Detail Dialogs ============
+
+class _TimeBasedDetailDialog extends StatelessWidget {
+  final VestingSchedule schedule;
+  final CapTableProvider provider;
+
+  const _TimeBasedDetailDialog({
+    required this.schedule,
+    required this.provider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final transaction = provider.transactions.cast<Transaction?>().firstWhere(
+      (t) => t?.id == schedule.transactionId,
+      orElse: () => null,
+    );
+    final investor = transaction != null
+        ? provider.getInvestorById(transaction.investorId)
+        : null;
+    final round = provider.getRoundById(transaction?.roundId ?? '');
+
+    final vestedShares = transaction != null
+        ? (transaction.numberOfShares * schedule.vestingPercentage / 100)
+              .round()
+        : 0;
+    final unvestedShares = transaction != null
+        ? transaction.numberOfShares - vestedShares
+        : 0;
+
+    Color statusColor;
+    String statusText;
+    switch (schedule.leaverStatus) {
+      case LeaverStatus.active:
+        if (schedule.vestingPercentage >= 100) {
+          statusColor = Colors.green;
+          statusText = 'Fully Vested';
+        } else if (!schedule.cliffPassed) {
+          statusColor = Colors.orange;
+          statusText = 'In Cliff';
+        } else {
+          statusColor = Colors.blue;
+          statusText = 'Vesting';
+        }
+      case LeaverStatus.goodLeaver:
+        statusColor = Colors.amber;
+        statusText = 'Good Leaver';
+      case LeaverStatus.badLeaver:
+        statusColor = Colors.red;
+        statusText = 'Bad Leaver';
+    }
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.schedule, color: Colors.indigo),
+          const SizedBox(width: 8),
+          Expanded(child: Text(investor?.name ?? 'Time-based Vesting')),
+        ],
+      ),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Status badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Progress
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${Formatters.percent(schedule.vestingPercentage)} vested',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: schedule.vestingPercentage / 100,
+                            backgroundColor: statusColor.withValues(alpha: 0.1),
+                            color: statusColor,
+                            minHeight: 8,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Share info
+              if (transaction != null) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: ResultChip(
+                        label: 'Total',
+                        value: Formatters.number(transaction.numberOfShares),
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ResultChip(
+                        label: 'Vested',
+                        value: Formatters.number(vestedShares),
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ResultChip(
+                        label: 'Unvested',
+                        value: Formatters.number(unvestedShares),
+                        color: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Details
+              _DetailRow(label: 'Round', value: round?.name ?? 'Unknown'),
+              _DetailRow(
+                label: 'Schedule',
+                value:
+                    '${schedule.vestingPeriodMonths}mo with ${schedule.cliffMonths}mo cliff',
+              ),
+              _DetailRow(
+                label: 'Start',
+                value: Formatters.date(schedule.startDate),
+              ),
+              _DetailRow(
+                label: 'Cliff Date',
+                value: Formatters.date(schedule.cliffDate),
+              ),
+              _DetailRow(
+                label: 'End Date',
+                value: Formatters.date(schedule.endDate),
+              ),
+              if (schedule.nextVestingDate != null)
+                _DetailRow(
+                  label: 'Next Vesting',
+                  value: Formatters.date(schedule.nextVestingDate!),
+                ),
+              if (schedule.terminationDate != null)
+                _DetailRow(
+                  label: 'Terminated',
+                  value: Formatters.date(schedule.terminationDate!),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        if (schedule.leaverStatus != LeaverStatus.active)
+          TextButton.icon(
+            onPressed: () {
+              final updated = schedule.copyWith(
+                leaverStatus: LeaverStatus.active,
+                clearTerminationDate: true,
+              );
+              provider.updateVestingSchedule(updated);
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.person_add_outlined),
+            label: const Text('Reinstate'),
+          ),
+        // Only show terminate if active AND not fully vested
+        if (schedule.leaverStatus == LeaverStatus.active &&
+            schedule.vestingPercentage < 100)
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                builder: (ctx) => _TerminateVestingDialog(
+                  schedule: schedule,
+                  provider: provider,
+                ),
+              );
+            },
+            icon: const Icon(Icons.person_off_outlined),
+            label: const Text('Terminate'),
+          ),
+        TextButton.icon(
+          onPressed: () {
+            Navigator.pop(context);
+            showDialog(
+              context: context,
+              builder: (ctx) => VestingScheduleDialog(
+                transactions: provider.transactions
+                    .where((t) => t.isAcquisition)
+                    .toList(),
+                provider: provider,
+                existingSchedule: schedule,
+              ),
+            );
+          },
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Edit'),
+        ),
+        TextButton.icon(
+          onPressed: () {
+            provider.deleteVestingSchedule(schedule.id);
+            Navigator.pop(context);
+          },
+          style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
+          icon: const Icon(Icons.delete_outline),
+          label: const Text('Delete'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+class _MilestoneDetailDialog extends StatelessWidget {
   final Milestone milestone;
   final CapTableProvider provider;
 
-  const _MilestoneCard({required this.milestone, required this.provider});
+  const _MilestoneDetailDialog({
+    required this.milestone,
+    required this.provider,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final investor = provider.getInvestorById(milestone.investorId ?? '');
 
-    // Status color
     Color statusColor;
     String statusText;
     if (milestone.isCompleted) {
@@ -482,205 +970,244 @@ class _MilestoneCard extends StatelessWidget {
       statusText = 'Pending';
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: statusColor.withValues(alpha: 0.2),
-          child: Icon(
-            milestone.isCompleted
-                ? Icons.check
-                : milestone.isLapsed
-                ? Icons.close
-                : Icons.flag,
-            color: statusColor,
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.flag, color: Colors.orange),
+          const SizedBox(width: 8),
+          Expanded(child: Text(milestone.name)),
+        ],
+      ),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Status badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Progress for graded
+              if (milestone.triggerType == MilestoneTriggerType.graded) ...[
+                Text(
+                  '${(milestone.progress * 100).toStringAsFixed(0)}% complete',
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: milestone.progress,
+                    backgroundColor: statusColor.withValues(alpha: 0.1),
+                    color: statusColor,
+                    minHeight: 8,
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Details
+              _DetailRow(
+                label: 'Assignee',
+                value: investor?.name ?? 'Unassigned',
+              ),
+              _DetailRow(
+                label: 'Equity',
+                value: '${milestone.equityPercent.toStringAsFixed(2)}%',
+              ),
+              _DetailRow(
+                label: 'Type',
+                value: milestone.triggerType == MilestoneTriggerType.binary
+                    ? 'Binary'
+                    : 'Graded',
+              ),
+              if (milestone.description != null)
+                _DetailRow(label: 'Description', value: milestone.description!),
+              if (milestone.deadline != null)
+                _DetailRow(
+                  label: 'Deadline',
+                  value: Formatters.date(milestone.deadline!),
+                ),
+              if (milestone.completedDate != null)
+                _DetailRow(
+                  label: 'Completed',
+                  value: Formatters.date(milestone.completedDate!),
+                ),
+            ],
           ),
         ),
-        title: Text(
-          milestone.name,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      actions: [
+        if (!milestone.isCompleted && !milestone.isLapsed)
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _showCompleteMilestone(context, milestone);
+            },
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('Complete'),
+          ),
+        TextButton.icon(
+          onPressed: () {
+            Navigator.pop(context);
+            showDialog(
+              context: context,
+              builder: (ctx) =>
+                  _MilestoneDialog(provider: provider, milestone: milestone),
+            );
+          },
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Edit'),
         ),
-        subtitle: Row(
-          children: [
-            // Progress indicator for graded milestones
-            if (milestone.triggerType == MilestoneTriggerType.graded)
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: milestone.progress,
-                        backgroundColor:
-                            theme.colorScheme.surfaceContainerHighest,
-                        color: statusColor,
-                        minHeight: 6,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${(milestone.progress * 100).toStringAsFixed(0)}% complete',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              Expanded(
-                child: Text(
-                  '${milestone.equityPercent.toStringAsFixed(2)}% equity',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-            const SizedBox(width: 12),
-            // Status badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-              ),
-              child: Text(
-                statusText,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: statusColor,
-                ),
-              ),
-            ),
-          ],
+        TextButton.icon(
+          onPressed: () {
+            provider.deleteMilestone(milestone.id);
+            Navigator.pop(context);
+          },
+          style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
+          icon: const Icon(Icons.delete_outline),
+          label: const Text('Delete'),
         ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  void _showCompleteMilestone(BuildContext context, Milestone milestone) {
+    final isGraded = milestone.triggerType == MilestoneTriggerType.graded;
+
+    // For graded milestones, we add progress. For binary, we complete.
+    if (isGraded && milestone.progress < 1.0) {
+      _showAddProgressDialog(context, milestone);
+    } else {
+      _showAwardEquityDialog(context, milestone);
+    }
+  }
+
+  void _showAddProgressDialog(BuildContext context, Milestone milestone) {
+    final progressController = TextEditingController(
+      text: milestone.currentValue.toStringAsFixed(2),
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final newValue =
+              double.tryParse(progressController.text) ??
+              milestone.currentValue;
+          final newProgress =
+              milestone.targetValue != null && milestone.targetValue! > 0
+              ? (newValue / milestone.targetValue!).clamp(0.0, 1.0)
+              : 0.0;
+          final willComplete = newProgress >= 1.0;
+
+          return AlertDialog(
+            title: const Text('Update Progress'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Milestone info
-                Row(
-                  children: [
-                    Expanded(
-                      child: ResultChip(
-                        label: 'Equity',
-                        value: '${milestone.equityPercent.toStringAsFixed(2)}%',
-                        color: theme.colorScheme.primary,
-                      ),
+                Text('Milestone: ${milestone.name}'),
+                Text(
+                  'Target: ${milestone.targetValue?.toStringAsFixed(0) ?? "N/A"}',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: progressController,
+                  decoration: InputDecoration(
+                    labelText: 'Current Progress Value',
+                    border: const OutlineInputBorder(),
+                    helperText:
+                        'Progress: ${(newProgress * 100).toStringAsFixed(1)}%',
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 16),
+                LinearProgressIndicator(
+                  value: newProgress,
+                  backgroundColor: Colors.grey.shade200,
+                ),
+                const SizedBox(height: 8),
+                if (willComplete)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ResultChip(
-                        label: 'Trigger',
-                        value: milestone.triggerTypeDisplayName,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    if (milestone.isCompleted) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ResultChip(
-                          label: 'Earned',
-                          value:
-                              '${milestone.earnedEquityPercent.toStringAsFixed(2)}%',
-                          color: Colors.green,
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green.shade700),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'This will complete the milestone!',
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Details
-                if (investor != null)
-                  _buildDetailRow(context, 'Assignee', investor.name),
-                if (milestone.description != null)
-                  _buildDetailRow(
-                    context,
-                    'Description',
-                    milestone.description!,
-                  ),
-                if (milestone.deadline != null)
-                  _buildDetailRow(
-                    context,
-                    'Deadline',
-                    Formatters.date(milestone.deadline!),
-                  ),
-                if (milestone.completedDate != null)
-                  _buildDetailRow(
-                    context,
-                    'Completed',
-                    Formatters.date(milestone.completedDate!),
-                  ),
-
-                const SizedBox(height: 16),
-
-                // Action buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (!milestone.isCompleted && !milestone.isLapsed)
-                      TextButton.icon(
-                        onPressed: () => _showCompleteMilestone(context),
-                        icon: const Icon(Icons.check_circle_outline),
-                        label: const Text('Complete'),
-                      ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: () => _showEditMilestone(context),
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Edit'),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: () => _showDeleteMilestone(context),
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: theme.colorScheme.error,
-                      ),
-                      label: Text(
-                        'Delete',
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
               ),
-            ),
-          ),
-          Expanded(
-            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
-          ),
-        ],
+              if (willComplete)
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // Update progress first, then show award dialog
+                    provider.updateMilestoneProgress(milestone.id, newValue);
+                    _showAwardEquityDialog(context, milestone);
+                  },
+                  child: const Text('Complete & Award'),
+                )
+              else
+                FilledButton(
+                  onPressed: () {
+                    provider.updateMilestoneProgress(milestone.id, newValue);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Update Progress'),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  void _showCompleteMilestone(BuildContext context) {
+  void _showAwardEquityDialog(BuildContext context, Milestone milestone) {
     String? shareClassId;
     final priceController = TextEditingController(
       text: provider.latestSharePrice.toStringAsFixed(4),
@@ -701,7 +1228,7 @@ class _MilestoneCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: shareClassId,
+                value: shareClassId,
                 decoration: const InputDecoration(
                   labelText: 'Share Class',
                   border: OutlineInputBorder(),
@@ -747,221 +1274,19 @@ class _MilestoneCard extends StatelessWidget {
       ),
     );
   }
-
-  void _showEditMilestone(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) =>
-          _MilestoneDialog(provider: provider, milestone: milestone),
-    );
-  }
-
-  void _showDeleteMilestone(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Milestone'),
-        content: Text(
-          'Are you sure you want to delete "${milestone.name}"? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              provider.deleteMilestone(milestone.id);
-              Navigator.pop(context);
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-// Hours-based vesting tab
-class _HoursVestingTab extends StatelessWidget {
-  final CapTableProvider provider;
-
-  const _HoursVestingTab({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final schedules = provider.hoursVestingSchedules;
-
-    if (schedules.isEmpty) {
-      return const EmptyState(
-        icon: Icons.access_time,
-        title: 'No hours-based vesting',
-        subtitle: 'Track equity vesting based on hours worked',
-      );
-    }
-
-    // Group by status
-    final active = schedules.where((s) => s.progress < 1.0).toList();
-    final fullyVested = schedules.where((s) => s.progress >= 1.0).toList();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Summary Stats
-          _HoursSummaryCard(schedules: schedules, provider: provider),
-          const SizedBox(height: 24),
-
-          // Currently Vesting
-          if (active.isNotEmpty) ...[
-            _buildSectionHeader(context, 'Currently Vesting', active.length),
-            const SizedBox(height: 8),
-            ...active.map(
-              (s) => _HoursVestingCard(schedule: s, provider: provider),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // Fully Vested
-          if (fullyVested.isNotEmpty) ...[
-            _buildSectionHeader(context, 'Fully Vested', fullyVested.length),
-            const SizedBox(height: 8),
-            ...fullyVested.map(
-              (s) => _HoursVestingCard(schedule: s, provider: provider),
-            ),
-          ],
-
-          // Space for FAB
-          const SizedBox(height: 80),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(BuildContext context, String title, int count) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            count.toString(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _HoursSummaryCard extends StatelessWidget {
-  final List<HoursVestingSchedule> schedules;
-  final CapTableProvider provider;
-
-  const _HoursSummaryCard({required this.schedules, required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final totalHoursLogged = schedules.fold<double>(
-      0,
-      (sum, s) => sum + s.hoursLogged,
-    );
-    final totalHoursCommitted = schedules.fold<double>(
-      0,
-      (sum, s) => sum + s.totalHoursCommitment,
-    );
-    final vestedEquity = schedules.fold<double>(
-      0,
-      (sum, s) => sum + (s.totalEquityPercent * s.progress),
-    );
-
-    final activeCount = schedules.where((s) => s.progress < 1.0).length;
-    final vestedCount = schedules.where((s) => s.progress >= 1.0).length;
-
-    return SectionCard(
-      title: 'Hours Summary',
-      icon: Icons.access_time,
-      helpKey: 'vesting.hours',
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: MiniStat(
-                  label: 'Total Schedules',
-                  value: schedules.length.toString(),
-                ),
-              ),
-              Expanded(
-                child: MiniStat(label: 'Active', value: activeCount.toString()),
-              ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Complete',
-                  value: vestedCount.toString(),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: MiniStat(
-                  label: 'Hours Logged',
-                  value: totalHoursLogged.toStringAsFixed(1),
-                ),
-              ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Committed',
-                  value: totalHoursCommitted.toStringAsFixed(0),
-                ),
-              ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Equity Vested',
-                  value: '${vestedEquity.toStringAsFixed(2)}%',
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HoursVestingCard extends StatelessWidget {
+class _HoursDetailDialog extends StatelessWidget {
   final HoursVestingSchedule schedule;
   final CapTableProvider provider;
 
-  const _HoursVestingCard({required this.schedule, required this.provider});
+  const _HoursDetailDialog({required this.schedule, required this.provider});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final investor = provider.getInvestorById(schedule.investorId);
 
-    // Status color
     Color statusColor;
     String statusText;
     if (schedule.progress >= 1.0) {
@@ -976,213 +1301,159 @@ class _HoursVestingCard extends StatelessWidget {
       statusText = 'Vesting';
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: InvestorAvatar(
-          name: investor?.name ?? '?',
-          type: investor?.type,
-        ),
-        title: Text(
-          investor?.name ?? 'Unknown',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Row(
-          children: [
-            // Progress indicator
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.access_time, color: Colors.teal),
+          const SizedBox(width: 8),
+          Expanded(child: Text(investor?.name ?? 'Hours Vesting')),
+        ],
+      ),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Status badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Progress
+              Text(
+                '${schedule.hoursLogged.toStringAsFixed(1)} / ${schedule.totalHoursCommitment} hours',
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: schedule.progress,
+                  backgroundColor: statusColor.withValues(alpha: 0.1),
+                  color: statusColor,
+                  minHeight: 8,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Stats
+              Row(
                 children: [
-                  const SizedBox(height: 4),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: schedule.progress,
-                      backgroundColor:
-                          theme.colorScheme.surfaceContainerHighest,
-                      color: statusColor,
-                      minHeight: 6,
+                  Expanded(
+                    child: ResultChip(
+                      label: 'Total Equity',
+                      value: '${schedule.totalEquityPercent}%',
+                      color: theme.colorScheme.primary,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${schedule.hoursLogged.toStringAsFixed(1)} / ${schedule.totalHoursCommitment} hours',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.outline,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ResultChip(
+                      label: 'Vested',
+                      value:
+                          '${schedule.totalVestedPercent.toStringAsFixed(2)}%',
+                      color: Colors.green,
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 12),
-            // Status badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-              ),
-              child: Text(
-                statusText,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: statusColor,
-                ),
-              ),
-            ),
-          ],
-        ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Stats
-                Row(
-                  children: [
-                    Expanded(
-                      child: ResultChip(
-                        label: 'Total Equity',
-                        value: '${schedule.totalEquityPercent}%',
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ResultChip(
-                        label: 'Vested',
-                        value:
-                            '${schedule.totalVestedPercent.toStringAsFixed(2)}%',
-                        color: Colors.green,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ResultChip(
-                        label: 'Curve',
-                        value: schedule.curveTypeDisplayName,
-                        color: Colors.blue,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-                // Details
-                _buildDetailRow(
-                  context,
-                  'Start Date',
-                  Formatters.date(schedule.startDate),
+              // Details
+              _DetailRow(
+                label: 'Start Date',
+                value: Formatters.date(schedule.startDate),
+              ),
+              _DetailRow(label: 'Curve', value: schedule.curveTypeDisplayName),
+              if (schedule.cliffHours != null)
+                _DetailRow(
+                  label: 'Cliff Hours',
+                  value: '${schedule.cliffHours} hours',
                 ),
-                if (schedule.cliffHours != null)
-                  _buildDetailRow(
-                    context,
-                    'Cliff Hours',
-                    '${schedule.cliffHours} hours',
-                  ),
-                if (schedule.bonusMilestones.isNotEmpty)
-                  _buildDetailRow(
-                    context,
-                    'Bonus Milestones',
-                    '${schedule.bonusMilestones.length} bonus${schedule.bonusMilestones.length > 1 ? 'es' : ''}',
-                  ),
 
-                // Recent activity
-                if (schedule.logEntries.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Recent Activity',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+              // Recent log entries
+              if (schedule.logEntries.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Recent Activity',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 8),
-                  ...schedule.logEntries
-                      .take(5)
-                      .map(
-                        (e) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                Formatters.date(e.date),
-                                style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 4),
+                ...schedule.logEntries
+                    .take(5)
+                    .map(
+                      (e) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              Formatters.date(e.date),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            Text(
+                              '+${e.hours.toStringAsFixed(1)}h',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.green,
                               ),
-                              Text(
-                                '+${e.hours.toStringAsFixed(1)}h',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.green,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                ],
-
-                const SizedBox(height: 16),
-
-                // Action buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      onPressed: () => _showLogHoursDialog(context),
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('Log Hours'),
                     ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: () => _showDeleteDialog(context),
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: theme.colorScheme.error,
-                      ),
-                      label: Text(
-                        'Delete',
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                    ),
-                  ],
-                ),
               ],
-            ),
+            ],
           ),
-        ],
+        ),
       ),
+      actions: [
+        TextButton.icon(
+          onPressed: () {
+            Navigator.pop(context);
+            _showLogHours(context);
+          },
+          icon: const Icon(Icons.add_circle_outline),
+          label: const Text('Log Hours'),
+        ),
+        TextButton.icon(
+          onPressed: () {
+            provider.deleteHoursVestingSchedule(schedule.id);
+            Navigator.pop(context);
+          },
+          style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
+          icon: const Icon(Icons.delete_outline),
+          label: const Text('Delete'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 
-  Widget _buildDetailRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showLogHoursDialog(BuildContext context) {
+  void _showLogHours(BuildContext context) {
     final hoursController = TextEditingController();
     final notesController = TextEditingController();
     DateTime date = DateTime.now();
@@ -1224,9 +1495,7 @@ class _HoursVestingCard extends StatelessWidget {
                       firstDate: schedule.startDate,
                       lastDate: DateTime.now(),
                     );
-                    if (picked != null) {
-                      setState(() => date = picked);
-                    }
+                    if (picked != null) setState(() => date = picked);
                   },
                   child: Text(Formatters.date(date)),
                 ),
@@ -1258,29 +1527,32 @@ class _HoursVestingCard extends StatelessWidget {
       ),
     );
   }
+}
 
-  void _showDeleteDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Schedule'),
-        content: const Text(
-          'Are you sure you want to delete this hours vesting schedule? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              provider.deleteHoursVestingSchedule(schedule.id);
-              Navigator.pop(context);
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              ),
             ),
-            child: const Text('Delete'),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
           ),
         ],
       ),
@@ -1738,437 +2010,6 @@ class _HoursVestingDialogState extends State<_HoursVestingDialog> {
     _hoursController.dispose();
     _cliffController.dispose();
     super.dispose();
-  }
-}
-
-class _VestingSummaryCard extends StatelessWidget {
-  final List<VestingSchedule> vestingSchedules;
-  final CapTableProvider provider;
-
-  const _VestingSummaryCard({
-    required this.vestingSchedules,
-    required this.provider,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Calculate totals
-    int totalSharesUnderVesting = 0;
-    int totalVestedShares = 0;
-    int totalUnvestedShares = 0;
-
-    for (final schedule in vestingSchedules) {
-      try {
-        final transaction = provider.transactions.firstWhere(
-          (t) => t.id == schedule.transactionId,
-        );
-        totalSharesUnderVesting += transaction.numberOfShares;
-        final vested =
-            (transaction.numberOfShares * schedule.vestingPercentage / 100)
-                .round();
-        totalVestedShares += vested;
-        totalUnvestedShares += transaction.numberOfShares - vested;
-      } catch (_) {
-        // Transaction not found
-      }
-    }
-
-    final activeCount = vestingSchedules
-        .where((v) => v.leaverStatus == LeaverStatus.active)
-        .length;
-    final vestedCount = vestingSchedules
-        .where((v) => v.vestingPercentage >= 100)
-        .length;
-
-    return SectionCard(
-      title: 'Vesting Summary',
-      icon: Icons.schedule,
-      helpKey: 'vesting.vesting',
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: MiniStat(
-                  label: 'Total Schedules',
-                  value: vestingSchedules.length.toString(),
-                ),
-              ),
-              Expanded(
-                child: MiniStat(label: 'Active', value: activeCount.toString()),
-              ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Fully Vested',
-                  value: vestedCount.toString(),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: MiniStat(
-                  label: 'Shares Under Vesting',
-                  value: Formatters.number(totalSharesUnderVesting),
-                ),
-              ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Vested',
-                  value: Formatters.number(totalVestedShares),
-                ),
-              ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Unvested',
-                  value: Formatters.number(totalUnvestedShares),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VestingCard extends StatelessWidget {
-  final VestingSchedule schedule;
-  final CapTableProvider provider;
-
-  const _VestingCard({required this.schedule, required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    // Get related data
-    Transaction? transaction;
-    Investor? investor;
-    try {
-      transaction = provider.transactions.firstWhere(
-        (t) => t.id == schedule.transactionId,
-      );
-      investor = provider.getInvestorById(transaction.investorId);
-    } catch (_) {}
-
-    if (transaction == null || investor == null) {
-      return const SizedBox.shrink();
-    }
-
-    final round = provider.getRoundById(transaction.roundId ?? '');
-    final vestedShares =
-        (transaction.numberOfShares * schedule.vestingPercentage / 100).round();
-    final unvestedShares = transaction.numberOfShares - vestedShares;
-
-    // Status color
-    Color statusColor;
-    String statusText;
-    switch (schedule.leaverStatus) {
-      case LeaverStatus.active:
-        if (schedule.vestingPercentage >= 100) {
-          statusColor = Colors.green;
-          statusText = 'Fully Vested';
-        } else if (!schedule.cliffPassed) {
-          statusColor = Colors.orange;
-          statusText = 'In Cliff';
-        } else {
-          statusColor = Colors.blue;
-          statusText = 'Vesting';
-        }
-        break;
-      case LeaverStatus.goodLeaver:
-        statusColor = Colors.amber;
-        statusText = 'Good Leaver';
-        break;
-      case LeaverStatus.badLeaver:
-        statusColor = Colors.red;
-        statusText = 'Bad Leaver';
-        break;
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: InvestorAvatar(name: investor.name, type: investor.type),
-        title: Text(
-          investor.name,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Row(
-          children: [
-            // Progress indicator
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 4),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: schedule.vestingPercentage / 100,
-                      backgroundColor:
-                          theme.colorScheme.surfaceContainerHighest,
-                      color: statusColor,
-                      minHeight: 6,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${Formatters.percent(schedule.vestingPercentage)} vested',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Status badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-              ),
-              child: Text(
-                statusText,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: statusColor,
-                ),
-              ),
-            ),
-          ],
-        ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Shares info
-                Row(
-                  children: [
-                    Expanded(
-                      child: ResultChip(
-                        label: 'Total Shares',
-                        value: Formatters.number(transaction.numberOfShares),
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ResultChip(
-                        label: 'Vested',
-                        value: Formatters.number(vestedShares),
-                        color: Colors.green,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ResultChip(
-                        label: 'Unvested',
-                        value: Formatters.number(unvestedShares),
-                        color: Colors.orange,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Schedule details
-                _buildDetailRow(context, 'Round', round?.name ?? 'Unknown'),
-                _buildDetailRow(
-                  context,
-                  'Vesting Type',
-                  _getVestingTypeLabel(schedule.type),
-                ),
-                _buildDetailRow(
-                  context,
-                  'Schedule',
-                  '${schedule.vestingPeriodMonths} months with ${schedule.cliffMonths} month cliff',
-                ),
-                _buildDetailRow(
-                  context,
-                  'Frequency',
-                  _getFrequencyLabel(schedule.frequency),
-                ),
-                _buildDetailRow(
-                  context,
-                  'Start Date',
-                  Formatters.date(schedule.startDate),
-                ),
-                _buildDetailRow(
-                  context,
-                  'Cliff Date',
-                  Formatters.date(schedule.cliffDate),
-                ),
-                _buildDetailRow(
-                  context,
-                  'End Date',
-                  Formatters.date(schedule.endDate),
-                ),
-                if (schedule.nextVestingDate != null)
-                  _buildDetailRow(
-                    context,
-                    'Next Vesting',
-                    Formatters.date(schedule.nextVestingDate!),
-                  ),
-                if (schedule.accelerationPercent > 0)
-                  _buildDetailRow(
-                    context,
-                    'Acceleration',
-                    '${schedule.accelerationPercent.toStringAsFixed(0)}% on liquidity event',
-                  ),
-                if (schedule.terminationDate != null)
-                  _buildDetailRow(
-                    context,
-                    'Termination Date',
-                    Formatters.date(schedule.terminationDate!),
-                  ),
-                if (schedule.notes != null && schedule.notes!.isNotEmpty)
-                  _buildDetailRow(context, 'Notes', schedule.notes!),
-
-                const SizedBox(height: 16),
-
-                // Action buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (schedule.leaverStatus == LeaverStatus.active) ...[
-                      TextButton.icon(
-                        onPressed: () => _showTerminateDialog(context),
-                        icon: const Icon(Icons.person_off_outlined),
-                        label: const Text('Terminate'),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    TextButton.icon(
-                      onPressed: () => _showEditDialog(context),
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Edit'),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: () => _showDeleteDialog(context),
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: theme.colorScheme.error,
-                      ),
-                      label: Text(
-                        'Delete',
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getVestingTypeLabel(VestingType type) {
-    switch (type) {
-      case VestingType.timeBased:
-        return 'Time-based';
-      case VestingType.milestoneBased:
-        return 'Milestone-based';
-      case VestingType.reverse:
-        return 'Reverse vesting';
-      case VestingType.hybrid:
-        return 'Hybrid';
-    }
-  }
-
-  String _getFrequencyLabel(VestingFrequency frequency) {
-    switch (frequency) {
-      case VestingFrequency.monthly:
-        return 'Monthly';
-      case VestingFrequency.quarterly:
-        return 'Quarterly';
-      case VestingFrequency.annually:
-        return 'Annually';
-    }
-  }
-
-  void _showEditDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => VestingScheduleDialog(
-        transactions: provider.transactions
-            .where((t) => t.isAcquisition)
-            .toList(),
-        provider: provider,
-        existingSchedule: schedule,
-      ),
-    );
-  }
-
-  void _showTerminateDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) =>
-          _TerminateVestingDialog(schedule: schedule, provider: provider),
-    );
-  }
-
-  void _showDeleteDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Vesting Schedule'),
-        content: const Text(
-          'Are you sure you want to delete this vesting schedule? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              provider.deleteVestingSchedule(schedule.id);
-              Navigator.pop(context);
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
   }
 }
 

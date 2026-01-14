@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/share_class.dart';
@@ -9,6 +6,7 @@ import '../pages/events_timeline_page.dart';
 import '../pages/convertibles_page.dart';
 import '../pages/options_page.dart';
 import '../providers/cap_table_provider.dart';
+import '../services/export_import_service.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/valuation_wizard.dart';
 
@@ -216,9 +214,11 @@ class SettingsDrawer extends StatelessWidget {
                           ),
                           title: Text(shareClass.name),
                           subtitle: Text(
-                            'Voting: ${shareClass.votingRightsMultiplier}x • '
+                            'Vote: ${shareClass.votingRightsMultiplier}x • '
                             'Liq: ${shareClass.liquidationPreference}x'
-                            '${shareClass.participating ? ' (Part.)' : ''}',
+                            '${shareClass.participating ? ' (Part.)' : ''}'
+                            '${shareClass.seniority > 0 ? ' • Sen: ${shareClass.seniority}' : ''}'
+                            '${shareClass.dividendRate > 0 ? ' • Div: ${shareClass.dividendRate}%' : ''}',
                             style: theme.textTheme.bodySmall,
                           ),
                           trailing: IconButton(
@@ -250,6 +250,26 @@ class SettingsDrawer extends StatelessWidget {
                         : provider.companyName,
                   ),
                   onTap: () => _showCompanyNameDialog(context, provider),
+                ),
+
+                // Theme Mode
+                ListTile(
+                  leading: const Icon(Icons.palette),
+                  title: const Text('Theme'),
+                  trailing: DropdownButton<int>(
+                    value: provider.themeModeIndex,
+                    underline: const SizedBox(),
+                    items: const [
+                      DropdownMenuItem(value: 0, child: Text('System')),
+                      DropdownMenuItem(value: 1, child: Text('Light')),
+                      DropdownMenuItem(value: 2, child: Text('Dark')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        provider.setThemeMode(value);
+                      }
+                    },
+                  ),
                 ),
 
                 const Divider(height: 32),
@@ -336,6 +356,12 @@ class SettingsDrawer extends StatelessWidget {
     final liquidationController = TextEditingController(
       text: shareClass?.liquidationPreference.toString() ?? '1.0',
     );
+    final dividendController = TextEditingController(
+      text: shareClass?.dividendRate.toString() ?? '0.0',
+    );
+    final seniorityController = TextEditingController(
+      text: shareClass?.seniority.toString() ?? '0',
+    );
     var participating = shareClass?.participating ?? false;
 
     final result = await showDialog<bool>(
@@ -356,30 +382,70 @@ class SettingsDrawer extends StatelessWidget {
                   autofocus: true,
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: votingController,
-                  decoration: const InputDecoration(
-                    labelText: 'Voting Rights Multiplier',
-                    hintText: '1.0 = normal, 0 = non-voting',
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: votingController,
+                        decoration: const InputDecoration(
+                          labelText: 'Voting Multiplier',
+                          hintText: '1.0 = normal',
+                          suffixText: 'x',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: liquidationController,
+                        decoration: const InputDecoration(
+                          labelText: 'Liq. Preference',
+                          hintText: '1.0 = 1x',
+                          suffixText: 'x',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: liquidationController,
-                  decoration: const InputDecoration(
-                    labelText: 'Liquidation Preference',
-                    hintText: '1.0 = 1x, 2.0 = 2x',
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: seniorityController,
+                        decoration: const InputDecoration(
+                          labelText: 'Seniority',
+                          hintText: '0 = last, higher = first',
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: dividendController,
+                        decoration: const InputDecoration(
+                          labelText: 'Dividend Rate',
+                          hintText: '0 = none',
+                          suffixText: '%',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 SwitchListTile(
                   title: const Text('Participating Preferred'),
+                  subtitle: const Text('Gets preference AND pro-rata share'),
                   value: participating,
                   onChanged: (value) {
                     setState(() => participating = value);
@@ -411,6 +477,8 @@ class SettingsDrawer extends StatelessWidget {
         liquidationPreference:
             double.tryParse(liquidationController.text) ?? 1.0,
         participating: participating,
+        dividendRate: double.tryParse(dividendController.text) ?? 0.0,
+        seniority: int.tryParse(seniorityController.text) ?? 0,
       );
 
       if (isEditing) {
@@ -480,47 +548,31 @@ class SettingsDrawer extends StatelessWidget {
     BuildContext context,
     CapTableProvider provider,
   ) async {
-    try {
-      final timestamp = DateTime.now()
-          .toIso8601String()
-          .replaceAll(':', '-')
-          .split('.')
-          .first;
-      final defaultFileName = 'simple_cap_backup_$timestamp.json';
+    final service = ExportImportService();
+    final data = provider.exportData();
+    final result = await service.exportData(data);
 
-      final data = provider.exportData();
-      final jsonString = jsonEncode(data);
-      final bytes = utf8.encode(jsonString);
+    if (!context.mounted) return;
 
-      // Use file picker to save with bytes (required for iOS)
-      final result = await FilePicker.platform.saveFile(
-        dialogTitle: 'Save Backup File',
-        fileName: defaultFileName,
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        bytes: Uint8List.fromList(bytes),
-      );
-
-      if (result == null) return; // User cancelled
-
-      if (context.mounted) {
+    switch (result) {
+      case DataTransferSuccess(:final fileName):
         Navigator.pop(context); // Close drawer
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Data exported to: ${result.split('/').last}'),
+            content: Text('Data exported to: $fileName'),
             duration: const Duration(seconds: 4),
           ),
         );
-      }
-    } catch (e) {
-      if (context.mounted) {
+      case DataTransferCancelled():
+        // User cancelled, do nothing
+        break;
+      case DataTransferError(:final error):
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Export failed: $e'),
+            content: Text('Export failed: $error'),
             backgroundColor: Colors.red,
           ),
         );
-      }
     }
   }
 
@@ -528,58 +580,54 @@ class SettingsDrawer extends StatelessWidget {
     BuildContext context,
     CapTableProvider provider,
   ) async {
-    try {
-      // Use file picker to select file (with bytes for cross-platform support)
-      final result = await FilePicker.platform.pickFiles(
-        dialogTitle: 'Select Backup File',
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        withData: true, // Load file bytes directly
-      );
+    final service = ExportImportService();
+    final result = await service.pickFileForImport();
 
-      if (result == null || result.files.isEmpty) return; // User cancelled
+    if (!context.mounted) return;
 
-      final bytes = result.files.single.bytes;
-      if (bytes == null) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Could not read file')));
-        }
-        return;
-      }
+    switch (result) {
+      case DataTransferSuccess(:final message):
+        if (message == null) return;
 
-      if (!context.mounted) return;
-
-      final confirmed = await showConfirmDialog(
-        context: context,
-        title: 'Import Data',
-        message:
-            'This will replace all current data with the backup. Continue?',
-        confirmText: 'Import',
-      );
-
-      if (!confirmed || !context.mounted) return;
-
-      final contents = utf8.decode(bytes);
-      final data = jsonDecode(contents) as Map<String, dynamic>;
-      await provider.importData(data);
-
-      if (context.mounted) {
-        Navigator.pop(context); // Close drawer
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Data imported successfully')),
+        final confirmed = await showConfirmDialog(
+          context: context,
+          title: 'Import Data',
+          message:
+              'This will replace all current data with the backup. Continue?',
+          confirmText: 'Import',
         );
-      }
-    } catch (e) {
-      if (context.mounted) {
+
+        if (!confirmed || !context.mounted) return;
+
+        final data = service.parseImportContent(message);
+        if (data == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Import failed: Invalid JSON format'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        await provider.importData(data);
+
+        if (context.mounted) {
+          Navigator.pop(context); // Close drawer
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Data imported successfully')),
+          );
+        }
+      case DataTransferCancelled():
+        // User cancelled, do nothing
+        break;
+      case DataTransferError(:final error):
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Import failed: $e'),
+            content: Text('Import failed: $error'),
             backgroundColor: Colors.red,
           ),
         );
-      }
     }
   }
 }

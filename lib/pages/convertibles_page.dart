@@ -11,6 +11,7 @@ import '../widgets/info_widgets.dart';
 import '../widgets/help_icon.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/avatars.dart';
+import '../widgets/expandable_card.dart';
 
 class ConvertiblesPage extends StatelessWidget {
   const ConvertiblesPage({super.key});
@@ -1019,7 +1020,7 @@ class _ConvertibleDetailsDialog extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: _getStatusColor(convertible.status),
+                            color: convertible.status.color,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -1034,18 +1035,18 @@ class _ConvertibleDetailsDialog extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _DetailRow(
-                      'Principal',
-                      Formatters.currency(convertible.principalAmount),
+                    DetailRow(
+                      label: 'Principal',
+                      value: Formatters.currency(convertible.principalAmount),
                     ),
-                    _DetailRow(
-                      'Issue Date',
-                      Formatters.date(convertible.issueDate),
+                    DetailRow(
+                      label: 'Issue Date',
+                      value: Formatters.date(convertible.issueDate),
                     ),
                     if (convertible.maturityDate != null)
-                      _DetailRow(
-                        'Maturity Date',
-                        Formatters.date(convertible.maturityDate!),
+                      DetailRow(
+                        label: 'Maturity Date',
+                        value: Formatters.date(convertible.maturityDate!),
                       ),
                   ],
                 ),
@@ -1070,34 +1071,39 @@ class _ConvertibleDetailsDialog extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     if (convertible.valuationCap != null)
-                      _DetailRow(
-                        'Valuation Cap',
-                        Formatters.currency(convertible.valuationCap!),
+                      DetailRow(
+                        label: 'Valuation Cap',
+                        value: Formatters.currency(convertible.valuationCap!),
                       ),
                     if (convertible.discountPercent != null)
-                      _DetailRow(
-                        'Discount',
-                        '${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
+                      DetailRow(
+                        label: 'Discount',
+                        value:
+                            '${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
                       ),
                     if (convertible.interestRate != null) ...[
-                      _DetailRow(
-                        'Interest Rate',
-                        '${(convertible.interestRate! * 100).toStringAsFixed(1)}%',
+                      DetailRow(
+                        label: 'Interest Rate',
+                        value:
+                            '${(convertible.interestRate! * 100).toStringAsFixed(1)}%',
                       ),
-                      _DetailRow(
-                        'Accrued Interest',
-                        Formatters.currency(convertible.accruedInterest),
+                      DetailRow(
+                        label: 'Accrued Interest',
+                        value: Formatters.currency(convertible.accruedInterest),
                       ),
-                      _DetailRow(
-                        'Total Amount',
-                        Formatters.currency(convertible.convertibleAmount),
+                      DetailRow(
+                        label: 'Total Amount',
+                        value: Formatters.currency(
+                          convertible.convertibleAmount,
+                        ),
                       ),
                     ],
                     if (convertible.hasMFN || convertible.hasProRata) ...[
                       const Divider(height: 16),
-                      if (convertible.hasMFN) _DetailRow('MFN', 'Yes'),
+                      if (convertible.hasMFN)
+                        DetailRow(label: 'MFN', value: 'Yes'),
                       if (convertible.hasProRata)
-                        _DetailRow('Pro-rata Rights', 'Yes'),
+                        DetailRow(label: 'Pro-rata Rights', value: 'Yes'),
                     ],
                   ],
                 ),
@@ -1126,21 +1132,23 @@ class _ConvertibleDetailsDialog extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       if (convertible.conversionDate != null)
-                        _DetailRow(
-                          'Date',
-                          Formatters.date(convertible.conversionDate!),
+                        DetailRow(
+                          label: 'Date',
+                          value: Formatters.date(convertible.conversionDate!),
                         ),
                       if (convertible.conversionPricePerShare != null)
-                        _DetailRow(
-                          'Price/Share',
-                          Formatters.currency(
+                        DetailRow(
+                          label: 'Price/Share',
+                          value: Formatters.currency(
                             convertible.conversionPricePerShare!,
                           ),
                         ),
                       if (convertible.conversionShares != null)
-                        _DetailRow(
-                          'Shares Issued',
-                          Formatters.number(convertible.conversionShares!),
+                        DetailRow(
+                          label: 'Shares Issued',
+                          value: Formatters.number(
+                            convertible.conversionShares!,
+                          ),
                         ),
                     ],
                   ),
@@ -1231,7 +1239,6 @@ class _ConvertibleDetailsDialog extends StatelessWidget {
           style: TextButton.styleFrom(foregroundColor: Colors.red),
           child: const Text('Delete'),
         ),
-        const Spacer(),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
@@ -1291,40 +1298,6 @@ class _ConvertibleDetailsDialog extends StatelessWidget {
             Icon(Icons.edit, size: 16, color: theme.colorScheme.outline),
           ],
         ),
-      ),
-    );
-  }
-
-  Color _getStatusColor(ConvertibleStatus status) {
-    switch (status) {
-      case ConvertibleStatus.outstanding:
-        return Colors.blue;
-      case ConvertibleStatus.converted:
-        return Colors.green;
-      case ConvertibleStatus.repaid:
-        return Colors.teal;
-      case ConvertibleStatus.cancelled:
-        return Colors.red;
-    }
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _DetailRow(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
       ),
     );
   }
@@ -1464,7 +1437,6 @@ class _EditConversionTransactionDialogState
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        const Spacer(),
         FilledButton(onPressed: _save, child: const Text('Save')),
       ],
     );

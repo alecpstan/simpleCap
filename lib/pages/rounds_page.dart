@@ -14,6 +14,7 @@ import '../widgets/investment_dialog.dart';
 import '../widgets/valuation_wizard.dart';
 import '../widgets/help_icon.dart';
 import '../widgets/transaction_editor.dart';
+import '../widgets/stat_pill.dart';
 import '../utils/helpers.dart';
 
 class RoundsPage extends StatelessWidget {
@@ -60,18 +61,18 @@ class RoundsPage extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _StatPill(
+                StatPill(
                   label: 'rounds',
                   value: provider.rounds.length.toString(),
                   color: Colors.indigo,
                 ),
-                _StatPill(
+                StatPill(
                   label: 'raised',
                   value: Formatters.compactCurrency(provider.totalInvested),
                   color: Colors.green,
                 ),
                 if (provider.outstandingConvertibles.isNotEmpty)
-                  _StatPill(
+                  StatPill(
                     label: 'convertibles',
                     value: Formatters.compactCurrency(
                       provider.totalConvertiblePrincipal,
@@ -813,50 +814,6 @@ class _ConvertNotesDialogState extends State<_ConvertNotesDialog> {
         ),
       );
     }
-  }
-}
-
-/// Stat pill for quick overview
-class _StatPill extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-
-  const _StatPill({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelMedium?.copyWith(color: color),
-          ),
-        ],
-      ),
-    );
   }
 }
 

@@ -40,6 +40,7 @@ class CapTableProvider extends ChangeNotifier {
   bool _isLoading = true;
   Map<String, double> _tableColumnWidths = {};
   bool _showFullyDiluted = false; // Toggle for FD view
+  int _themeModeIndex = 0; // 0=system, 1=light, 2=dark
 
   // === Task 2.1: ESOP dilution settings ===
   EsopDilutionMethod _esopDilutionMethod = EsopDilutionMethod.preRoundCap;
@@ -64,6 +65,7 @@ class CapTableProvider extends ChangeNotifier {
   List<TaxRule> get taxRules => List.unmodifiable(_taxRules);
   List<OptionGrant> get optionGrants => List.unmodifiable(_optionGrants);
   bool get showFullyDiluted => _showFullyDiluted;
+  int get themeModeIndex => _themeModeIndex;
 
   // ESOP settings getters
   EsopDilutionMethod get esopDilutionMethod => _esopDilutionMethod;
@@ -268,6 +270,13 @@ class CapTableProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set theme mode (0=system, 1=light, 2=dark)
+  Future<void> setThemeMode(int index) async {
+    _themeModeIndex = index.clamp(0, 2);
+    await _save();
+    notifyListeners();
+  }
+
   /// Total amount invested (sum of acquisition transaction amounts)
   double get totalInvested {
     return _transactions
@@ -347,6 +356,7 @@ class CapTableProvider extends ChangeNotifier {
             (key, value) => MapEntry(key, (value as num).toDouble()),
           ) ??
           {};
+      _themeModeIndex = data['themeModeIndex'] ?? 0;
 
       // Load new settings
       _esopDilutionMethod =
@@ -401,6 +411,7 @@ class CapTableProvider extends ChangeNotifier {
       optionGrants: _optionGrants,
       companyName: _companyName,
       tableColumnWidths: _tableColumnWidths,
+      themeModeIndex: _themeModeIndex,
       esopDilutionMethod: _esopDilutionMethod.index,
       esopPoolPercent: _esopPoolPercent,
       authorizedShares: _authorizedShares,
@@ -934,6 +945,22 @@ class CapTableProvider extends ChangeNotifier {
     return _milestones.where((m) => !m.isCompleted && !m.isLapsed).toList();
   }
 
+  /// Update progress for a graded milestone
+  Future<void> updateMilestoneProgress(
+    String milestoneId,
+    double newValue,
+  ) async {
+    final index = _milestones.indexWhere((m) => m.id == milestoneId);
+    if (index == -1) return;
+
+    final milestone = _milestones[index];
+    milestone.currentValue = newValue;
+    _milestones[index] = milestone;
+
+    await _save();
+    notifyListeners();
+  }
+
   /// Complete a milestone and award equity
   Future<void> completeMilestone(
     String milestoneId,
@@ -1283,6 +1310,91 @@ class CapTableProvider extends ChangeNotifier {
     return getCurrentSharesByInvestor(investorId) * latestSharePrice;
   }
 
+  /// Get voting power for an investor (shares × voting multiplier)
+  double getVotingPowerByInvestor(String investorId) {
+    double votes = 0;
+    final investorTransactions = _transactions.where(
+      (t) => t.investorId == investorId && t.isAcquisition,
+    );
+
+    // Sum shares sold (disposals)
+    final soldShares = _transactions
+        .where((t) => t.investorId == investorId && t.isDisposal)
+        .fold(0, (sum, t) => sum + t.numberOfShares);
+
+    // For each acquisition, apply the share class voting multiplier
+    for (final t in investorTransactions) {
+      final shareClass = getShareClassById(t.shareClassId);
+      final multiplier = shareClass?.votingRightsMultiplier ?? 1.0;
+      votes += t.numberOfShares * multiplier;
+    }
+
+    // Subtract sold shares (assume they lose voting proportionally)
+    if (soldShares > 0) {
+      final currentShares = getCurrentSharesByInvestor(investorId);
+      final totalShares = getSharesByInvestor(investorId);
+      if (totalShares > 0) {
+        votes = votes * (currentShares / totalShares);
+      }
+    }
+
+    return votes;
+  }
+
+  /// Total voting power across all investors
+  double get totalVotingPower {
+    return activeInvestors.fold(
+      0.0,
+      (sum, inv) => sum + getVotingPowerByInvestor(inv.id),
+    );
+  }
+
+  /// Get voting percentage for an investor
+  double getVotingPercentage(String investorId) {
+    if (totalVotingPower == 0) return 0;
+    return getVotingPowerByInvestor(investorId) / totalVotingPower * 100;
+  }
+
+  /// Calculate accrued dividends for an investor based on share class dividend rates
+  double getAccruedDividendsByInvestor(String investorId) {
+    double totalDividends = 0;
+
+    final investorTransactions = _transactions
+        .where((t) => t.investorId == investorId && t.isAcquisition)
+        .toList();
+
+    for (final t in investorTransactions) {
+      final shareClass = getShareClassById(t.shareClassId);
+      if (shareClass == null || shareClass.dividendRate <= 0) continue;
+
+      // Calculate years since acquisition
+      final yearsSince = DateTime.now().difference(t.date).inDays / 365.25;
+      if (yearsSince <= 0) continue;
+
+      // Dividend = invested amount × rate × years (simple interest)
+      final dividend =
+          t.totalAmount * (shareClass.dividendRate / 100) * yearsSince;
+      totalDividends += dividend;
+    }
+
+    // Adjust for sold shares proportionally
+    final currentShares = getCurrentSharesByInvestor(investorId);
+    final originalShares = getSharesByInvestor(investorId);
+    if (originalShares > 0 && currentShares < originalShares) {
+      totalDividends = totalDividends * (currentShares / originalShares);
+    }
+
+    return totalDividends;
+  }
+
+  /// Total accrued dividends across all share classes
+  double get totalAccruedDividends {
+    return activeInvestors.fold(
+      0.0,
+      (sum, inv) => sum + getAccruedDividendsByInvestor(inv.id),
+    );
+  }
+
   // Pro-rata calculations
   double calculateProRataAllocation(String investorId, double newRoundSize) {
     final ownership = getOwnershipPercentage(investorId);
@@ -1627,6 +1739,7 @@ class CapTableProvider extends ChangeNotifier {
           .toList(),
       'companyName': _companyName,
       'tableColumnWidths': _tableColumnWidths,
+      'themeModeIndex': _themeModeIndex,
       'exportedAt': DateTime.now().toIso8601String(),
       'version': '2.0', // Updated version for new models
     };
@@ -1662,6 +1775,7 @@ class CapTableProvider extends ChangeNotifier {
     _tableColumnWidths = Map<String, double>.from(
       data['tableColumnWidths'] as Map? ?? {},
     );
+    _themeModeIndex = data['themeModeIndex'] as int? ?? 0;
 
     await _save();
     notifyListeners();

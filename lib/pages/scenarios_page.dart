@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../models/share_class.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/section_card.dart';
 import '../widgets/info_widgets.dart';
@@ -578,19 +579,154 @@ class _ScenariosPageState extends State<ScenariosPage>
     final totalShares = provider.totalCurrentShares;
     if (totalShares == 0) return;
 
-    // Simple pro-rata distribution (can be enhanced for preferences later)
-    final pricePerShare = exitValue / totalShares;
-
+    // Build investor holdings with share class info
+    final investorHoldings = <_InvestorHolding>[];
     for (final investor in provider.activeInvestors) {
+      final transactions = provider
+          .getTransactionsByInvestor(investor.id)
+          .where((t) => t.isAcquisition);
+
+      // Group shares by share class
+      final sharesByClass = <String, int>{};
+      final investmentByClass = <String, double>{};
+      for (final t in transactions) {
+        sharesByClass[t.shareClassId] =
+            (sharesByClass[t.shareClassId] ?? 0) + t.numberOfShares;
+        investmentByClass[t.shareClassId] =
+            (investmentByClass[t.shareClassId] ?? 0) + t.totalAmount;
+      }
+
+      // Handle sold shares (reduce proportionally)
+      final soldShares = provider
+          .getTransactionsByInvestor(investor.id)
+          .where((t) => t.isDisposal)
+          .fold(0, (sum, t) => sum + t.numberOfShares);
+
+      final originalTotal = sharesByClass.values.fold(0, (a, b) => a + b);
+      final ratio = originalTotal > 0
+          ? (originalTotal - soldShares) / originalTotal
+          : 0.0;
+
+      for (final entry in sharesByClass.entries) {
+        final shareClass = provider.getShareClassById(entry.key);
+        if (shareClass == null) continue;
+
+        final adjustedShares = (entry.value * ratio).round();
+        if (adjustedShares <= 0) continue;
+
+        investorHoldings.add(
+          _InvestorHolding(
+            investorId: investor.id,
+            investorName: investor.name,
+            shareClass: shareClass,
+            shares: adjustedShares,
+            invested: (investmentByClass[entry.key] ?? 0) * ratio,
+          ),
+        );
+      }
+    }
+
+    // Calculate proceeds using waterfall
+    final proceeds = <String, double>{}; // investorId -> total proceeds
+    var remainingValue = exitValue;
+
+    // Step 1: Pay liquidation preferences by seniority (highest first)
+    final seniorityLevels =
+        investorHoldings.map((h) => h.shareClass.seniority).toSet().toList()
+          ..sort((a, b) => b.compareTo(a)); // Descending
+
+    for (final seniority in seniorityLevels) {
+      if (remainingValue <= 0) break;
+
+      final holdingsAtLevel = investorHoldings
+          .where((h) => h.shareClass.seniority == seniority)
+          .toList();
+
+      // Calculate total preference due at this level (including accrued dividends)
+      double totalPreferenceDue = 0;
+      for (final h in holdingsAtLevel) {
+        if (h.shareClass.liquidationPreference > 0) {
+          // Base preference
+          var preference = h.invested * h.shareClass.liquidationPreference;
+          // Add accrued dividends if any
+          if (h.shareClass.dividendRate > 0) {
+            final dividends = provider.getAccruedDividendsByInvestor(
+              h.investorId,
+            );
+            // Proportional dividends for this holding
+            final totalInvested = provider.getInvestmentByInvestor(
+              h.investorId,
+            );
+            if (totalInvested > 0) {
+              preference += dividends * (h.invested / totalInvested);
+            }
+          }
+          totalPreferenceDue += preference;
+        }
+      }
+
+      if (totalPreferenceDue > 0) {
+        // Pay out preferences (may be pro-rata if not enough)
+        final payoutRatio = remainingValue >= totalPreferenceDue
+            ? 1.0
+            : remainingValue / totalPreferenceDue;
+
+        for (final h in holdingsAtLevel) {
+          if (h.shareClass.liquidationPreference > 0) {
+            var preference = h.invested * h.shareClass.liquidationPreference;
+            // Add accrued dividends
+            if (h.shareClass.dividendRate > 0) {
+              final dividends = provider.getAccruedDividendsByInvestor(
+                h.investorId,
+              );
+              final totalInvested = provider.getInvestmentByInvestor(
+                h.investorId,
+              );
+              if (totalInvested > 0) {
+                preference += dividends * (h.invested / totalInvested);
+              }
+            }
+            final payout = preference * payoutRatio;
+            proceeds[h.investorId] = (proceeds[h.investorId] ?? 0) + payout;
+            remainingValue -= payout;
+          }
+        }
+      }
+    }
+
+    // Step 2: Distribute remaining value pro-rata
+    if (remainingValue > 0) {
+      // For participating preferred, they get their share too
+      // For non-participating, they already got their preference
+      double eligibleShares = 0;
+      for (final h in investorHoldings) {
+        if (h.shareClass.participating ||
+            h.shareClass.liquidationPreference == 0) {
+          eligibleShares += h.shares;
+        }
+      }
+
+      if (eligibleShares > 0) {
+        final perShare = remainingValue / eligibleShares;
+        for (final h in investorHoldings) {
+          if (h.shareClass.participating ||
+              h.shareClass.liquidationPreference == 0) {
+            final proRata = h.shares * perShare;
+            proceeds[h.investorId] = (proceeds[h.investorId] ?? 0) + proRata;
+          }
+        }
+      }
+    }
+
+    // Build results
+    for (final investor in provider.activeInvestors) {
+      final investorProceeds = proceeds[investor.id] ?? 0;
+      if (investorProceeds <= 0) continue;
+
       final shares = provider.getCurrentSharesByInvestor(investor.id);
-      if (shares <= 0) continue;
-
       final ownershipPercent = (shares / totalShares) * 100;
-      final proceeds = shares * pricePerShare;
-
-      // Calculate investment cost for multiple
       final invested = provider.getInvestmentByInvestor(investor.id);
-      final multiple = invested > 0 ? proceeds / invested : 0.0;
+      final multiple = invested > 0 ? investorProceeds / invested : 0.0;
 
       // Get primary share class for display
       final transactions = provider.getTransactionsByInvestor(investor.id);
@@ -608,7 +744,7 @@ class _ScenariosPageState extends State<ScenariosPage>
           shareClassName: shareClassName,
           shares: shares,
           ownershipPercent: ownershipPercent,
-          proceeds: proceeds,
+          proceeds: investorProceeds,
           multiple: multiple,
         ),
       );
@@ -981,6 +1117,23 @@ class WaterfallRow {
     required this.ownershipPercent,
     required this.proceeds,
     required this.multiple,
+  });
+}
+
+/// Helper for waterfall calculation
+class _InvestorHolding {
+  final String investorId;
+  final String investorName;
+  final ShareClass shareClass;
+  final int shares;
+  final double invested;
+
+  _InvestorHolding({
+    required this.investorId,
+    required this.investorName,
+    required this.shareClass,
+    required this.shares,
+    required this.invested,
   });
 }
 
