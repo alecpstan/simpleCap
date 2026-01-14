@@ -4,6 +4,7 @@ import '../providers/cap_table_provider.dart';
 import '../models/transaction.dart';
 import '../models/convertible_instrument.dart';
 import '../widgets/section_card.dart';
+import '../widgets/transaction_editor.dart';
 import '../utils/helpers.dart';
 
 /// Event types for the timeline
@@ -638,6 +639,19 @@ class _EventsTimelinePageState extends State<EventsTimelinePage> {
   }
 
   void _showEventDetails(TimelineEvent event, CapTableProvider provider) {
+    // For transaction events, show edit dialog directly
+    if (event.type == TimelineEventType.transaction) {
+      final transactionId = event.metadata['transactionId'] as String?;
+      if (transactionId != null) {
+        final transaction = provider.getTransactionById(transactionId);
+        if (transaction != null) {
+          _showTransactionEditDialog(transaction, provider);
+          return;
+        }
+      }
+    }
+
+    // For other events, show the standard details sheet
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -705,7 +719,9 @@ class _EventsTimelinePageState extends State<EventsTimelinePage> {
                     title: 'Additional Info',
                     child: Column(
                       children: event.metadata.entries
-                          .where((e) => e.value != null)
+                          .where(
+                            (e) => e.value != null && e.key != 'investments',
+                          )
                           .map(
                             (e) => Padding(
                               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -737,6 +753,21 @@ class _EventsTimelinePageState extends State<EventsTimelinePage> {
         ),
       ),
     );
+  }
+
+  Future<void> _showTransactionEditDialog(
+    Transaction transaction,
+    CapTableProvider provider,
+  ) async {
+    final result = await TransactionEditor.edit(
+      context: context,
+      transaction: transaction,
+      provider: provider,
+    );
+
+    if (result) {
+      setState(() {}); // Refresh the timeline
+    }
   }
 
   IconData _getTransactionIcon(TransactionType type) {

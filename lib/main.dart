@@ -45,6 +45,11 @@ class MainApp extends StatelessWidget {
             brightness: Brightness.light,
           ),
           useMaterial3: true,
+          inputDecorationTheme: const InputDecorationTheme(
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            border: OutlineInputBorder(),
+          ),
         ),
         darkTheme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
@@ -52,6 +57,11 @@ class MainApp extends StatelessWidget {
             brightness: Brightness.dark,
           ),
           useMaterial3: true,
+          inputDecorationTheme: const InputDecorationTheme(
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            border: OutlineInputBorder(),
+          ),
         ),
         themeMode: ThemeMode.system,
         home: const HomePage(),
@@ -83,7 +93,7 @@ class _HomePageState extends State<HomePage> {
     NavigationDestination(
       icon: Icon(Icons.dashboard_outlined),
       selectedIcon: Icon(Icons.dashboard),
-      label: 'Dash',
+      label: 'Overview',
     ),
     NavigationDestination(
       icon: Icon(Icons.people_outlined),

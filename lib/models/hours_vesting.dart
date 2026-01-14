@@ -1,4 +1,9 @@
+import 'dart:math' as math;
 import 'package:uuid/uuid.dart';
+
+// Helper function for power calculation
+double _dartPow(double base, double exponent) =>
+    math.pow(base, exponent).toDouble();
 
 /// Curve type for hours-based vesting
 enum HoursVestingCurve {
@@ -144,10 +149,11 @@ class HoursVestingSchedule {
     }
   }
 
-  // Helper for power calculation
+  // Helper for power calculation using dart:math
   double _pow(double base, double exponent) {
     if (base <= 0) return 0;
-    return base * (exponent == 1 ? 1 : _pow(base, exponent - 1));
+    // Use dart:math pow for proper floating-point exponentiation
+    return _dartPow(base, exponent);
   }
 
   /// Total bonus equity earned from milestones

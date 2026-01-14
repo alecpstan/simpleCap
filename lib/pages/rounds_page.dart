@@ -2,16 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/investment_round.dart';
-import '../models/transaction.dart';
 import '../models/convertible_instrument.dart';
 import '../models/share_class.dart';
+import '../models/transaction.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/avatars.dart';
+import '../widgets/expandable_card.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/investment_dialog.dart';
 import '../widgets/valuation_wizard.dart';
 import '../widgets/help_icon.dart';
+import '../widgets/transaction_editor.dart';
 import '../utils/helpers.dart';
 
 class RoundsPage extends StatelessWidget {
@@ -48,197 +50,61 @@ class RoundsPage extends StatelessWidget {
     final sortedRounds = List<InvestmentRound>.from(provider.rounds)
       ..sort((a, b) => a.date.compareTo(b.date));
 
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 80),
-      itemCount: sortedRounds.length,
-      itemBuilder: (context, index) {
-        final round = sortedRounds[index];
-        final investments = provider.getInvestmentsByRound(round.id);
-        final totalShares = investments.fold(
-          0,
-          (sum, t) => sum + t.numberOfShares,
-        );
-
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: ExpansionTile(
-            leading: RoundAvatar(order: index + 1, type: round.type),
-            title: Text(round.name),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return CustomScrollView(
+      slivers: [
+        // Summary header
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Text(
-                  '${round.typeDisplayName} • ${Formatters.date(round.date)}',
+                _StatPill(
+                  label: 'rounds',
+                  value: provider.rounds.length.toString(),
+                  color: Colors.indigo,
                 ),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    if (round.preMoneyValuation > 0)
-                      Chip(
-                        label: Text(
-                          'Pre: ${Formatters.compactCurrency(round.preMoneyValuation)}',
-                        ),
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    if (round.amountRaised > 0)
-                      Chip(
-                        label: Text(
-                          'Raised: ${Formatters.compactCurrency(round.amountRaised)}',
-                        ),
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    Chip(
-                      label: Text('${investments.length} investors'),
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
+                _StatPill(
+                  label: 'raised',
+                  value: Formatters.compactCurrency(provider.totalInvested),
+                  color: Colors.green,
+                ),
+                if (provider.outstandingConvertibles.isNotEmpty)
+                  _StatPill(
+                    label: 'convertibles',
+                    value: Formatters.compactCurrency(
+                      provider.totalConvertiblePrincipal,
                     ),
-                  ],
-                ),
+                    color: Colors.teal,
+                  ),
               ],
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (round.isClosed)
-                  const Chip(
-                    label: Text('Closed'),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                PopupMenuButton(
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'add_investor',
-                      child: ListTile(
-                        leading: Icon(Icons.person_add),
-                        title: Text('Add Investor'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    if (provider.outstandingConvertibles.isNotEmpty)
-                      const PopupMenuItem(
-                        value: 'convert_notes',
-                        child: ListTile(
-                          leading: Icon(Icons.swap_horiz),
-                          title: Text('Convert SAFE/Notes'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: ListTile(
-                        leading: Icon(Icons.edit),
-                        title: Text('Edit Round'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: ListTile(
-                        leading: Icon(Icons.delete, color: Colors.red),
-                        title: Text(
-                          'Delete',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'add_investor':
-                        _showAddInvestorToRoundDialog(context, provider, round);
-                        break;
-                      case 'convert_notes':
-                        _showConvertNotesDialog(context, provider, round);
-                        break;
-                      case 'edit':
-                        _showRoundDialog(context, provider, round: round);
-                        break;
-                      case 'delete':
-                        _confirmDeleteRound(context, provider, round);
-                        break;
-                    }
-                  },
-                ),
-              ],
-            ),
-            children: [
-              if (investments.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('No investors in this round yet'),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      ...investments.map((transaction) {
-                        final investor = provider.getInvestorById(
-                          transaction.investorId,
-                        );
-                        final shareClass = provider.getShareClassById(
-                          transaction.shareClassId,
-                        );
-                        return ListTile(
-                          leading: InvestorAvatar(
-                            name: investor?.name ?? '?',
-                            type: investor?.type,
-                            radius: 16,
-                          ),
-                          title: Text(investor?.name ?? 'Unknown'),
-                          subtitle: Text(shareClass?.name ?? 'Unknown class'),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                Formatters.number(transaction.numberOfShares),
-                              ),
-                              Text(
-                                Formatters.currency(transaction.totalAmount),
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                          onTap: () => _showEditInvestmentDialog(
-                            context,
-                            provider,
-                            transaction,
-                          ),
-                          onLongPress: () => _confirmDeleteInvestment(
-                            context,
-                            provider,
-                            transaction,
-                          ),
-                        );
-                      }),
-                      const Divider(),
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Total shares in round:'),
-                            Text(
-                              Formatters.number(totalShares),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
           ),
-        );
-      },
+        ),
+
+        // Rounds list
+        SliverList(
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final round = sortedRounds[index];
+            return _RoundCard(
+              round: round,
+              roundOrder: index + 1,
+              provider: provider,
+              onEdit: () => _showRoundDialog(context, provider, round: round),
+              onDelete: () => _confirmDeleteRound(context, provider, round),
+              onAddInvestor: () =>
+                  _showAddInvestorToRoundDialog(context, provider, round),
+              onConvertNotes: provider.outstandingConvertibles.isNotEmpty
+                  ? () => _showConvertNotesDialog(context, provider, round)
+                  : null,
+            );
+          }, childCount: sortedRounds.length),
+        ),
+
+        // Bottom padding
+        const SliverToBoxAdapter(child: SizedBox(height: 80)),
+      ],
     );
   }
 
@@ -640,52 +506,6 @@ class RoundsPage extends StatelessWidget {
     }
   }
 
-  Future<void> _showEditInvestmentDialog(
-    BuildContext context,
-    CapTableProvider provider,
-    Transaction transaction,
-  ) async {
-    final round = provider.getRoundById(transaction.roundId ?? '');
-    if (round == null) return;
-
-    final result = await showInvestmentDialog(
-      context: context,
-      provider: provider,
-      round: round,
-      existingTransaction: transaction,
-    );
-
-    switch (result.action) {
-      case InvestmentDialogAction.saved:
-        if (result.transaction != null) {
-          await provider.updateInvestment(result.transaction!);
-        }
-      case InvestmentDialogAction.deleted:
-        await provider.deleteInvestment(transaction.id);
-      case InvestmentDialogAction.cancelled:
-        break;
-    }
-  }
-
-  Future<void> _confirmDeleteInvestment(
-    BuildContext context,
-    CapTableProvider provider,
-    Transaction transaction,
-  ) async {
-    final investor = provider.getInvestorById(transaction.investorId);
-
-    final confirmed = await showConfirmDialog(
-      context: context,
-      title: 'Delete Investment',
-      message:
-          'Remove ${investor?.name ?? 'this investor'}\'s ${Formatters.number(transaction.numberOfShares)} shares from this round?',
-    );
-
-    if (confirmed) {
-      await provider.deleteInvestment(transaction.id);
-    }
-  }
-
   Future<void> _showConvertNotesDialog(
     BuildContext context,
     CapTableProvider provider,
@@ -882,29 +702,21 @@ class _ConvertNotesDialogState extends State<_ConvertNotesDialog> {
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                // Terms chips
+                                // Terms as simple text
                                 Expanded(
-                                  child: Wrap(
-                                    spacing: 4,
-                                    runSpacing: 4,
-                                    children: [
+                                  child: Text(
+                                    [
                                       if (convertible.valuationCap != null)
-                                        Chip(
-                                          label: Text(
-                                            'Cap: ${Formatters.compactCurrency(convertible.valuationCap!)}',
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          visualDensity: VisualDensity.compact,
-                                        ),
+                                        'Cap: ${Formatters.compactCurrency(convertible.valuationCap!)}',
                                       if (convertible.discountPercent != null)
-                                        Chip(
-                                          label: Text(
-                                            '${(convertible.discountPercent! * 100).toStringAsFixed(0)}% discount',
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          visualDensity: VisualDensity.compact,
+                                        '${(convertible.discountPercent! * 100).toStringAsFixed(0)}% discount',
+                                    ].join(' • '),
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outline,
                                         ),
-                                    ],
                                   ),
                                 ),
                                 // Share class dropdown
@@ -1000,6 +812,588 @@ class _ConvertNotesDialogState extends State<_ConvertNotesDialog> {
           backgroundColor: Colors.green,
         ),
       );
+    }
+  }
+}
+
+/// Stat pill for quick overview
+class _StatPill extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _StatPill({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelMedium?.copyWith(color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Expandable round card with prominent "Add Investor" button
+class _RoundCard extends StatefulWidget {
+  final InvestmentRound round;
+  final int roundOrder;
+  final CapTableProvider provider;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onAddInvestor;
+  final VoidCallback? onConvertNotes;
+
+  const _RoundCard({
+    required this.round,
+    required this.roundOrder,
+    required this.provider,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onAddInvestor,
+    this.onConvertNotes,
+  });
+
+  @override
+  State<_RoundCard> createState() => _RoundCardState();
+}
+
+class _RoundCardState extends State<_RoundCard> {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final round = widget.round;
+    final provider = widget.provider;
+    final investments = provider.getInvestmentsByRound(round.id);
+    final conversions = provider.convertibles
+        .where(
+          (c) =>
+              c.conversionRoundId == round.id &&
+              c.status == ConvertibleStatus.converted,
+        )
+        .toList();
+    final totalShares = investments.fold<int>(
+      0,
+      (sum, t) => sum + t.numberOfShares,
+    );
+    final totalRaised = investments.fold<double>(
+      0,
+      (sum, t) => sum + t.totalAmount,
+    );
+
+    return ExpandableCard(
+      leading: RoundAvatar(order: widget.roundOrder, type: round.type),
+      title: round.name,
+      subtitle: '${round.typeDisplayName} • ${Formatters.date(round.date)}',
+      trailing: round.isClosed
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'CLOSED',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            )
+          : null,
+      chips: [
+        if (round.preMoneyValuation > 0)
+          InfoTag(
+            label: 'Pre',
+            value: Formatters.compactCurrency(round.preMoneyValuation),
+            color: Colors.blue,
+          ),
+        if (totalRaised > 0)
+          InfoTag(
+            label: 'Raised',
+            value: Formatters.compactCurrency(totalRaised),
+            color: Colors.green,
+          ),
+        InfoTag(
+          label: 'Investors',
+          value: investments.length.toString(),
+          icon: Icons.people_outline,
+        ),
+      ],
+      expandedContent: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Round details
+          DetailRow(
+            label: 'Pre-Money Valuation',
+            value: round.preMoneyValuation > 0
+                ? Formatters.currency(round.preMoneyValuation)
+                : 'Not set',
+          ),
+          DetailRow(
+            label: 'Post-Money Valuation',
+            value: round.preMoneyValuation > 0 || totalRaised > 0
+                ? Formatters.currency(round.preMoneyValuation + totalRaised)
+                : 'Not set',
+          ),
+          if (round.pricePerShare != null)
+            DetailRow(
+              label: 'Price per Share',
+              value: Formatters.currency(round.pricePerShare!),
+            ),
+          if (round.leadInvestor != null && round.leadInvestor!.isNotEmpty)
+            DetailRow(label: 'Lead Investor', value: round.leadInvestor!),
+
+          // Investments in this round (tap to edit)
+          if (investments.isNotEmpty) ...[
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Investments',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Tap to edit',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...investments.map((t) => _buildInvestmentItem(t, provider)),
+            const SizedBox(height: 8),
+            DetailRow(
+              label: 'Total Shares',
+              value: Formatters.number(totalShares),
+              highlight: true,
+            ),
+          ],
+
+          // Note conversions in this round (tap to undo)
+          if (conversions.isNotEmpty) ...[
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Conversions',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Tap to undo',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...conversions.map((c) => _buildConversionItem(c, provider)),
+          ],
+        ],
+      ),
+      actions: [
+        // All buttons in a Column with 2 rows
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Row 1: Add Investor and Convert buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      onPressed: widget.onAddInvestor,
+                      icon: const Icon(Icons.person_add, size: 18),
+                      label: const Text('Add Investor'),
+                    ),
+                  ),
+                  if (widget.onConvertNotes != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: widget.onConvertNotes,
+                        icon: const Icon(Icons.swap_horiz, size: 18),
+                        label: const Text('Convert'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Row 2: Edit and Delete buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: widget.onEdit,
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Edit'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: widget.onDelete,
+                      icon: Icon(
+                        Icons.delete_outline,
+                        size: 18,
+                        color: theme.colorScheme.error,
+                      ),
+                      label: Text(
+                        'Delete',
+                        style: TextStyle(color: theme.colorScheme.error),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInvestmentItem(Transaction t, CapTableProvider provider) {
+    final theme = Theme.of(context);
+    final investor = provider.getInvestorById(t.investorId);
+    final shareClass = provider.getShareClassById(t.shareClassId);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: InkWell(
+        onTap: () => _editInvestment(t),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.5,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              InvestorAvatar(
+                name: investor?.name ?? '?',
+                type: investor?.type,
+                radius: 12,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      investor?.name ?? 'Unknown',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    Text(
+                      shareClass?.name ?? 'Unknown class',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    Formatters.number(t.numberOfShares),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    Formatters.compactCurrency(t.totalAmount),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: theme.colorScheme.outline,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editInvestment(Transaction transaction) async {
+    final result = await TransactionEditor.edit(
+      context: context,
+      transaction: transaction,
+      provider: widget.provider,
+      round: widget.round,
+    );
+
+    if (result) {
+      setState(() {}); // Refresh the card
+    }
+  }
+
+  Widget _buildConversionItem(
+    ConvertibleInstrument convertible,
+    CapTableProvider provider,
+  ) {
+    final theme = Theme.of(context);
+    final investor = provider.getInvestorById(convertible.investorId);
+
+    // Find the conversion transaction to get the share class
+    final conversionTransaction = provider.transactions
+        .where(
+          (t) =>
+              t.type == TransactionType.conversion &&
+              t.investorId == convertible.investorId &&
+              t.roundId == convertible.conversionRoundId &&
+              t.numberOfShares == convertible.conversionShares,
+        )
+        .firstOrNull;
+    final shareClass = conversionTransaction != null
+        ? provider.getShareClassById(conversionTransaction.shareClassId)
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: InkWell(
+        onTap: () => _showUndoConversionDialog(convertible, provider),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.teal.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.transform,
+                  color: Colors.teal,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      investor?.name ?? 'Unknown',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    Text(
+                      '${convertible.typeDisplayName} → ${shareClass?.name ?? 'shares'}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    Formatters.number(convertible.conversionShares ?? 0),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    Formatters.compactCurrency(convertible.principalAmount),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.undo, size: 16, color: Colors.orange),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showUndoConversionDialog(
+    ConvertibleInstrument convertible,
+    CapTableProvider provider,
+  ) async {
+    final investor = provider.getInvestorById(convertible.investorId);
+
+    // Find the conversion transaction to get the share class
+    final conversionTransaction = provider.transactions
+        .where(
+          (t) =>
+              t.type == TransactionType.conversion &&
+              t.investorId == convertible.investorId &&
+              t.roundId == convertible.conversionRoundId &&
+              t.numberOfShares == convertible.conversionShares,
+        )
+        .firstOrNull;
+    final shareClass = conversionTransaction != null
+        ? provider.getShareClassById(conversionTransaction.shareClassId)
+        : null;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Undo Conversion'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Conversion details
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        InvestorAvatar(
+                          name: investor?.name ?? '?',
+                          type: investor?.type,
+                          radius: 14,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          investor?.name ?? 'Unknown',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Type: ${convertible.typeDisplayName}'),
+                    Text(
+                      'Principal: ${Formatters.currency(convertible.principalAmount)}',
+                    ),
+                    Text(
+                      'Shares: ${Formatters.number(convertible.conversionShares ?? 0)}',
+                    ),
+                    Text('Class: ${shareClass?.name ?? 'Unknown'}'),
+                    if (convertible.conversionDate != null)
+                      Text(
+                        'Date: ${Formatters.date(convertible.conversionDate!)}',
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Undoing will remove the conversion transaction and restore this instrument to outstanding status.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () async {
+              final success = await provider.undoConversion(convertible.id);
+              if (context.mounted) {
+                Navigator.pop(context, success);
+              }
+            },
+            icon: const Icon(Icons.undo),
+            label: const Text('Undo Conversion'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      setState(() {}); // Refresh the card
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Conversion undone successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     }
   }
 }

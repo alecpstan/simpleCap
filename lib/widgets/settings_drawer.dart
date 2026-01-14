@@ -7,6 +7,7 @@ import '../models/share_class.dart';
 import '../pages/scenarios_page.dart';
 import '../pages/events_timeline_page.dart';
 import '../pages/convertibles_page.dart';
+import '../pages/options_page.dart';
 import '../providers/cap_table_provider.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/valuation_wizard.dart';
@@ -129,6 +130,21 @@ class SettingsDrawer extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const ConvertiblesPage(),
+                      ),
+                    );
+                  },
+                ),
+
+                ListTile(
+                  leading: const Icon(Icons.card_giftcard),
+                  title: const Text('Options & ESOP'),
+                  subtitle: const Text('Employee stock option grants'),
+                  onTap: () {
+                    Navigator.pop(context); // Close drawer
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const OptionsPage(),
                       ),
                     );
                   },

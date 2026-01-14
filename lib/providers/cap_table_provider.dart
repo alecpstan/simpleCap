@@ -8,6 +8,7 @@ import '../models/convertible_instrument.dart';
 import '../models/milestone.dart';
 import '../models/hours_vesting.dart';
 import '../models/tax_rule.dart';
+import '../models/option_grant.dart';
 import '../services/storage_service.dart';
 
 /// ESOP dilution calculation methods (Task 2.1)
@@ -34,6 +35,7 @@ class CapTableProvider extends ChangeNotifier {
   List<Milestone> _milestones = [];
   List<HoursVestingSchedule> _hoursVestingSchedules = [];
   List<TaxRule> _taxRules = [];
+  List<OptionGrant> _optionGrants = [];
   String _companyName = 'My Company Pty Ltd';
   bool _isLoading = true;
   Map<String, double> _tableColumnWidths = {};
@@ -60,6 +62,7 @@ class CapTableProvider extends ChangeNotifier {
   List<HoursVestingSchedule> get hoursVestingSchedules =>
       List.unmodifiable(_hoursVestingSchedules);
   List<TaxRule> get taxRules => List.unmodifiable(_taxRules);
+  List<OptionGrant> get optionGrants => List.unmodifiable(_optionGrants);
   bool get showFullyDiluted => _showFullyDiluted;
 
   // ESOP settings getters
@@ -68,6 +71,23 @@ class CapTableProvider extends ChangeNotifier {
 
   // Authorized shares getter
   int get authorizedShares => _authorizedShares;
+
+  // Option grant getters
+  List<OptionGrant> get activeOptionGrants => _optionGrants
+      .where(
+        (g) =>
+            g.status == OptionGrantStatus.active ||
+            g.status == OptionGrantStatus.partiallyExercised,
+      )
+      .toList();
+
+  /// Total options granted (not yet exercised)
+  int get totalOptionsGranted =>
+      _optionGrants.fold(0, (sum, g) => sum + g.remainingOptions);
+
+  /// Total options exercised
+  int get totalOptionsExercised =>
+      _optionGrants.fold(0, (sum, g) => sum + g.exercisedCount);
 
   /// Returns all transactions sorted chronologically
   List<Transaction> get sortedTransactions {
@@ -273,7 +293,9 @@ class CapTableProvider extends ChangeNotifier {
     if (_rounds.isEmpty) return 0;
     final sortedRounds = List<InvestmentRound>.from(_rounds)
       ..sort((a, b) => b.date.compareTo(a.date));
-    return sortedRounds.first.postMoneyValuation;
+    final latestRound = sortedRounds.first;
+    final amountRaised = getAmountRaisedByRound(latestRound.id);
+    return latestRound.preMoneyValuation + amountRaised;
   }
 
   double get latestSharePrice {
@@ -315,6 +337,9 @@ class CapTableProvider extends ChangeNotifier {
           .toList();
       _taxRules = (data['taxRules'] as List? ?? [])
           .map((e) => TaxRule.fromJson(e))
+          .toList();
+      _optionGrants = (data['optionGrants'] as List? ?? [])
+          .map((e) => OptionGrant.fromJson(e))
           .toList();
       _companyName = data['companyName'] ?? 'My Company Pty Ltd';
       _tableColumnWidths =
@@ -373,6 +398,7 @@ class CapTableProvider extends ChangeNotifier {
       milestones: _milestones,
       hoursVestingSchedules: _hoursVestingSchedules,
       taxRules: _taxRules,
+      optionGrants: _optionGrants,
       companyName: _companyName,
       tableColumnWidths: _tableColumnWidths,
       esopDilutionMethod: _esopDilutionMethod.index,
@@ -641,6 +667,15 @@ class CapTableProvider extends ChangeNotifier {
     }
     await _save();
     notifyListeners();
+  }
+
+  /// Get vesting schedule by ID
+  VestingSchedule? getVestingScheduleById(String id) {
+    try {
+      return _vestingSchedules.firstWhere((v) => v.id == id);
+    } catch (_) {
+      return null;
+    }
   }
 
   // Vesting Schedule CRUD
@@ -1038,6 +1073,154 @@ class CapTableProvider extends ChangeNotifier {
         .toList();
   }
 
+  // Option Grant CRUD
+  Future<void> addOptionGrant(OptionGrant grant) async {
+    _optionGrants.add(grant);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> updateOptionGrant(OptionGrant grant) async {
+    final index = _optionGrants.indexWhere((g) => g.id == grant.id);
+    if (index != -1) {
+      _optionGrants[index] = grant;
+      await _save();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteOptionGrant(String id) async {
+    // Also remove any linked vesting schedule
+    final grant = getOptionGrantById(id);
+    if (grant?.vestingScheduleId != null) {
+      _vestingSchedules.removeWhere((v) => v.id == grant!.vestingScheduleId);
+    }
+    _optionGrants.removeWhere((g) => g.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  OptionGrant? getOptionGrantById(String id) {
+    try {
+      return _optionGrants.firstWhere((g) => g.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<OptionGrant> getOptionGrantsByInvestor(String investorId) {
+    return _optionGrants.where((g) => g.investorId == investorId).toList();
+  }
+
+  /// Exercise options - creates a transaction and updates the grant
+  Future<bool> exerciseOptions({
+    required String grantId,
+    required int numberOfOptions,
+    required DateTime exerciseDate,
+    String? notes,
+  }) async {
+    final index = _optionGrants.indexWhere((g) => g.id == grantId);
+    if (index == -1) return false;
+
+    final grant = _optionGrants[index];
+
+    // Validate
+    if (numberOfOptions <= 0 || numberOfOptions > grant.remainingOptions) {
+      return false;
+    }
+    if (grant.isExpired) return false;
+
+    // Create the exercise transaction
+    final transaction = Transaction(
+      investorId: grant.investorId,
+      shareClassId: grant.shareClassId,
+      type: TransactionType.optionExercise,
+      numberOfShares: numberOfOptions,
+      pricePerShare: grant.strikePrice,
+      totalAmount: numberOfOptions * grant.strikePrice,
+      date: exerciseDate,
+      exercisePrice: grant.strikePrice,
+      notes: notes ?? 'Option exercise from grant ${grant.id.substring(0, 8)}',
+    );
+    _transactions.add(transaction);
+
+    // Update the grant
+    final newExercisedCount = grant.exercisedCount + numberOfOptions;
+    final newStatus = newExercisedCount >= grant.numberOfOptions
+        ? OptionGrantStatus.fullyExercised
+        : OptionGrantStatus.partiallyExercised;
+
+    _optionGrants[index] = grant.copyWith(
+      exercisedCount: newExercisedCount,
+      status: newStatus,
+      exerciseTransactionId: transaction.id,
+    );
+
+    await _save();
+    notifyListeners();
+    return true;
+  }
+
+  /// Cancel/forfeit options (e.g., employee termination)
+  Future<bool> cancelOptions({
+    required String grantId,
+    required int numberOfOptions,
+    required OptionGrantStatus reason, // cancelled or forfeited
+    String? notes,
+  }) async {
+    final index = _optionGrants.indexWhere((g) => g.id == grantId);
+    if (index == -1) return false;
+
+    final grant = _optionGrants[index];
+
+    // Validate
+    if (numberOfOptions <= 0 || numberOfOptions > grant.remainingOptions) {
+      return false;
+    }
+    if (reason != OptionGrantStatus.cancelled &&
+        reason != OptionGrantStatus.forfeited) {
+      return false;
+    }
+
+    // Update the grant
+    final newCancelledCount = grant.cancelledCount + numberOfOptions;
+    final newStatus = (grant.remainingOptions - numberOfOptions) <= 0
+        ? reason
+        : grant.status;
+
+    _optionGrants[index] = grant.copyWith(
+      cancelledCount: newCancelledCount,
+      status: newStatus,
+      notes: notes ?? grant.notes,
+    );
+
+    await _save();
+    notifyListeners();
+    return true;
+  }
+
+  /// Check and update expired option grants
+  Future<void> updateExpiredOptionGrants() async {
+    bool changed = false;
+    final now = DateTime.now();
+
+    for (int i = 0; i < _optionGrants.length; i++) {
+      final grant = _optionGrants[i];
+      if (grant.status == OptionGrantStatus.active ||
+          grant.status == OptionGrantStatus.partiallyExercised) {
+        if (now.isAfter(grant.expiryDate)) {
+          _optionGrants[i] = grant.copyWith(status: OptionGrantStatus.expired);
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      await _save();
+      notifyListeners();
+    }
+  }
+
   // Analysis methods
   Map<String, double> getOwnershipByInvestor() {
     final Map<String, int> sharesByInvestor = {};
@@ -1146,12 +1329,43 @@ class CapTableProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateTransaction(Transaction transaction) async {
+    final index = _transactions.indexWhere((t) => t.id == transaction.id);
+    if (index != -1) {
+      _transactions[index] = transaction;
+      await _save();
+      notifyListeners();
+    }
+  }
+
   Future<void> deleteTransaction(String id) async {
     // Also delete any related transaction (e.g., the other side of a secondary sale)
     final transaction = _transactions.firstWhere(
       (t) => t.id == id,
       orElse: () => throw Exception('Transaction not found'),
     );
+
+    // If this is a conversion transaction, revert the convertible to outstanding
+    if (transaction.type == TransactionType.conversion) {
+      final convertibleIndex = _convertibles.indexWhere(
+        (c) =>
+            c.status == ConvertibleStatus.converted &&
+            c.investorId == transaction.investorId &&
+            c.conversionRoundId == transaction.roundId &&
+            c.conversionShares == transaction.numberOfShares,
+      );
+      if (convertibleIndex != -1) {
+        final convertible = _convertibles[convertibleIndex];
+        _convertibles[convertibleIndex] = convertible.copyWith(
+          status: ConvertibleStatus.outstanding,
+          conversionRoundId: null,
+          conversionShares: null,
+          conversionPricePerShare: null,
+          conversionDate: null,
+        );
+      }
+    }
+
     if (transaction.relatedTransactionId != null) {
       _transactions.removeWhere(
         (t) => t.id == transaction.relatedTransactionId,

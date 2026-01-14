@@ -17,6 +17,10 @@ class Formatters {
 
   static final NumberFormat _numberFormat = NumberFormat('#,###', 'en_AU');
 
+  static final NumberFormat _compactNumberFormat = NumberFormat.compact(
+    locale: 'en_AU',
+  );
+
   static final NumberFormat _percentFormat = NumberFormat('##0.00', 'en_AU');
 
   static final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
@@ -31,6 +35,13 @@ class Formatters {
   }
 
   static String number(int value) => _numberFormat.format(value);
+
+  static String compactNumber(int value) {
+    if (value >= 10000) {
+      return _compactNumberFormat.format(value);
+    }
+    return _numberFormat.format(value);
+  }
 
   static String shares(int value) => '${_numberFormat.format(value)} shares';
 

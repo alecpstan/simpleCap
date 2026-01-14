@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/convertible_instrument.dart';
+import '../models/investor.dart';
+import '../models/transaction.dart';
 import '../providers/cap_table_provider.dart';
 import '../utils/helpers.dart';
 import '../widgets/empty_state.dart';
@@ -8,6 +10,7 @@ import '../widgets/section_card.dart';
 import '../widgets/info_widgets.dart';
 import '../widgets/help_icon.dart';
 import '../widgets/dialogs.dart';
+import '../widgets/avatars.dart';
 
 class ConvertiblesPage extends StatelessWidget {
   const ConvertiblesPage({super.key});
@@ -132,94 +135,27 @@ class ConvertiblesPage extends StatelessWidget {
     return Column(
       children: convertibles.map((c) {
         final investor = provider.getInvestorById(c.investorId);
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: c.type == ConvertibleType.safe
-                ? Colors.purple
-                : Colors.teal,
-            child: Icon(
-              c.type == ConvertibleType.safe
-                  ? Icons.flash_on
-                  : Icons.description,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-          title: Text(investor?.name ?? 'Unknown Investor'),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${c.typeDisplayName} • ${Formatters.currency(c.principalAmount)}',
-              ),
-              Wrap(
-                spacing: 8,
-                children: [
-                  if (c.valuationCap != null)
-                    TermChip(
-                      label:
-                          'Cap: ${Formatters.compactCurrency(c.valuationCap!)}',
-                    ),
-                  if (c.discountPercent != null)
-                    TermChip(
-                      label:
-                          '${(c.discountPercent! * 100).toStringAsFixed(0)}% Discount',
-                    ),
-                  if (c.interestRate != null)
-                    TermChip(
-                      label:
-                          '${(c.interestRate! * 100).toStringAsFixed(1)}% Interest',
-                    ),
-                  if (c.hasMFN) const TermChip(label: 'MFN'),
-                  if (c.hasProRata) const TermChip(label: 'Pro-rata'),
-                ],
-              ),
-            ],
-          ),
-          trailing: PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'convert':
-                  _showConvertDialog(context, provider, c);
-                  break;
-                case 'edit':
-                  _showEditConvertibleDialog(context, provider, c);
-                  break;
-                case 'delete':
-                  _confirmDelete(context, provider, c);
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'convert',
-                child: ListTile(
-                  leading: Icon(Icons.swap_horiz),
-                  title: Text('Convert to Equity'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'edit',
-                child: ListTile(
-                  leading: Icon(Icons.edit),
-                  title: Text('Edit'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'delete',
-                child: ListTile(
-                  leading: Icon(Icons.delete, color: Colors.red),
-                  title: Text('Delete', style: TextStyle(color: Colors.red)),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ],
-          ),
-          isThreeLine: true,
+        return _ConvertibleTile(
+          convertible: c,
+          investorName: investor?.name ?? 'Unknown',
+          investorType: investor?.type,
+          onTap: () => _showConvertibleDetails(context, provider, c),
         );
       }).toList(),
+    );
+  }
+
+  void _showConvertibleDetails(
+    BuildContext context,
+    CapTableProvider provider,
+    ConvertibleInstrument convertible,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => _ConvertibleDetailsDialog(
+        convertible: convertible,
+        provider: provider,
+      ),
     );
   }
 
@@ -285,45 +221,6 @@ class ConvertiblesPage extends StatelessWidget {
       context: context,
       builder: (context) => _ConvertibleDialog(provider: provider),
     );
-  }
-
-  void _showEditConvertibleDialog(
-    BuildContext context,
-    CapTableProvider provider,
-    ConvertibleInstrument convertible,
-  ) {
-    showDialog(
-      context: context,
-      builder: (context) =>
-          _ConvertibleDialog(provider: provider, convertible: convertible),
-    );
-  }
-
-  void _showConvertDialog(
-    BuildContext context,
-    CapTableProvider provider,
-    ConvertibleInstrument convertible,
-  ) {
-    showDialog(
-      context: context,
-      builder: (context) =>
-          _ConversionDialog(provider: provider, convertible: convertible),
-    );
-  }
-
-  void _confirmDelete(
-    BuildContext context,
-    CapTableProvider provider,
-    ConvertibleInstrument convertible,
-  ) async {
-    final confirmed = await showConfirmDialog(
-      context: context,
-      title: 'Delete Convertible?',
-      message: 'This will permanently remove this convertible instrument.',
-    );
-    if (confirmed) {
-      provider.deleteConvertible(convertible.id);
-    }
   }
 
   void _showConversionSummaryDialog(
@@ -904,5 +801,716 @@ class _ConversionDialogState extends State<_ConversionDialog> {
       round?.date ?? DateTime.now(),
     );
     Navigator.pop(context);
+  }
+}
+
+/// Compact tile for displaying a convertible instrument (matching Options style)
+class _ConvertibleTile extends StatelessWidget {
+  final ConvertibleInstrument convertible;
+  final String investorName;
+  final InvestorType? investorType;
+  final VoidCallback onTap;
+
+  const _ConvertibleTile({
+    required this.convertible,
+    required this.investorName,
+    required this.investorType,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isSafe = convertible.type == ConvertibleType.safe;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.3,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: isSafe ? Colors.purple : Colors.teal,
+                  child: Icon(
+                    isSafe ? Icons.flash_on : Icons.description,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        investorName,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '${convertible.typeDisplayName} • ${Formatters.currency(convertible.principalAmount)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: theme.colorScheme.outline),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Terms row
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                if (convertible.valuationCap != null)
+                  _TermChip(
+                    label: 'Cap',
+                    value: Formatters.compactCurrency(
+                      convertible.valuationCap!,
+                    ),
+                    color: Colors.blue,
+                  ),
+                if (convertible.discountPercent != null)
+                  _TermChip(
+                    label: 'Discount',
+                    value:
+                        '${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
+                    color: Colors.orange,
+                  ),
+                if (convertible.interestRate != null)
+                  _TermChip(
+                    label: 'Interest',
+                    value:
+                        '${(convertible.interestRate! * 100).toStringAsFixed(1)}%',
+                    color: Colors.teal,
+                  ),
+                if (convertible.hasMFN)
+                  _TermChip(label: 'MFN', value: '', color: Colors.purple),
+                if (convertible.hasProRata)
+                  _TermChip(label: 'Pro-rata', value: '', color: Colors.green),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TermChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _TermChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        value.isEmpty ? label : '$label: $value',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact dialog for viewing convertible details (matching Options style)
+class _ConvertibleDetailsDialog extends StatelessWidget {
+  final ConvertibleInstrument convertible;
+  final CapTableProvider provider;
+
+  const _ConvertibleDetailsDialog({
+    required this.convertible,
+    required this.provider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final investor = provider.getInvestorById(convertible.investorId);
+    final isSafe = convertible.type == ConvertibleType.safe;
+    final isOutstanding = convertible.status == ConvertibleStatus.outstanding;
+
+    // Find conversion transaction if converted
+    Transaction? conversionTransaction;
+    if (convertible.status == ConvertibleStatus.converted) {
+      conversionTransaction = provider.transactions
+          .cast<Transaction?>()
+          .firstWhere(
+            (t) =>
+                t != null &&
+                t.type == TransactionType.conversion &&
+                t.investorId == convertible.investorId &&
+                t.roundId == convertible.conversionRoundId &&
+                t.numberOfShares == convertible.conversionShares,
+            orElse: () => null,
+          );
+    }
+
+    return AlertDialog(
+      title: Text('${convertible.typeDisplayName} Details'),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Instrument info
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (isSafe ? Colors.purple : Colors.teal).withValues(
+                    alpha: 0.1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        InvestorAvatar(
+                          name: investor?.name ?? '?',
+                          type: investor?.type,
+                          radius: 14,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          investor?.name ?? 'Unknown',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _getStatusColor(convertible.status),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            convertible.statusDisplayName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _DetailRow(
+                      'Principal',
+                      Formatters.currency(convertible.principalAmount),
+                    ),
+                    _DetailRow(
+                      'Issue Date',
+                      Formatters.date(convertible.issueDate),
+                    ),
+                    if (convertible.maturityDate != null)
+                      _DetailRow(
+                        'Maturity Date',
+                        Formatters.date(convertible.maturityDate!),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Terms
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Terms',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (convertible.valuationCap != null)
+                      _DetailRow(
+                        'Valuation Cap',
+                        Formatters.currency(convertible.valuationCap!),
+                      ),
+                    if (convertible.discountPercent != null)
+                      _DetailRow(
+                        'Discount',
+                        '${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
+                      ),
+                    if (convertible.interestRate != null) ...[
+                      _DetailRow(
+                        'Interest Rate',
+                        '${(convertible.interestRate! * 100).toStringAsFixed(1)}%',
+                      ),
+                      _DetailRow(
+                        'Accrued Interest',
+                        Formatters.currency(convertible.accruedInterest),
+                      ),
+                      _DetailRow(
+                        'Total Amount',
+                        Formatters.currency(convertible.convertibleAmount),
+                      ),
+                    ],
+                    if (convertible.hasMFN || convertible.hasProRata) ...[
+                      const Divider(height: 16),
+                      if (convertible.hasMFN) _DetailRow('MFN', 'Yes'),
+                      if (convertible.hasProRata)
+                        _DetailRow('Pro-rata Rights', 'Yes'),
+                    ],
+                  ],
+                ),
+              ),
+
+              // Conversion details (if converted)
+              if (convertible.status == ConvertibleStatus.converted) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.green.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Conversion',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (convertible.conversionDate != null)
+                        _DetailRow(
+                          'Date',
+                          Formatters.date(convertible.conversionDate!),
+                        ),
+                      if (convertible.conversionPricePerShare != null)
+                        _DetailRow(
+                          'Price/Share',
+                          Formatters.currency(
+                            convertible.conversionPricePerShare!,
+                          ),
+                        ),
+                      if (convertible.conversionShares != null)
+                        _DetailRow(
+                          'Shares Issued',
+                          Formatters.number(convertible.conversionShares!),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Linked transactions
+              if (conversionTransaction != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Linked Transactions',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTransactionTile(
+                        context,
+                        conversionTransaction,
+                        provider,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton.icon(
+          onPressed: isOutstanding
+              ? () {
+                  Navigator.pop(context);
+                  showDialog(
+                    context: context,
+                    builder: (context) => _ConversionDialog(
+                      convertible: convertible,
+                      provider: provider,
+                    ),
+                  );
+                }
+              : null,
+          icon: const Icon(Icons.swap_horiz, size: 18),
+          label: const Text('Convert'),
+        ),
+        TextButton.icon(
+          onPressed:
+              (conversionTransaction == null &&
+                  convertible.status == ConvertibleStatus.outstanding)
+              ? () {
+                  Navigator.pop(context);
+                  showDialog(
+                    context: context,
+                    builder: (context) => _ConvertibleDialog(
+                      provider: provider,
+                      convertible: convertible,
+                    ),
+                  );
+                }
+              : null,
+          icon: const Icon(Icons.edit, size: 18),
+          label: const Text('Edit'),
+        ),
+        TextButton(
+          onPressed: () async {
+            final navigator = Navigator.of(context);
+            final confirmed = await showConfirmDialog(
+              context: context,
+              title: 'Delete Convertible?',
+              message:
+                  'This will permanently remove this convertible instrument.',
+            );
+            if (confirmed && context.mounted) {
+              await provider.deleteConvertible(convertible.id);
+              navigator.pop();
+            }
+          },
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          child: const Text('Delete'),
+        ),
+        const Spacer(),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTransactionTile(
+    BuildContext context,
+    Transaction txn,
+    CapTableProvider provider,
+  ) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          builder: (ctx) => _EditConversionTransactionDialog(
+            transaction: txn,
+            convertible: convertible,
+            provider: provider,
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.swap_horiz, color: Colors.green, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Conversion - ${Formatters.number(txn.numberOfShares)} shares',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    Formatters.date(txn.date),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.edit, size: 16, color: theme.colorScheme.outline),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(ConvertibleStatus status) {
+    switch (status) {
+      case ConvertibleStatus.outstanding:
+        return Colors.blue;
+      case ConvertibleStatus.converted:
+        return Colors.green;
+      case ConvertibleStatus.repaid:
+        return Colors.teal;
+      case ConvertibleStatus.cancelled:
+        return Colors.red;
+    }
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dialog for editing/deleting a conversion transaction
+class _EditConversionTransactionDialog extends StatefulWidget {
+  final Transaction transaction;
+  final ConvertibleInstrument convertible;
+  final CapTableProvider provider;
+
+  const _EditConversionTransactionDialog({
+    required this.transaction,
+    required this.convertible,
+    required this.provider,
+  });
+
+  @override
+  State<_EditConversionTransactionDialog> createState() =>
+      _EditConversionTransactionDialogState();
+}
+
+class _EditConversionTransactionDialogState
+    extends State<_EditConversionTransactionDialog> {
+  late TextEditingController _sharesController;
+  late DateTime _conversionDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _sharesController = TextEditingController(
+      text: widget.transaction.numberOfShares.toString(),
+    );
+    _conversionDate = widget.transaction.date;
+  }
+
+  @override
+  void dispose() {
+    _sharesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final investor = widget.provider.getInvestorById(
+      widget.convertible.investorId,
+    );
+
+    return AlertDialog(
+      title: const Text('Edit Conversion Transaction'),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Convertible info
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.purple.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      InvestorAvatar(
+                        name: investor?.name ?? '?',
+                        type: investor?.type,
+                        radius: 14,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        investor?.name ?? 'Unknown',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(widget.convertible.typeDisplayName),
+                  Text(
+                    'Principal: ${Formatters.currency(widget.convertible.principalAmount)}',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Shares
+            TextFormField(
+              controller: _sharesController,
+              decoration: const InputDecoration(
+                labelText: 'Shares Issued',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+
+            // Conversion date
+            InkWell(
+              onTap: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _conversionDate,
+                  firstDate: widget.convertible.issueDate,
+                  lastDate: DateTime.now(),
+                );
+                if (date != null) setState(() => _conversionDate = date);
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Conversion Date',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: Icon(Icons.calendar_today, size: 18),
+                ),
+                child: Text(Formatters.date(_conversionDate)),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _delete,
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          child: const Text('Delete'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        const Spacer(),
+        FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+  }
+
+  Future<void> _save() async {
+    final shares = int.tryParse(_sharesController.text) ?? 0;
+    if (shares <= 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invalid number of shares')));
+      return;
+    }
+
+    // Update the transaction
+    final updated = widget.transaction.copyWith(
+      numberOfShares: shares,
+      date: _conversionDate,
+    );
+    await widget.provider.updateTransaction(updated);
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Transaction updated')));
+    }
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: 'Undo Conversion',
+      message:
+          'This will undo the conversion and restore the convertible to outstanding status. Continue?',
+    );
+    if (!confirmed) return;
+
+    // Use existing undo conversion logic
+    await widget.provider.undoConversion(widget.convertible.id);
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Conversion undone')));
+    }
   }
 }
