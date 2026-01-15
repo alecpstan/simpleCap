@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-import 'providers/cap_table_provider.dart';
-import 'pages/dashboard_page.dart';
-import 'pages/investors_page.dart';
-import 'pages/rounds_page.dart';
-import 'pages/share_value_page.dart';
-import 'pages/vesting_page.dart';
-import 'widgets/settings_drawer.dart';
-import 'widgets/help_icon.dart';
+import 'features/core/providers/core_cap_table_provider.dart';
+import 'features/esop/providers/esop_provider.dart';
+import 'features/convertibles/providers/convertibles_provider.dart';
+import 'features/scenarios/providers/scenarios_provider.dart';
+import 'features/core/pages/dashboard_page.dart';
+import 'features/core/pages/investors_page.dart';
+import 'features/core/pages/rounds_page.dart';
+import 'features/core/pages/share_value_page.dart';
+import 'features/core/pages/vesting_page.dart';
+import 'shared/widgets/settings_drawer.dart';
+import 'shared/widgets/help_icon.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized before any async work
@@ -34,9 +37,52 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => CapTableProvider()..loadData(),
-      child: Consumer<CapTableProvider>(
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => CoreCapTableProvider()..loadData(),
+        ),
+        ChangeNotifierProxyProvider<CoreCapTableProvider, EsopProvider>(
+          create: (_) => EsopProvider(),
+          update: (_, core, esop) {
+            final provider = esop ?? EsopProvider();
+            provider.updateFromCore(
+              optionGrants: core.optionGrants,
+              esopPoolChanges: core.esopPoolChanges,
+              esopDilutionMethod: core.esopDilutionMethod,
+              esopPoolPercent: core.esopPoolPercent,
+              onSave: () => core.syncEsopData(
+                optionGrants: provider.optionGrants,
+                esopPoolChanges: provider.esopPoolChanges,
+                esopDilutionMethod: provider.esopDilutionMethod,
+                esopPoolPercent: provider.esopPoolPercent,
+              ),
+              onAddTransaction: core.addTransaction,
+              onDeleteTransaction: core.deleteTransactionById,
+              getVestingSchedule: core.getVestingScheduleById,
+              onDeleteVestingSchedule: (id) => core.deleteVestingSchedule(id),
+              getLatestSharePrice: () => core.latestSharePrice,
+            );
+            return provider;
+          },
+        ),
+        ChangeNotifierProxyProvider<CoreCapTableProvider, ConvertiblesProvider>(
+          create: (_) => ConvertiblesProvider(),
+          update: (_, core, convertibles) {
+            final provider = convertibles ?? ConvertiblesProvider();
+            provider.updateFromCore(
+              convertibles: core.convertibles,
+              onSave: () => core.syncConvertiblesData(
+                convertibles: provider.convertibles,
+              ),
+              onAddTransaction: core.addTransaction,
+            );
+            return provider;
+          },
+        ),
+        ChangeNotifierProvider(create: (_) => ScenariosProvider()),
+      ],
+      child: Consumer<CoreCapTableProvider>(
         builder: (context, provider, _) {
           // Convert theme mode index to ThemeMode
           final themeMode = switch (provider.themeModeIndex) {
