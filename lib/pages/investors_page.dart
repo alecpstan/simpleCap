@@ -12,8 +12,12 @@ import '../widgets/expandable_card.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/help_icon.dart';
 import '../widgets/transaction_editor.dart';
+import 'options_page.dart';
+import 'convertibles_page.dart';
+import 'vesting_page.dart';
 
 import '../widgets/stat_pill.dart';
+import '../widgets/info_widgets.dart';
 import '../utils/helpers.dart';
 
 class InvestorsPage extends StatelessWidget {
@@ -549,15 +553,65 @@ class _InvestorCardState extends State<_InvestorCard> {
               label: 'Current Shares',
               value: Formatters.number(currentShares),
             ),
-            DetailRow(
-              label: 'Ownership',
-              value: Formatters.percent(ownership),
-              highlight: true,
-            ),
-            DetailRow(
-              label: 'Current Value',
-              value: Formatters.currency(value),
-            ),
+            // Show vested/unvested breakdown if investor has vesting schedules
+            if (hasActiveVesting) ...[
+              Builder(
+                builder: (context) {
+                  final vestedShares = provider.getVestedSharesByInvestor(
+                    investor.id,
+                  );
+                  final unvestedShares = provider.getUnvestedSharesByInvestor(
+                    investor.id,
+                  );
+                  final vestedValue = provider.getVestedValueByInvestor(
+                    investor.id,
+                  );
+                  final unvestedValue = provider.getUnvestedValueByInvestor(
+                    investor.id,
+                  );
+
+                  return Column(
+                    children: [
+                      DetailRow(
+                        label: '  └ Vested',
+                        value: Formatters.number(vestedShares),
+                      ),
+                      DetailRow(
+                        label: '  └ Unvested',
+                        value: Formatters.number(unvestedShares),
+                      ),
+                      DetailRow(
+                        label: 'Ownership',
+                        value: Formatters.percent(ownership),
+                        highlight: true,
+                      ),
+                      DetailRow(
+                        label: 'Total Value',
+                        value: Formatters.currency(value),
+                      ),
+                      DetailRow(
+                        label: '  └ Vested Value',
+                        value: Formatters.currency(vestedValue),
+                      ),
+                      DetailRow(
+                        label: '  └ Unvested Value',
+                        value: Formatters.currency(unvestedValue),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ] else ...[
+              DetailRow(
+                label: 'Ownership',
+                value: Formatters.percent(ownership),
+                highlight: true,
+              ),
+              DetailRow(
+                label: 'Current Value',
+                value: Formatters.currency(value),
+              ),
+            ],
           ],
           if (invested > 0)
             DetailRow(
@@ -580,6 +634,32 @@ class _InvestorCardState extends State<_InvestorCard> {
           ],
           if (investor.company != null)
             DetailRow(label: 'Company', value: investor.company!),
+
+          // Vesting Schedules section
+          if (vestingSchedules.isNotEmpty) ...[
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Vesting Schedules',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  '${vestingSchedules.length} schedules',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...vestingSchedules.map(
+              (schedule) => _buildVestingItem(schedule, provider, context),
+            ),
+          ],
 
           // Option Grants section
           if (optionGrants.isNotEmpty) ...[
@@ -683,6 +763,108 @@ class _InvestorCardState extends State<_InvestorCard> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildVestingItem(
+    VestingSchedule schedule,
+    CapTableProvider provider,
+    BuildContext context,
+  ) {
+    final theme = Theme.of(context);
+    final transaction = provider.getTransactionById(schedule.transactionId);
+    final round = transaction?.roundId != null
+        ? provider.getRoundById(transaction!.roundId!)
+        : null;
+
+    final isActive = schedule.leaverStatus == LeaverStatus.active;
+    final isFullyVested = schedule.vestingPercentage >= 100;
+    final color = isFullyVested
+        ? Colors.green
+        : isActive
+        ? Colors.indigo
+        : Colors.grey;
+
+    final vestedShares = transaction != null
+        ? (transaction.numberOfShares * schedule.vestingPercentage / 100)
+              .round()
+        : 0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: InkWell(
+        onTap: () => showDialog(
+          context: context,
+          builder: (context) =>
+              TimeBasedDetailDialog(schedule: schedule, provider: provider),
+        ),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(Icons.schedule, color: color, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${Formatters.number(vestedShares)} / ${Formatters.number(transaction?.numberOfShares ?? 0)} Shares',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isFullyVested
+                                ? 'Vested'
+                                : '${schedule.vestingPercentage.toStringAsFixed(0)}%',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${round?.name ?? 'Unknown Round'} • ${schedule.vestingPeriodMonths ~/ 12}yr ${schedule.cliffMonths}mo cliff • ${schedule.type.name}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: theme.colorScheme.outline),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -900,11 +1082,9 @@ class _InvestorCardState extends State<_InvestorCard> {
     CapTableProvider provider,
     OptionGrant grant,
   ) {
-    // Import the dialog from options_page or use a shared dialog
     showDialog(
       context: context,
-      builder: (ctx) =>
-          _OptionGrantDetailsDialog(grant: grant, provider: provider),
+      builder: (ctx) => GrantDetailsDialog(grant: grant, provider: provider),
     );
   }
 
@@ -913,10 +1093,9 @@ class _InvestorCardState extends State<_InvestorCard> {
     CapTableProvider provider,
     ConvertibleInstrument convertible,
   ) {
-    // Import the dialog from convertibles_page or use a shared dialog
     showDialog(
       context: context,
-      builder: (ctx) => _ConvertibleDetailsDialogInline(
+      builder: (ctx) => ConvertibleDetailsDialog(
         convertible: convertible,
         provider: provider,
       ),
@@ -929,6 +1108,7 @@ class _InvestorCardState extends State<_InvestorCard> {
     final round = txn.roundId != null
         ? provider.getRoundById(txn.roundId!)
         : null;
+    final hasVesting = provider.getVestingByTransaction(txn.id) != null;
 
     // Determine color based on transaction type
     final isAcquisition = txn.isAcquisition;
@@ -974,11 +1154,19 @@ class _InvestorCardState extends State<_InvestorCard> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          txn.typeDisplayName,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              txn.typeDisplayName,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (hasVesting) ...[
+                              const SizedBox(width: 6),
+                              const TermChip(label: 'Vesting'),
+                            ],
+                          ],
                         ),
                         Text(
                           Formatters.date(txn.date),
@@ -1486,876 +1674,5 @@ class _TransactionListItem extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-/// Inline dialog for option grant details (used from investors page)
-class _OptionGrantDetailsDialog extends StatelessWidget {
-  final OptionGrant grant;
-  final CapTableProvider provider;
-
-  const _OptionGrantDetailsDialog({
-    required this.grant,
-    required this.provider,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final investor = provider.getInvestorById(grant.investorId);
-    final shareClass = provider.getShareClassById(grant.shareClassId);
-    final vesting = grant.vestingScheduleId != null
-        ? provider.getVestingScheduleById(grant.vestingScheduleId!)
-        : null;
-    final currentPrice = provider.latestSharePrice;
-    final intrinsicValue = grant.intrinsicValue(currentPrice);
-    final inTheMoney = currentPrice > grant.strikePrice;
-
-    // Calculate vested options
-    double vestedPercent = 100.0;
-    if (vesting != null) {
-      final now = DateTime.now();
-      final monthsElapsed = (now.difference(vesting.startDate).inDays / 30.44)
-          .floor();
-      if (monthsElapsed < vesting.cliffMonths) {
-        vestedPercent = 0;
-      } else {
-        final vestedMonths = monthsElapsed.clamp(
-          0,
-          vesting.vestingPeriodMonths,
-        );
-        vestedPercent = (vestedMonths / vesting.vestingPeriodMonths * 100)
-            .clamp(0, 100)
-            .toDouble();
-      }
-    }
-    final vestedOptions = (grant.numberOfOptions * vestedPercent / 100).round();
-    final exercisableOptions = vestedOptions - grant.exercisedCount;
-    final canExercise = grant.canExercise && exercisableOptions > 0;
-
-    return AlertDialog(
-      title: const Text('Option Grant Details'),
-      content: SizedBox(
-        width: 400,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Grant info
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        InvestorAvatar(
-                          name: investor?.name ?? '?',
-                          type: investor?.type,
-                          radius: 14,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          investor?.name ?? 'Unknown',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: grant.status.color,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            grant.statusDisplayName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    DetailRow(
-                      label: 'Options Granted',
-                      value: Formatters.number(grant.numberOfOptions),
-                    ),
-                    DetailRow(
-                      label: 'Strike Price',
-                      value: Formatters.currency(grant.strikePrice),
-                    ),
-                    DetailRow(
-                      label: 'Share Class',
-                      value: shareClass?.name ?? 'Unknown',
-                    ),
-                    DetailRow(
-                      label: 'Grant Date',
-                      value: Formatters.date(grant.grantDate),
-                    ),
-                    DetailRow(
-                      label: 'Expiry Date',
-                      value: Formatters.date(grant.expiryDate),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Status breakdown
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Status',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (vesting != null)
-                      DetailRow(
-                        label: 'Vested',
-                        value:
-                            '${vestedPercent.toStringAsFixed(0)}% (${Formatters.number(vestedOptions)} options)',
-                      ),
-                    DetailRow(
-                      label: 'Exercised',
-                      value: Formatters.number(grant.exercisedCount),
-                    ),
-                    DetailRow(
-                      label: 'Exercisable',
-                      value: Formatters.number(exercisableOptions),
-                    ),
-                    DetailRow(
-                      label: 'Remaining',
-                      value: Formatters.number(grant.remainingOptions),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Value
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: inTheMoney
-                      ? Colors.green.withValues(alpha: 0.1)
-                      : Colors.grey.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: inTheMoney
-                        ? Colors.green.withValues(alpha: 0.3)
-                        : Colors.grey.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      inTheMoney ? Icons.trending_up : Icons.trending_flat,
-                      color: inTheMoney ? Colors.green : Colors.grey,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            inTheMoney ? 'In The Money' : 'Out of Money',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: inTheMoney ? Colors.green : Colors.grey,
-                            ),
-                          ),
-                          Text(
-                            'Intrinsic value: ${Formatters.currency(intrinsicValue)}',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        FilledButton.icon(
-          onPressed: canExercise
-              ? () {
-                  Navigator.pop(context);
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => _ExerciseOptionsDialogInline(
-                      grant: grant,
-                      provider: provider,
-                      maxExercisable: exercisableOptions,
-                    ),
-                  );
-                }
-              : null,
-          icon: const Icon(Icons.check_circle, size: 18),
-          label: const Text('Exercise'),
-        ),
-        TextButton(
-          onPressed: () async {
-            final navigator = Navigator.of(context);
-            final confirmed = await showConfirmDialog(
-              context: context,
-              title: 'Delete Grant',
-              message: 'Are you sure you want to delete this option grant?',
-            );
-            if (confirmed && context.mounted) {
-              await provider.deleteOptionGrant(grant.id);
-              navigator.pop();
-            }
-          },
-          style: TextButton.styleFrom(foregroundColor: Colors.red),
-          child: const Text('Delete'),
-        ),
-        const Spacer(),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    );
-  }
-}
-
-/// Inline exercise dialog
-class _ExerciseOptionsDialogInline extends StatefulWidget {
-  final OptionGrant grant;
-  final CapTableProvider provider;
-  final int maxExercisable;
-
-  const _ExerciseOptionsDialogInline({
-    required this.grant,
-    required this.provider,
-    required this.maxExercisable,
-  });
-
-  @override
-  State<_ExerciseOptionsDialogInline> createState() =>
-      _ExerciseOptionsDialogInlineState();
-}
-
-class _ExerciseOptionsDialogInlineState
-    extends State<_ExerciseOptionsDialogInline> {
-  final _optionsController = TextEditingController();
-  DateTime _exerciseDate = DateTime.now();
-
-  @override
-  void initState() {
-    super.initState();
-    _optionsController.text = widget.maxExercisable.toString();
-  }
-
-  @override
-  void dispose() {
-    _optionsController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final investor = widget.provider.getInvestorById(widget.grant.investorId);
-    final options = int.tryParse(_optionsController.text) ?? 0;
-    final totalCost = options * widget.grant.strikePrice;
-    final currentValue = options * widget.provider.latestSharePrice;
-    final gain = currentValue - totalCost;
-
-    return AlertDialog(
-      title: const Text('Exercise Options'),
-      content: SizedBox(
-        width: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      InvestorAvatar(
-                        name: investor?.name ?? '?',
-                        type: investor?.type,
-                        radius: 14,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        investor?.name ?? 'Unknown',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Strike Price: ${Formatters.currency(widget.grant.strikePrice)}',
-                  ),
-                  Text(
-                    'Exercisable: ${Formatters.number(widget.maxExercisable)} options',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _optionsController,
-              decoration: InputDecoration(
-                labelText: 'Options to Exercise',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: TextButton(
-                  onPressed: () {
-                    _optionsController.text = widget.maxExercisable.toString();
-                    setState(() {});
-                  },
-                  child: const Text('All'),
-                ),
-              ),
-              keyboardType: TextInputType.number,
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _exerciseDate,
-                  firstDate: widget.grant.grantDate,
-                  lastDate: widget.grant.expiryDate,
-                );
-                if (date != null) setState(() => _exerciseDate = date);
-              },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Exercise Date',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: Icon(Icons.calendar_today, size: 18),
-                ),
-                child: Text(Formatters.date(_exerciseDate)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: gain > 0
-                    ? Colors.green.withValues(alpha: 0.1)
-                    : theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  DetailRow(
-                    label: 'Exercise Cost',
-                    value: Formatters.currency(totalCost),
-                  ),
-                  DetailRow(
-                    label: 'Current Value',
-                    value: Formatters.currency(currentValue),
-                  ),
-                  const Divider(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Gain/Loss',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        '${gain >= 0 ? '+' : ''}${Formatters.currency(gain)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: gain >= 0 ? Colors.green : Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton.icon(
-          onPressed: _exercise,
-          icon: const Icon(Icons.check_circle),
-          label: const Text('Exercise'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _exercise() async {
-    final options = int.tryParse(_optionsController.text) ?? 0;
-    if (options <= 0 || options > widget.maxExercisable) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid number of options')),
-      );
-      return;
-    }
-
-    final success = await widget.provider.exerciseOptions(
-      grantId: widget.grant.id,
-      numberOfOptions: options,
-      exerciseDate: _exerciseDate,
-    );
-
-    if (success && mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Exercised ${Formatters.number(options)} options'),
-        ),
-      );
-    }
-  }
-}
-
-/// Inline dialog for convertible details (used from investors page)
-class _ConvertibleDetailsDialogInline extends StatelessWidget {
-  final ConvertibleInstrument convertible;
-  final CapTableProvider provider;
-
-  const _ConvertibleDetailsDialogInline({
-    required this.convertible,
-    required this.provider,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final investor = provider.getInvestorById(convertible.investorId);
-    final isSafe = convertible.type == ConvertibleType.safe;
-    final isOutstanding = convertible.status == ConvertibleStatus.outstanding;
-
-    return AlertDialog(
-      title: Text('${convertible.typeDisplayName} Details'),
-      content: SizedBox(
-        width: 400,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Instrument info
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: (isSafe ? Colors.purple : Colors.teal).withValues(
-                    alpha: 0.1,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        InvestorAvatar(
-                          name: investor?.name ?? '?',
-                          type: investor?.type,
-                          radius: 14,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          investor?.name ?? 'Unknown',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: convertible.status.color,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            convertible.statusDisplayName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    DetailRow(
-                      label: 'Principal',
-                      value: Formatters.currency(convertible.principalAmount),
-                    ),
-                    DetailRow(
-                      label: 'Issue Date',
-                      value: Formatters.date(convertible.issueDate),
-                    ),
-                    if (convertible.maturityDate != null)
-                      DetailRow(
-                        label: 'Maturity Date',
-                        value: Formatters.date(convertible.maturityDate!),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Terms
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Terms',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (convertible.valuationCap != null)
-                      DetailRow(
-                        label: 'Valuation Cap',
-                        value: Formatters.currency(convertible.valuationCap!),
-                      ),
-                    if (convertible.discountPercent != null)
-                      DetailRow(
-                        label: 'Discount',
-                        value:
-                            '${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
-                      ),
-                    if (convertible.interestRate != null) ...[
-                      DetailRow(
-                        label: 'Interest Rate',
-                        value:
-                            '${(convertible.interestRate! * 100).toStringAsFixed(1)}%',
-                      ),
-                      DetailRow(
-                        label: 'Accrued Interest',
-                        value: Formatters.currency(convertible.accruedInterest),
-                      ),
-                      DetailRow(
-                        label: 'Total Amount',
-                        value: Formatters.currency(
-                          convertible.convertibleAmount,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-              // Conversion details (if converted)
-              if (convertible.status == ConvertibleStatus.converted) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.green.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Conversion',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (convertible.conversionDate != null)
-                        DetailRow(
-                          label: 'Date',
-                          value: Formatters.date(convertible.conversionDate!),
-                        ),
-                      if (convertible.conversionPricePerShare != null)
-                        DetailRow(
-                          label: 'Price/Share',
-                          value: Formatters.currency(
-                            convertible.conversionPricePerShare!,
-                          ),
-                        ),
-                      if (convertible.conversionShares != null)
-                        DetailRow(
-                          label: 'Shares Issued',
-                          value: Formatters.number(
-                            convertible.conversionShares!,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        FilledButton.icon(
-          onPressed: isOutstanding
-              ? () {
-                  Navigator.pop(context);
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => _ConversionDialogInline(
-                      convertible: convertible,
-                      provider: provider,
-                    ),
-                  );
-                }
-              : null,
-          icon: const Icon(Icons.swap_horiz, size: 18),
-          label: const Text('Convert'),
-        ),
-        TextButton(
-          onPressed: () async {
-            final navigator = Navigator.of(context);
-            final confirmed = await showConfirmDialog(
-              context: context,
-              title: 'Delete Convertible?',
-              message:
-                  'This will permanently remove this convertible instrument.',
-            );
-            if (confirmed && context.mounted) {
-              await provider.deleteConvertible(convertible.id);
-              navigator.pop();
-            }
-          },
-          style: TextButton.styleFrom(foregroundColor: Colors.red),
-          child: const Text('Delete'),
-        ),
-        const Spacer(),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    );
-  }
-}
-
-/// Inline conversion dialog
-class _ConversionDialogInline extends StatefulWidget {
-  final ConvertibleInstrument convertible;
-  final CapTableProvider provider;
-
-  const _ConversionDialogInline({
-    required this.convertible,
-    required this.provider,
-  });
-
-  @override
-  State<_ConversionDialogInline> createState() =>
-      _ConversionDialogInlineState();
-}
-
-class _ConversionDialogInlineState extends State<_ConversionDialogInline> {
-  String? _roundId;
-  String? _shareClassId;
-
-  @override
-  void initState() {
-    super.initState();
-    // Default to first available round and share class
-    final rounds = widget.provider.rounds;
-    if (rounds.isNotEmpty) _roundId = rounds.first.id;
-
-    final shareClasses = widget.provider.shareClasses;
-    if (shareClasses.isNotEmpty) _shareClassId = shareClasses.first.id;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final investor = widget.provider.getInvestorById(
-      widget.convertible.investorId,
-    );
-    final round = _roundId != null
-        ? widget.provider.getRoundById(_roundId!)
-        : null;
-
-    int? shares;
-    double? pps;
-    if (round != null) {
-      final issuedBefore = widget.provider.getIssuedSharesBeforeRound(
-        _roundId!,
-      );
-      shares = widget.convertible.calculateConversionShares(
-        roundPreMoney: round.preMoneyValuation,
-        issuedSharesBeforeRound: issuedBefore,
-      );
-      pps = widget.convertible.calculateConversionPPS(
-        roundPreMoney: round.preMoneyValuation,
-        issuedSharesBeforeRound: issuedBefore,
-      );
-    }
-
-    return AlertDialog(
-      title: const Text('Convert to Equity'),
-      content: SizedBox(
-        width: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.purple.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      InvestorAvatar(
-                        name: investor?.name ?? '?',
-                        type: investor?.type,
-                        radius: 14,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        investor?.name ?? 'Unknown',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(widget.convertible.typeDisplayName),
-                  Text(
-                    'Amount: ${Formatters.currency(widget.convertible.convertibleAmount)}',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _roundId,
-              decoration: const InputDecoration(
-                labelText: 'Converting in Round',
-                border: OutlineInputBorder(),
-              ),
-              items: widget.provider.rounds.map((r) {
-                return DropdownMenuItem(value: r.id, child: Text(r.name));
-              }).toList(),
-              onChanged: (value) => setState(() => _roundId = value),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _shareClassId,
-              decoration: const InputDecoration(
-                labelText: 'Share Class',
-                border: OutlineInputBorder(),
-              ),
-              items: widget.provider.shareClasses.map((sc) {
-                return DropdownMenuItem(value: sc.id, child: Text(sc.name));
-              }).toList(),
-              onChanged: (value) => setState(() => _shareClassId = value),
-            ),
-            const SizedBox(height: 16),
-            if (pps != null && shares != null)
-              Card(
-                color: theme.colorScheme.primaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Conversion Preview',
-                        style: TextStyle(
-                          color: theme.colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('Price per Share: ${Formatters.currency(pps)}'),
-                      Text(
-                        'Shares to Issue: ${Formatters.number(shares)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _canConvert() ? _convert : null,
-          child: const Text('Convert'),
-        ),
-      ],
-    );
-  }
-
-  bool _canConvert() => _roundId != null && _shareClassId != null;
-
-  void _convert() {
-    final round = widget.provider.getRoundById(_roundId!);
-    widget.provider.convertConvertible(
-      widget.convertible.id,
-      _shareClassId!,
-      _roundId!,
-      round?.date ?? DateTime.now(),
-    );
-    Navigator.pop(context);
   }
 }

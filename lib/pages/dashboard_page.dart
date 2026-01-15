@@ -16,6 +16,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   bool _showByShareClass = false;
+  bool _showVestedOnly = false;
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +92,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final shareCount = showFD
         ? provider.fullyDilutedShares
         : provider.totalCurrentShares;
+    final unvestedCount = provider.totalUnvestedShares;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -108,7 +110,11 @@ class _DashboardPageState extends State<DashboardPage> {
             value: Formatters.compactNumber(shareCount),
             icon: Icons.pie_chart,
             color: Colors.purple,
-            subtitle: showFD ? 'Fully Diluted' : 'Current',
+            subtitle: showFD
+                ? 'Fully Diluted'
+                : unvestedCount > 0
+                ? '${Formatters.compactNumber(unvestedCount)} unvested'
+                : 'All vested',
             helpKey: 'general.shares',
           ),
           StatCard(
@@ -147,37 +153,67 @@ class _DashboardPageState extends State<DashboardPage> {
       return const SizedBox.shrink();
     }
 
+    final hasUnvested = provider.totalUnvestedShares > 0;
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: SectionCard(
         title: 'Ownership',
-        trailing: SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(
-              value: false,
-              label: Text('Investor'),
-              icon: Icon(Icons.person, size: 16),
+        trailing: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  label: Text('Investor'),
+                  icon: Icon(Icons.person, size: 16),
+                ),
+                ButtonSegment(
+                  value: true,
+                  label: Text('Class'),
+                  icon: Icon(Icons.category, size: 16),
+                ),
+              ],
+              selected: {_showByShareClass},
+              onSelectionChanged: (value) {
+                setState(() {
+                  _showByShareClass = value.first;
+                });
+              },
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
-            ButtonSegment(
-              value: true,
-              label: Text('Class'),
-              icon: Icon(Icons.category, size: 16),
-            ),
+            if (hasUnvested && !_showByShareClass) ...[
+              const SizedBox(height: 8),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('All')),
+                  ButtonSegment(value: true, label: Text('Vested')),
+                ],
+                selected: {_showVestedOnly},
+                onSelectionChanged: (value) {
+                  setState(() {
+                    _showVestedOnly = value.first;
+                  });
+                },
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
           ],
-          selected: {_showByShareClass},
-          onSelectionChanged: (value) {
-            setState(() {
-              _showByShareClass = value.first;
-            });
-          },
-          style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
         ),
         child: SizedBox(
           height: 280,
-          child: OwnershipPieChart(showByShareClass: _showByShareClass),
+          child: OwnershipPieChart(
+            showByShareClass: _showByShareClass,
+            showVestedOnly: _showVestedOnly && !_showByShareClass,
+          ),
         ),
       ),
     );
@@ -187,31 +223,6 @@ class _DashboardPageState extends State<DashboardPage> {
     if (provider.activeInvestors.isEmpty) {
       return const SizedBox.shrink();
     }
-
-    // Check if any share classes have dividend rates
-    final hasDividendRates = provider.shareClasses.any(
-      (sc) => sc.dividendRate > 0,
-    );
-
-    // Get total accrued dividends
-    final totalDividends = provider.totalAccruedDividends;
-
-    // Get dividend data per investor
-    final dividendData = <String, double>{};
-    for (final investor in provider.activeInvestors) {
-      final dividends = provider.getAccruedDividendsByInvestor(investor.id);
-      if (dividends > 0) {
-        // Calculate percentage of total dividends
-        final pct = totalDividends > 0
-            ? (dividends / totalDividends) * 100
-            : 0.0;
-        dividendData[investor.name] = pct;
-      }
-    }
-
-    // Sort by dividend share descending
-    final sortedEntries = dividendData.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
 
     final theme = Theme.of(context);
     final colors = [
@@ -227,39 +238,69 @@ class _DashboardPageState extends State<DashboardPage> {
       Colors.cyan,
     ];
 
+    // Check if any share classes have dividend rates (for cumulative preferred)
+    final hasDividendRates = provider.shareClasses.any(
+      (sc) => sc.dividendRate > 0,
+    );
+
+    // If no share classes have dividend rates, don't show this section
+    if (!hasDividendRates) {
+      return const SizedBox.shrink();
+    }
+
+    // Get total accrued cumulative preferred dividends
+    final totalAccruedDividends = provider.totalAccruedDividends;
+
+    // Get cumulative preferred dividend data per investor (actual $ amounts)
+    final preferredDividendData = <String, double>{};
+    for (final investor in provider.activeInvestors) {
+      final dividends = provider.getAccruedDividendsByInvestor(investor.id);
+      if (dividends > 0) {
+        preferredDividendData[investor.name] = dividends;
+      }
+    }
+
+    // Sort by dividend amount descending
+    final sortedPreferredEntries = preferredDividendData.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: SectionCard(
-        title: 'Dividend Split',
-        trailing: hasDividendRates && totalDividends > 0
-            ? Container(
+        title: 'Cumulative Preferred Dividends',
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (totalAccruedDividends > 0)
+              Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                margin: const EdgeInsets.only(right: 8),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '\$${(totalDividends / 1000).toStringAsFixed(1)}k accrued',
+                  '${Formatters.compactCurrency(totalAccruedDividends)} total',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.onPrimaryContainer,
                   ),
                 ),
-              )
-            : null,
+              ),
+            Tooltip(
+              message:
+                  'Cumulative preferred dividends accrue automatically based on each share class\'s dividend rate. These are typically paid at a liquidity event (exit), not from company profits.',
+              child: Icon(
+                Icons.info_outline,
+                size: 16,
+                color: theme.colorScheme.outline,
+              ),
+            ),
+          ],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!hasDividendRates)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'No share classes have dividend rates configured',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-              )
-            else if (sortedEntries.isEmpty)
+            if (sortedPreferredEntries.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
@@ -269,7 +310,9 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 ),
               ),
-            ...sortedEntries.take(10).toList().asMap().entries.map((entry) {
+            ...sortedPreferredEntries.take(10).toList().asMap().entries.map((
+              entry,
+            ) {
               final index = entry.key;
               final data = entry.value;
               return Padding(
@@ -293,7 +336,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                     Text(
-                      '${data.value.toStringAsFixed(1)}%',
+                      Formatters.compactCurrency(data.value),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -302,11 +345,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
               );
             }),
-            if (sortedEntries.length > 10)
+            if (sortedPreferredEntries.length > 10)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  '+ ${sortedEntries.length - 10} more investors',
+                  '+ ${sortedPreferredEntries.length - 10} more investors',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.outline,
                   ),

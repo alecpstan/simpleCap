@@ -760,6 +760,91 @@ class CapTableProvider extends ChangeNotifier {
     return transaction.numberOfShares - getVestedShares(transactionId);
   }
 
+  /// Get total vested shares for an investor across all their transactions
+  int getVestedSharesByInvestor(String investorId) {
+    final investorTransactions = _transactions
+        .where((t) => t.investorId == investorId && t.isAcquisition)
+        .toList();
+
+    int totalVested = 0;
+    for (final t in investorTransactions) {
+      try {
+        totalVested += getVestedShares(t.id);
+      } catch (_) {
+        // If transaction not found, skip
+      }
+    }
+
+    // Subtract sold shares (disposals reduce vested count)
+    final soldShares = _transactions
+        .where((t) => t.investorId == investorId && t.isDisposal)
+        .fold(0, (sum, t) => sum + t.numberOfShares);
+
+    return (totalVested - soldShares).clamp(0, totalVested);
+  }
+
+  /// Get total unvested shares for an investor across all their transactions
+  int getUnvestedSharesByInvestor(String investorId) {
+    final currentShares = getCurrentSharesByInvestor(investorId);
+    final vestedShares = getVestedSharesByInvestor(investorId);
+    return (currentShares - vestedShares).clamp(0, currentShares);
+  }
+
+  /// Check if an investor has any vesting schedules
+  bool hasVestingSchedules(String investorId) {
+    final investorTransactions = _transactions
+        .where((t) => t.investorId == investorId && t.isAcquisition)
+        .toList();
+
+    for (final t in investorTransactions) {
+      if (getVestingByTransaction(t.id) != null) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Get vested share value for an investor
+  double getVestedValueByInvestor(String investorId) {
+    return getVestedSharesByInvestor(investorId) * latestSharePrice;
+  }
+
+  /// Get unvested share value for an investor
+  double getUnvestedValueByInvestor(String investorId) {
+    return getUnvestedSharesByInvestor(investorId) * latestSharePrice;
+  }
+
+  /// Total vested shares across all investors
+  int get totalVestedShares {
+    return activeInvestors.fold(
+      0,
+      (sum, inv) => sum + getVestedSharesByInvestor(inv.id),
+    );
+  }
+
+  /// Total unvested shares across all investors
+  int get totalUnvestedShares {
+    return totalCurrentShares - totalVestedShares;
+  }
+
+  /// Get vested ownership by investor (percentage based on vested shares only)
+  Map<String, double> getVestedOwnershipByInvestor() {
+    final Map<String, int> vestedByInvestor = {};
+    for (var investor in _investors) {
+      final vestedShares = getVestedSharesByInvestor(investor.id);
+      if (vestedShares > 0) {
+        vestedByInvestor[investor.id] = vestedShares;
+      }
+    }
+
+    final total = totalVestedShares;
+    if (total == 0) return {};
+
+    return vestedByInvestor.map(
+      (id, shares) => MapEntry(id, shares / total * 100),
+    );
+  }
+
   // Convertible Instrument CRUD
   Future<void> addConvertible(ConvertibleInstrument convertible) async {
     _convertibles.add(convertible);
@@ -847,6 +932,60 @@ class CapTableProvider extends ChangeNotifier {
     _convertibles[index] = convertible.copyWith(
       status: ConvertibleStatus.converted,
       conversionRoundId: roundId,
+      conversionShares: shares,
+      conversionPricePerShare: pps,
+      conversionDate: conversionDate,
+    );
+
+    await _save();
+    notifyListeners();
+  }
+
+  /// Convert a convertible instrument at a specific valuation (standalone, no round)
+  /// Used for maturity conversions, M&A events, or manual conversions
+  Future<void> convertConvertibleAtValuation(
+    String convertibleId,
+    String shareClassId,
+    double valuation,
+    DateTime conversionDate, {
+    String? notes,
+  }) async {
+    final index = _convertibles.indexWhere((c) => c.id == convertibleId);
+    if (index == -1) return;
+
+    final convertible = _convertibles[index];
+    final issuedShares = totalCurrentShares;
+
+    final shares = convertible.calculateConversionShares(
+      roundPreMoney: valuation,
+      issuedSharesBeforeRound: issuedShares,
+    );
+
+    final pps =
+        convertible.calculateConversionPPS(
+          roundPreMoney: valuation,
+          issuedSharesBeforeRound: issuedShares,
+        ) ??
+        0;
+
+    // Create the transaction (no round reference)
+    final transaction = Transaction(
+      investorId: convertible.investorId,
+      shareClassId: shareClassId,
+      type: TransactionType.conversion,
+      numberOfShares: shares,
+      pricePerShare: pps,
+      totalAmount: convertible.convertibleAmount,
+      date: conversionDate,
+      notes:
+          notes ??
+          'Converted from ${convertible.typeDisplayName} at \$${valuation.toStringAsFixed(0)} valuation',
+    );
+    _transactions.add(transaction);
+
+    // Mark convertible as converted
+    _convertibles[index] = convertible.copyWith(
+      status: ConvertibleStatus.converted,
       conversionShares: shares,
       conversionPricePerShare: pps,
       conversionDate: conversionDate,
@@ -1042,6 +1181,43 @@ class CapTableProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Update a log entry in an hours vesting schedule
+  Future<void> updateLogEntry(
+    String scheduleId,
+    String entryId, {
+    double? hours,
+    DateTime? date,
+    String? description,
+  }) async {
+    final index = _hoursVestingSchedules.indexWhere((h) => h.id == scheduleId);
+    if (index == -1) return;
+
+    final schedule = _hoursVestingSchedules[index];
+    schedule.updateLogEntry(
+      entryId,
+      hours: hours,
+      date: date,
+      description: description,
+    );
+
+    _hoursVestingSchedules[index] = schedule;
+    await _save();
+    notifyListeners();
+  }
+
+  /// Delete a log entry from an hours vesting schedule
+  Future<void> deleteLogEntry(String scheduleId, String entryId) async {
+    final index = _hoursVestingSchedules.indexWhere((h) => h.id == scheduleId);
+    if (index == -1) return;
+
+    final schedule = _hoursVestingSchedules[index];
+    schedule.deleteLogEntry(entryId);
+
+    _hoursVestingSchedules[index] = schedule;
+    await _save();
+    notifyListeners();
+  }
+
   // Tax Rule CRUD
   Future<void> addTaxRule(TaxRule rule) async {
     _taxRules.add(rule);
@@ -1203,6 +1379,57 @@ class CapTableProvider extends ChangeNotifier {
       cancelledCount: newCancelledCount,
       status: newStatus,
       notes: notes ?? grant.notes,
+    );
+
+    await _save();
+    notifyListeners();
+    return true;
+  }
+
+  /// Undo option exercise - removes the exercise transaction and resets the grant
+  Future<bool> undoOptionExercise({required String grantId}) async {
+    final index = _optionGrants.indexWhere((g) => g.id == grantId);
+    if (index == -1) return false;
+
+    final grant = _optionGrants[index];
+
+    // Must have been exercised
+    if (grant.exercisedCount == 0) return false;
+
+    // Find and remove all exercise transactions for this grant
+    final exerciseTransactions = _transactions
+        .where(
+          (t) =>
+              t.type == TransactionType.optionExercise &&
+              t.investorId == grant.investorId &&
+              t.shareClassId == grant.shareClassId &&
+              (t.notes?.contains(grant.id.substring(0, 8)) ?? false),
+        )
+        .toList();
+
+    // Also try to find by exerciseTransactionId
+    if (grant.exerciseTransactionId != null) {
+      final directMatch = _transactions.firstWhere(
+        (t) => t.id == grant.exerciseTransactionId,
+        orElse: () => exerciseTransactions.isNotEmpty
+            ? exerciseTransactions.first
+            : throw StateError('No exercise transaction found'),
+      );
+      if (!exerciseTransactions.contains(directMatch)) {
+        exerciseTransactions.add(directMatch);
+      }
+    }
+
+    // Remove the exercise transactions
+    for (final txn in exerciseTransactions) {
+      _transactions.removeWhere((t) => t.id == txn.id);
+    }
+
+    // Reset the grant to active status
+    _optionGrants[index] = grant.copyWith(
+      exercisedCount: 0,
+      status: OptionGrantStatus.active,
+      exerciseTransactionId: null,
     );
 
     await _save();

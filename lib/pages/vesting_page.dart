@@ -316,6 +316,15 @@ class _VestingPageState extends State<VestingPage> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.replay),
+              title: const Text('Reverse Vesting'),
+              subtitle: const Text('Founder buyback / company repurchase'),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddReverseVesting(context, provider);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.flag),
               title: const Text('Milestone Vesting'),
               subtitle: const Text('Vest on achievement of goals'),
@@ -331,6 +340,15 @@ class _VestingPageState extends State<VestingPage> {
               onTap: () {
                 Navigator.pop(context);
                 _showAddHoursVesting(context, provider);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.merge_type),
+              title: const Text('Hybrid Vesting'),
+              subtitle: const Text('Combine time + milestones + hours'),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddHybridVesting(context, provider);
               },
             ),
           ],
@@ -379,6 +397,60 @@ class _VestingPageState extends State<VestingPage> {
     showDialog(
       context: context,
       builder: (context) => _HoursVestingDialog(provider: provider),
+    );
+  }
+
+  void _showAddReverseVesting(BuildContext context, CapTableProvider provider) {
+    final allAcquisitions = provider.transactions
+        .where((t) => t.isAcquisition)
+        .toList();
+    final transactionsWithoutVesting = allAcquisitions.where((t) {
+      return provider.getVestingByTransaction(t.id) == null;
+    }).toList();
+
+    if (transactionsWithoutVesting.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All investments already have vesting schedules'),
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => VestingScheduleDialog(
+        transactions: transactionsWithoutVesting,
+        provider: provider,
+        initialVestingType: VestingType.reverse,
+      ),
+    );
+  }
+
+  void _showAddHybridVesting(BuildContext context, CapTableProvider provider) {
+    final allAcquisitions = provider.transactions
+        .where((t) => t.isAcquisition)
+        .toList();
+    final transactionsWithoutVesting = allAcquisitions.where((t) {
+      return provider.getVestingByTransaction(t.id) == null;
+    }).toList();
+
+    if (transactionsWithoutVesting.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All investments already have vesting schedules'),
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => VestingScheduleDialog(
+        transactions: transactionsWithoutVesting,
+        provider: provider,
+        initialVestingType: VestingType.hybrid,
+      ),
     );
   }
 }
@@ -672,7 +744,7 @@ class _UnifiedVestingCard extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) =>
-          _TimeBasedDetailDialog(schedule: schedule, provider: provider),
+          TimeBasedDetailDialog(schedule: schedule, provider: provider),
     );
   }
 
@@ -695,11 +767,12 @@ class _UnifiedVestingCard extends StatelessWidget {
 
 // ============ Detail Dialogs ============
 
-class _TimeBasedDetailDialog extends StatelessWidget {
+class TimeBasedDetailDialog extends StatelessWidget {
   final VestingSchedule schedule;
   final CapTableProvider provider;
 
-  const _TimeBasedDetailDialog({
+  const TimeBasedDetailDialog({
+    super.key,
     required this.schedule,
     required this.provider,
   });
@@ -1402,23 +1475,62 @@ class _HoursDetailDialog extends StatelessWidget {
                 ...schedule.logEntries
                     .take(5)
                     .map(
-                      (e) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              Formatters.date(e.date),
-                              style: theme.textTheme.bodySmall,
-                            ),
-                            Text(
-                              '+${e.hours.toStringAsFixed(1)}h',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.green,
+                      (e) => InkWell(
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showEditLogEntry(context, e);
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 6,
+                            horizontal: 4,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      Formatters.date(e.date),
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                    if (e.description != null &&
+                                        e.description!.isNotEmpty)
+                                      Text(
+                                        e.description!,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: theme.colorScheme.outline,
+                                            ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '+${e.hours.toStringAsFixed(1)}h',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.edit_outlined,
+                                    size: 14,
+                                    color: theme.colorScheme.outline,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -1435,6 +1547,18 @@ class _HoursDetailDialog extends StatelessWidget {
           },
           icon: const Icon(Icons.add_circle_outline),
           label: const Text('Log Hours'),
+        ),
+        TextButton.icon(
+          onPressed: () {
+            Navigator.pop(context);
+            showDialog(
+              context: context,
+              builder: (context) =>
+                  _HoursVestingDialog(provider: provider, schedule: schedule),
+            );
+          },
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Edit'),
         ),
         TextButton.icon(
           onPressed: () {
@@ -1524,6 +1648,132 @@ class _HoursDetailDialog extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showEditLogEntry(BuildContext context, HoursLogEntry entry) {
+    final hoursController = TextEditingController(
+      text: entry.hours.toStringAsFixed(1),
+    );
+    final notesController = TextEditingController(
+      text: entry.description ?? '',
+    );
+    DateTime date = entry.date;
+    final theme = Theme.of(context);
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Edit Log Entry'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: hoursController,
+                decoration: const InputDecoration(
+                  labelText: 'Hours',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: notesController,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Date'),
+                trailing: TextButton(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: date,
+                      firstDate: schedule.startDate,
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) setState(() => date = picked);
+                  },
+                  child: Text(Formatters.date(date)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _confirmDeleteLogEntry(context, entry);
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+              ),
+              child: const Text('Delete'),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final hours = double.tryParse(hoursController.text);
+                if (hours != null && hours > 0) {
+                  provider.updateLogEntry(
+                    schedule.id,
+                    entry.id,
+                    hours: hours,
+                    date: date,
+                    description: notesController.text.isEmpty
+                        ? null
+                        : notesController.text,
+                  );
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteLogEntry(BuildContext context, HoursLogEntry entry) {
+    final theme = Theme.of(context);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Log Entry'),
+        content: Text(
+          'Are you sure you want to delete this log entry?\n\n'
+          '${Formatters.date(entry.date)} - ${entry.hours.toStringAsFixed(1)} hours\n\n'
+          'This will reduce the total logged hours.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              provider.deleteLogEntry(schedule.id, entry.id);
+              Navigator.pop(context);
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
   }
@@ -1858,7 +2108,18 @@ class _HoursVestingDialogState extends State<_HoursVestingDialog> {
                     ),
                   );
                 }).toList(),
-                onChanged: (v) => setState(() => _transactionId = v),
+                onChanged: (v) {
+                  if (v != null) {
+                    final transaction = investorTransactions.firstWhere(
+                      (t) => t.id == v,
+                    );
+                    setState(() {
+                      _transactionId = v;
+                      // Auto-update start date to match transaction date
+                      _startDate = transaction.date;
+                    });
+                  }
+                },
               ),
             ],
             const SizedBox(height: 16),
@@ -2155,12 +2416,14 @@ class VestingScheduleDialog extends StatefulWidget {
   final List<Transaction> transactions;
   final CapTableProvider provider;
   final VestingSchedule? existingSchedule;
+  final VestingType? initialVestingType;
 
   const VestingScheduleDialog({
     super.key,
     required this.transactions,
     required this.provider,
     this.existingSchedule,
+    this.initialVestingType,
   });
 
   @override
@@ -2186,8 +2449,22 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
     _selectedTransactionId =
         existing?.transactionId ??
         (widget.transactions.isNotEmpty ? widget.transactions.first.id : null);
-    _vestingType = existing?.type ?? VestingType.timeBased;
-    _startDate = existing?.startDate ?? DateTime.now();
+    _vestingType =
+        existing?.type ?? widget.initialVestingType ?? VestingType.timeBased;
+
+    // For new schedules, get start date from selected transaction
+    if (existing != null) {
+      _startDate = existing.startDate;
+    } else if (_selectedTransactionId != null) {
+      final transaction = widget.transactions.firstWhere(
+        (t) => t.id == _selectedTransactionId,
+        orElse: () => widget.transactions.first,
+      );
+      _startDate = transaction.date;
+    } else {
+      _startDate = DateTime.now();
+    }
+
     _vestingPeriodMonths = existing?.vestingPeriodMonths ?? 48;
     _cliffMonths = existing?.cliffMonths ?? 12;
     _frequency = existing?.frequency ?? VestingFrequency.monthly;
@@ -2234,7 +2511,16 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
                       );
                     }).toList(),
                     onChanged: (value) {
-                      setState(() => _selectedTransactionId = value);
+                      if (value != null) {
+                        final transaction = widget.transactions.firstWhere(
+                          (t) => t.id == value,
+                        );
+                        setState(() {
+                          _selectedTransactionId = value;
+                          // Auto-update start date to match transaction date
+                          _startDate = transaction.date;
+                        });
+                      }
                     },
                     validator: (value) =>
                         value == null ? 'Please select an investment' : null,

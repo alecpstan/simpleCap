@@ -356,6 +356,9 @@ class _ShareholderValueCard extends StatelessWidget {
                     final shareClass = provider.getShareClassById(
                       transaction.shareClassId,
                     );
+                    final hasVesting =
+                        provider.getVestingByTransaction(transaction.id) !=
+                        null;
                     final holdingValue =
                         transaction.numberOfShares * provider.latestSharePrice;
                     final holdingGain = holdingValue - transaction.totalAmount;
@@ -399,11 +402,19 @@ class _ShareholderValueCard extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      transactionLabel,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          transactionLabel,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (hasVesting) ...[
+                                          const SizedBox(width: 6),
+                                          const TermChip(label: 'Vesting'),
+                                        ],
+                                      ],
                                     ),
                                     Text(
                                       '${shareClass?.name ?? 'Unknown Class'} • ${Formatters.date(transaction.date)}',
@@ -442,7 +453,9 @@ class _ShareholderValueCard extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  '${Formatters.number(transaction.numberOfShares)} shares',
+                                  hasVesting
+                                      ? '${Formatters.number(provider.getVestedShares(transaction.id))} / ${Formatters.number(transaction.numberOfShares)} shares vested'
+                                      : '${Formatters.number(transaction.numberOfShares)} shares',
                                   style: theme.textTheme.bodySmall,
                                 ),
                               ),

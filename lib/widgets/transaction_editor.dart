@@ -7,6 +7,7 @@ import '../providers/cap_table_provider.dart';
 import '../utils/helpers.dart';
 import 'avatars.dart';
 import 'dialogs.dart';
+import 'investment_dialog.dart';
 
 /// Centralized transaction editing service
 ///
@@ -57,12 +58,18 @@ class TransactionEditor {
         );
 
       case TransactionType.purchase:
-        if (round != null) {
+        // Auto-lookup round if not provided
+        final effectiveRound =
+            round ??
+            (transaction.roundId != null
+                ? provider.getRoundById(transaction.roundId!)
+                : null);
+        if (effectiveRound != null) {
           return await _showRoundInvestmentDialog(
             context: context,
             transaction: transaction,
             provider: provider,
-            round: round,
+            round: effectiveRound,
           );
         }
         return await _showGenericEditDialog(
@@ -181,23 +188,34 @@ class TransactionEditor {
     return result ?? false;
   }
 
-  /// Show round investment edit dialog
+  /// Show round investment edit dialog using the same dialog as Add Investor
   static Future<bool> _showRoundInvestmentDialog({
     required BuildContext context,
     required Transaction transaction,
     required CapTableProvider provider,
     required InvestmentRound round,
   }) async {
-    final result = await showDialog<bool>(
+    final result = await showInvestmentDialog(
       context: context,
-      builder: (context) => RoundInvestmentEditDialog(
-        transaction: transaction,
-        round: round,
-        provider: provider,
-      ),
+      provider: provider,
+      round: round,
+      existingTransaction: transaction,
     );
 
-    return result ?? false;
+    if (result.action == InvestmentDialogAction.deleted) {
+      await provider.deleteTransaction(transaction.id);
+      return true;
+    }
+
+    if (result.action == InvestmentDialogAction.saved &&
+        result.transaction != null) {
+      // Delete old and add updated transaction
+      await provider.deleteTransaction(transaction.id);
+      await provider.addTransaction(result.transaction!);
+      return true;
+    }
+
+    return false;
   }
 }
 
@@ -426,6 +444,22 @@ class _SellSharesDialogState extends State<SellSharesDialog> {
     );
   }
 
+  /// Auto-switch between partial and exit sale types based on shares entered
+  void _autoSwitchSaleType() {
+    // Only auto-switch between partial and exit (not secondary or buyback)
+    if (_saleType != SaleType.partial && _saleType != SaleType.exit) return;
+
+    final shares = int.tryParse(_sharesController.text);
+    if (shares == null || shares <= 0) return;
+
+    final available = _availableSharesAtDate;
+    if (shares >= available && _saleType == SaleType.partial) {
+      setState(() => _saleType = SaleType.exit);
+    } else if (shares < available && _saleType == SaleType.exit) {
+      setState(() => _saleType = SaleType.partial);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -480,6 +514,7 @@ class _SellSharesDialogState extends State<SellSharesDialog> {
 
                 // Sale Type
                 DropdownButtonFormField<SaleType>(
+                  key: ValueKey(_saleType),
                   initialValue: _saleType,
                   decoration: const InputDecoration(
                     labelText: 'Sale Type',
@@ -539,11 +574,13 @@ class _SellSharesDialogState extends State<SellSharesDialog> {
                       onPressed: () {
                         _sharesController.text = _availableSharesAtDate
                             .toString();
+                        _autoSwitchSaleType();
                       },
                       child: const Text('All'),
                     ),
                   ),
                   keyboardType: TextInputType.number,
+                  onChanged: (_) => _autoSwitchSaleType(),
                   validator: (value) {
                     if (value == null || value.isEmpty) return 'Required';
                     final shares = int.tryParse(value);
@@ -792,6 +829,8 @@ class _GenericTransactionEditDialogState
   late TextEditingController _priceController;
   late TextEditingController _notesController;
   late DateTime _date;
+  int _vestedShares = 0;
+  bool _hasVesting = false;
 
   @override
   void initState() {
@@ -806,6 +845,16 @@ class _GenericTransactionEditDialogState
       text: widget.transaction.notes ?? '',
     );
     _date = widget.transaction.date;
+
+    // Check if this transaction has a vesting schedule
+    _vestedShares = widget.provider.getVestedShares(widget.transaction.id);
+    _hasVesting =
+        widget.provider.vestingSchedules.any(
+          (v) => v.transactionId == widget.transaction.id,
+        ) ||
+        widget.provider.hoursVestingSchedules.any(
+          (v) => v.transactionId == widget.transaction.id,
+        );
   }
 
   @override
@@ -861,15 +910,21 @@ class _GenericTransactionEditDialogState
 
                 TextFormField(
                   controller: _sharesController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Number of Shares',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    helperText: _hasVesting && _vestedShares > 0
+                        ? 'Minimum: $_vestedShares (already vested)'
+                        : null,
                   ),
                   keyboardType: TextInputType.number,
                   validator: (value) {
                     if (value == null || value.isEmpty) return 'Required';
                     final shares = int.tryParse(value);
                     if (shares == null || shares <= 0) return 'Invalid number';
+                    if (_hasVesting && shares < _vestedShares) {
+                      return 'Cannot reduce below $_vestedShares vested shares';
+                    }
                     return null;
                   },
                 ),
@@ -998,196 +1053,6 @@ class _GenericTransactionEditDialogState
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Transaction deleted')));
-      }
-    }
-  }
-}
-
-/// Dialog for editing investments in a round
-class RoundInvestmentEditDialog extends StatefulWidget {
-  final Transaction transaction;
-  final InvestmentRound round;
-  final CapTableProvider provider;
-
-  const RoundInvestmentEditDialog({
-    super.key,
-    required this.transaction,
-    required this.round,
-    required this.provider,
-  });
-
-  @override
-  State<RoundInvestmentEditDialog> createState() =>
-      _RoundInvestmentEditDialogState();
-}
-
-class _RoundInvestmentEditDialogState extends State<RoundInvestmentEditDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _sharesController;
-  late TextEditingController _priceController;
-  late TextEditingController _notesController;
-
-  @override
-  void initState() {
-    super.initState();
-    _sharesController = TextEditingController(
-      text: widget.transaction.numberOfShares.toString(),
-    );
-    _priceController = TextEditingController(
-      text: widget.transaction.pricePerShare.toStringAsFixed(2),
-    );
-    _notesController = TextEditingController(
-      text: widget.transaction.notes ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _sharesController.dispose();
-    _priceController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final investor = widget.provider.getInvestorById(
-      widget.transaction.investorId,
-    );
-
-    return AlertDialog(
-      title: Text('Edit Investment - ${investor?.name ?? "Unknown"}'),
-      content: SizedBox(
-        width: 400,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.business_center, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.round.name,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _sharesController,
-                decoration: const InputDecoration(
-                  labelText: 'Number of Shares',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Required';
-                  final shares = int.tryParse(value);
-                  if (shares == null || shares <= 0) return 'Invalid number';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _priceController,
-                decoration: const InputDecoration(
-                  labelText: 'Price per Share',
-                  border: OutlineInputBorder(),
-                  prefixText: '\$ ',
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Required';
-                  final price = double.tryParse(value);
-                  if (price == null || price < 0) return 'Invalid price';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _notesController,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optional)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: _delete,
-          style: TextButton.styleFrom(foregroundColor: Colors.red),
-          child: const Text('Delete'),
-        ),
-        FilledButton(onPressed: _save, child: const Text('Save')),
-      ],
-    );
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final shares = int.parse(_sharesController.text);
-    final price = double.parse(_priceController.text);
-    final notes = _notesController.text.isEmpty ? null : _notesController.text;
-
-    final updated = widget.transaction.copyWith(
-      numberOfShares: shares,
-      pricePerShare: price,
-      totalAmount: shares * price,
-      notes: notes,
-    );
-
-    await widget.provider.deleteTransaction(widget.transaction.id);
-    await widget.provider.addTransaction(updated);
-
-    if (mounted) {
-      Navigator.pop(context, true);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Investment updated')));
-    }
-  }
-
-  Future<void> _delete() async {
-    final confirmed = await showConfirmDialog(
-      context: context,
-      title: 'Delete Investment',
-      message: 'Are you sure you want to delete this investment?',
-    );
-
-    if (confirmed) {
-      await widget.provider.deleteTransaction(widget.transaction.id);
-      if (mounted) {
-        Navigator.pop(context, true);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Investment deleted')));
       }
     }
   }

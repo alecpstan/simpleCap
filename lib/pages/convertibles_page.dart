@@ -153,7 +153,7 @@ class ConvertiblesPage extends StatelessWidget {
   ) {
     showDialog(
       context: context,
-      builder: (context) => _ConvertibleDetailsDialog(
+      builder: (context) => ConvertibleDetailsDialog(
         convertible: convertible,
         provider: provider,
       ),
@@ -220,7 +220,7 @@ class ConvertiblesPage extends StatelessWidget {
   ) {
     showDialog(
       context: context,
-      builder: (context) => _ConvertibleDialog(provider: provider),
+      builder: (context) => ConvertibleDialog(provider: provider),
     );
   }
 
@@ -355,17 +355,21 @@ class ConvertiblesPage extends StatelessWidget {
   }
 }
 
-class _ConvertibleDialog extends StatefulWidget {
+class ConvertibleDialog extends StatefulWidget {
   final CapTableProvider provider;
   final ConvertibleInstrument? convertible;
 
-  const _ConvertibleDialog({required this.provider, this.convertible});
+  const ConvertibleDialog({
+    super.key,
+    required this.provider,
+    this.convertible,
+  });
 
   @override
-  State<_ConvertibleDialog> createState() => _ConvertibleDialogState();
+  State<ConvertibleDialog> createState() => _ConvertibleDialogState();
 }
 
-class _ConvertibleDialogState extends State<_ConvertibleDialog> {
+class _ConvertibleDialogState extends State<ConvertibleDialog> {
   late ConvertibleType _type;
   String? _investorId;
   final _principalController = TextEditingController();
@@ -440,18 +444,24 @@ class _ConvertibleDialogState extends State<_ConvertibleDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Investor dropdown
-            DropdownButtonFormField<String>(
-              initialValue: _investorId,
-              decoration: const InputDecoration(
-                labelText: 'Investor',
-                border: OutlineInputBorder(),
+            // Investor (locked when editing)
+            if (isEditing) ...[
+              _buildLockedInvestorTile(
+                widget.provider.getInvestorById(_investorId!),
               ),
-              items: widget.provider.investors.map((inv) {
-                return DropdownMenuItem(value: inv.id, child: Text(inv.name));
-              }).toList(),
-              onChanged: (value) => setState(() => _investorId = value),
-            ),
+            ] else ...[
+              DropdownButtonFormField<String>(
+                initialValue: _investorId,
+                decoration: const InputDecoration(
+                  labelText: 'Investor',
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.provider.investors.map((inv) {
+                  return DropdownMenuItem(value: inv.id, child: Text(inv.name));
+                }).toList(),
+                onChanged: (value) => setState(() => _investorId = value),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Principal
@@ -630,6 +640,45 @@ class _ConvertibleDialogState extends State<_ConvertibleDialog> {
     Navigator.pop(context);
   }
 
+  Widget _buildLockedInvestorTile(Investor? investor) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          InvestorAvatar(
+            name: investor?.name ?? '?',
+            type: investor?.type,
+            radius: 16,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  investor?.name ?? 'Unknown',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  'Investor',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _principalController.dispose();
@@ -640,29 +689,57 @@ class _ConvertibleDialogState extends State<_ConvertibleDialog> {
   }
 }
 
-class _ConversionDialog extends StatefulWidget {
+class ConversionDialog extends StatefulWidget {
   final CapTableProvider provider;
   final ConvertibleInstrument convertible;
 
-  const _ConversionDialog({required this.provider, required this.convertible});
+  const ConversionDialog({
+    super.key,
+    required this.provider,
+    required this.convertible,
+  });
 
   @override
-  State<_ConversionDialog> createState() => _ConversionDialogState();
+  State<ConversionDialog> createState() => _ConversionDialogState();
 }
 
-class _ConversionDialogState extends State<_ConversionDialog> {
+enum _ConversionMode { atRound, atValuation }
+
+class _ConversionDialogState extends State<ConversionDialog> {
+  _ConversionMode _mode = _ConversionMode.atRound;
   String? _roundId;
   String? _shareClassId;
+  final _valuationController = TextEditingController();
+  late DateTime _conversionDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _conversionDate = DateTime.now();
+
+    // If no rounds exist, default to valuation mode
+    if (widget.provider.rounds.isEmpty) {
+      _mode = _ConversionMode.atValuation;
+    }
+  }
+
+  @override
+  void dispose() {
+    _valuationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final provider = widget.provider;
     final convertible = widget.convertible;
 
-    // Calculate conversion details if round selected
+    // Calculate conversion details based on mode
     int? shares;
     double? pps;
-    if (_roundId != null) {
+
+    if (_mode == _ConversionMode.atRound && _roundId != null) {
       final round = provider.getRoundById(_roundId!);
       if (round != null) {
         final issuedBefore = provider.getIssuedSharesBeforeRound(_roundId!);
@@ -675,107 +752,204 @@ class _ConversionDialogState extends State<_ConversionDialog> {
           issuedSharesBeforeRound: issuedBefore,
         );
       }
+    } else if (_mode == _ConversionMode.atValuation) {
+      final valuation = double.tryParse(_valuationController.text);
+      if (valuation != null && valuation > 0) {
+        final issuedShares = provider.totalCurrentShares;
+        pps = convertible.calculateConversionPPS(
+          roundPreMoney: valuation,
+          issuedSharesBeforeRound: issuedShares,
+        );
+        shares = convertible.calculateConversionShares(
+          roundPreMoney: valuation,
+          issuedSharesBeforeRound: issuedShares,
+        );
+      }
     }
 
     return AlertDialog(
       title: const Text('Convert to Equity'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Convertible summary
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Principal: ${Formatters.currency(convertible.principalAmount)}',
-                    ),
-                    Text(
-                      'Accrued Interest: ${Formatters.currency(convertible.accruedInterest)}',
-                    ),
-                    const Divider(),
-                    Text(
-                      'Total: ${Formatters.currency(convertible.convertibleAmount)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    if (convertible.valuationCap != null)
-                      Text(
-                        'Cap: ${Formatters.compactCurrency(convertible.valuationCap!)}',
-                      ),
-                    if (convertible.discountPercent != null)
-                      Text(
-                        'Discount: ${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Round selection
-            DropdownButtonFormField<String>(
-              initialValue: _roundId,
-              decoration: const InputDecoration(
-                labelText: 'Converting in Round',
-                border: OutlineInputBorder(),
-              ),
-              items: provider.rounds.map((r) {
-                return DropdownMenuItem(value: r.id, child: Text(r.name));
-              }).toList(),
-              onChanged: (value) => setState(() => _roundId = value),
-            ),
-            const SizedBox(height: 16),
-
-            // Share class selection
-            DropdownButtonFormField<String>(
-              initialValue: _shareClassId,
-              decoration: const InputDecoration(
-                labelText: 'Share Class',
-                border: OutlineInputBorder(),
-              ),
-              items: provider.shareClasses.map((sc) {
-                return DropdownMenuItem(value: sc.id, child: Text(sc.name));
-              }).toList(),
-              onChanged: (value) => setState(() => _shareClassId = value),
-            ),
-            const SizedBox(height: 16),
-
-            // Conversion preview
-            if (pps != null && shares != null)
+        child: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Convertible summary
               Card(
-                color: Theme.of(context).colorScheme.primaryContainer,
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Conversion Preview',
-                        style: TextStyle(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        'Principal: ${Formatters.currency(convertible.principalAmount)}',
                       ),
-                      const SizedBox(height: 8),
-                      Text('Price per Share: ${Formatters.currency(pps)}'),
                       Text(
-                        'Shares to Issue: ${Formatters.number(shares)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
+                        'Accrued Interest: ${Formatters.currency(convertible.accruedInterest)}',
                       ),
+                      const Divider(),
+                      Text(
+                        'Total: ${Formatters.currency(convertible.convertibleAmount)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      if (convertible.valuationCap != null)
+                        Text(
+                          'Cap: ${Formatters.compactCurrency(convertible.valuationCap!)}',
+                        ),
+                      if (convertible.discountPercent != null)
+                        Text(
+                          'Discount: ${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
+                        ),
                     ],
                   ),
                 ),
               ),
-          ],
+              const SizedBox(height: 16),
+
+              // Conversion mode selector
+              Text(
+                'Conversion Trigger',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<_ConversionMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: _ConversionMode.atRound,
+                    label: Text('At Round'),
+                    icon: Icon(Icons.account_balance, size: 18),
+                  ),
+                  ButtonSegment(
+                    value: _ConversionMode.atValuation,
+                    label: Text('At Valuation'),
+                    icon: Icon(Icons.attach_money, size: 18),
+                  ),
+                ],
+                selected: {_mode},
+                onSelectionChanged: (selection) {
+                  setState(() {
+                    _mode = selection.first;
+                    // Clear the other selection
+                    if (_mode == _ConversionMode.atRound) {
+                      _valuationController.clear();
+                    } else {
+                      _roundId = null;
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Mode-specific inputs
+              if (_mode == _ConversionMode.atRound) ...[
+                // Round selection
+                DropdownButtonFormField<String>(
+                  key: ValueKey('round_$_roundId'),
+                  initialValue: _roundId,
+                  decoration: const InputDecoration(
+                    labelText: 'Converting in Round',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: provider.rounds.map((r) {
+                    return DropdownMenuItem(value: r.id, child: Text(r.name));
+                  }).toList(),
+                  onChanged: (value) => setState(() => _roundId = value),
+                ),
+              ] else ...[
+                // Valuation input
+                TextFormField(
+                  controller: _valuationController,
+                  decoration: const InputDecoration(
+                    labelText: 'Valuation',
+                    border: OutlineInputBorder(),
+                    prefixText: '\$ ',
+                    helperText:
+                        'Company valuation for conversion (e.g., maturity, M&A)',
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 12),
+                // Conversion date
+                InkWell(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _conversionDate,
+                      firstDate: convertible.issueDate,
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (date != null) {
+                      setState(() => _conversionDate = date);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Conversion Date',
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(Formatters.date(_conversionDate)),
+                        const Icon(Icons.calendar_today, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+
+              // Share class selection
+              DropdownButtonFormField<String>(
+                key: ValueKey('shareclass_$_shareClassId'),
+                initialValue: _shareClassId,
+                decoration: const InputDecoration(
+                  labelText: 'Share Class',
+                  border: OutlineInputBorder(),
+                ),
+                items: provider.shareClasses.map((sc) {
+                  return DropdownMenuItem(value: sc.id, child: Text(sc.name));
+                }).toList(),
+                onChanged: (value) => setState(() => _shareClassId = value),
+              ),
+              const SizedBox(height: 16),
+
+              // Conversion preview
+              if (pps != null && shares != null)
+                Card(
+                  color: theme.colorScheme.primaryContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Conversion Preview',
+                          style: TextStyle(
+                            color: theme.colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Price per Share: ${Formatters.currency(pps)}'),
+                        Text(
+                          'Shares to Issue: ${Formatters.number(shares)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -791,16 +965,34 @@ class _ConversionDialogState extends State<_ConversionDialog> {
     );
   }
 
-  bool _canConvert() => _roundId != null && _shareClassId != null;
+  bool _canConvert() {
+    if (_shareClassId == null) return false;
+    if (_mode == _ConversionMode.atRound) {
+      return _roundId != null;
+    } else {
+      final valuation = double.tryParse(_valuationController.text);
+      return valuation != null && valuation > 0;
+    }
+  }
 
   void _convert() {
-    final round = widget.provider.getRoundById(_roundId!);
-    widget.provider.convertConvertible(
-      widget.convertible.id,
-      _shareClassId!,
-      _roundId!,
-      round?.date ?? DateTime.now(),
-    );
+    if (_mode == _ConversionMode.atRound) {
+      final round = widget.provider.getRoundById(_roundId!);
+      widget.provider.convertConvertible(
+        widget.convertible.id,
+        _shareClassId!,
+        _roundId!,
+        round?.date ?? DateTime.now(),
+      );
+    } else {
+      final valuation = double.parse(_valuationController.text);
+      widget.provider.convertConvertibleAtValuation(
+        widget.convertible.id,
+        _shareClassId!,
+        valuation,
+        _conversionDate,
+      );
+    }
     Navigator.pop(context);
   }
 }
@@ -947,11 +1139,12 @@ class _TermChip extends StatelessWidget {
 }
 
 /// Compact dialog for viewing convertible details (matching Options style)
-class _ConvertibleDetailsDialog extends StatelessWidget {
+class ConvertibleDetailsDialog extends StatelessWidget {
   final ConvertibleInstrument convertible;
   final CapTableProvider provider;
 
-  const _ConvertibleDetailsDialog({
+  const ConvertibleDetailsDialog({
+    super.key,
     required this.convertible,
     required this.provider,
   });
@@ -1194,7 +1387,7 @@ class _ConvertibleDetailsDialog extends StatelessWidget {
                   Navigator.pop(context);
                   showDialog(
                     context: context,
-                    builder: (context) => _ConversionDialog(
+                    builder: (context) => ConversionDialog(
                       convertible: convertible,
                       provider: provider,
                     ),
@@ -1212,7 +1405,7 @@ class _ConvertibleDetailsDialog extends StatelessWidget {
                   Navigator.pop(context);
                   showDialog(
                     context: context,
-                    builder: (context) => _ConvertibleDialog(
+                    builder: (context) => ConvertibleDialog(
                       provider: provider,
                       convertible: convertible,
                     ),

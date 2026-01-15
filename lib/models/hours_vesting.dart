@@ -200,6 +200,87 @@ class HoursVestingSchedule {
     }
   }
 
+  /// Update a log entry and recalculate totals
+  void updateLogEntry(
+    String entryId, {
+    double? hours,
+    DateTime? date,
+    String? description,
+  }) {
+    final entryIndex = logEntries.indexWhere((e) => e.id == entryId);
+    if (entryIndex == -1) return;
+
+    final oldEntry = logEntries[entryIndex];
+    final hoursDiff = (hours ?? oldEntry.hours) - oldEntry.hours;
+
+    // Update hoursLogged with the difference
+    hoursLogged += hoursDiff;
+
+    // Create updated entry (entries are immutable, so we replace)
+    logEntries[entryIndex] = HoursLogEntry(
+      id: entryId,
+      hours: hours ?? oldEntry.hours,
+      date: date ?? oldEntry.date,
+      description: description ?? oldEntry.description,
+      cumulativeHours: oldEntry.cumulativeHours + hoursDiff,
+    );
+
+    // Recalculate cumulative hours for all entries after this one
+    _recalculateCumulativeHours();
+    _recheckBonusMilestones();
+  }
+
+  /// Delete a log entry and recalculate totals
+  void deleteLogEntry(String entryId) {
+    final entryIndex = logEntries.indexWhere((e) => e.id == entryId);
+    if (entryIndex == -1) return;
+
+    final entry = logEntries[entryIndex];
+    hoursLogged -= entry.hours;
+    if (hoursLogged < 0) hoursLogged = 0;
+
+    logEntries.removeAt(entryIndex);
+
+    // Recalculate cumulative hours for remaining entries
+    _recalculateCumulativeHours();
+    _recheckBonusMilestones();
+  }
+
+  /// Recalculate cumulative hours for all entries (after edit/delete)
+  void _recalculateCumulativeHours() {
+    // Sort entries by date
+    logEntries.sort((a, b) => a.date.compareTo(b.date));
+
+    double cumulative = 0;
+    for (int i = 0; i < logEntries.length; i++) {
+      cumulative += logEntries[i].hours;
+      // Entries are immutable, so we need to replace
+      logEntries[i] = HoursLogEntry(
+        id: logEntries[i].id,
+        hours: logEntries[i].hours,
+        date: logEntries[i].date,
+        description: logEntries[i].description,
+        cumulativeHours: cumulative,
+      );
+    }
+  }
+
+  /// Recheck bonus milestones after hours change
+  void _recheckBonusMilestones() {
+    for (final milestone in bonusMilestones) {
+      if (hoursLogged >= milestone.hoursRequired) {
+        if (!milestone.isAchieved) {
+          milestone.isAchieved = true;
+          milestone.achievedDate = DateTime.now();
+        }
+      } else {
+        // Unachieve if hours dropped below threshold
+        milestone.isAchieved = false;
+        milestone.achievedDate = null;
+      }
+    }
+  }
+
   String get curveTypeDisplayName {
     switch (curveType) {
       case HoursVestingCurve.linear:

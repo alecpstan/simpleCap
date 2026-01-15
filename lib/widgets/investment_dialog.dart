@@ -88,6 +88,20 @@ Future<InvestmentDialogResult> showInvestmentDialog({
     text: existingTransaction?.totalAmount.toStringAsFixed(2) ?? '',
   );
 
+  // Check if this transaction has vesting
+  final int vestedShares = existingTransaction != null
+      ? provider.getVestedShares(existingTransaction.id)
+      : 0;
+  final bool hasVesting =
+      existingTransaction != null &&
+      (provider.vestingSchedules.any(
+            (v) => v.transactionId == existingTransaction.id,
+          ) ||
+          provider.hoursVestingSchedules.any(
+            (v) => v.transactionId == existingTransaction.id,
+          ));
+  String? sharesError;
+
   void recalculateFromSharesAndPrice() {
     final shares = int.tryParse(sharesController.text) ?? 0;
     final price = double.tryParse(priceController.text) ?? 0;
@@ -184,10 +198,24 @@ Future<InvestmentDialogResult> showInvestmentDialog({
                     suffixIcon: const HelpIcon(
                       helpKey: 'fields.numberOfShares',
                     ),
+                    helperText: hasVesting && vestedShares > 0
+                        ? 'Minimum: $vestedShares (already vested)'
+                        : null,
+                    errorText: sharesError,
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   onChanged: (value) {
+                    // Validate against vested shares
+                    final shares = int.tryParse(value) ?? 0;
+                    setState(() {
+                      if (hasVesting && shares < vestedShares) {
+                        sharesError =
+                            'Cannot reduce below $vestedShares vested shares';
+                      } else {
+                        sharesError = null;
+                      }
+                    });
                     // When shares change, recalculate total from shares × price
                     recalculateFromSharesAndPrice();
                   },
@@ -282,6 +310,12 @@ Future<InvestmentDialogResult> showInvestmentDialog({
       selectedShareClassId != null &&
       sharesController.text.isNotEmpty) {
     final numberOfShares = int.parse(sharesController.text);
+
+    // Validate against vested shares
+    if (hasVesting && numberOfShares < vestedShares) {
+      return InvestmentDialogResult.cancelled();
+    }
+
     final pricePerShare = double.tryParse(priceController.text) ?? 1.0;
     final totalAmount =
         double.tryParse(amountController.text) ??

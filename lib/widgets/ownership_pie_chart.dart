@@ -6,16 +6,26 @@ import '../utils/helpers.dart';
 
 class OwnershipPieChart extends StatelessWidget {
   final bool showByShareClass;
+  final bool showVestedOnly;
 
-  const OwnershipPieChart({super.key, this.showByShareClass = false});
+  const OwnershipPieChart({
+    super.key,
+    this.showByShareClass = false,
+    this.showVestedOnly = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Consumer<CapTableProvider>(
       builder: (context, provider, child) {
-        final ownership = showByShareClass
-            ? provider.getOwnershipByShareClass()
-            : provider.getOwnershipByInvestor();
+        final Map<String, double> ownership;
+        if (showByShareClass) {
+          ownership = provider.getOwnershipByShareClass();
+        } else if (showVestedOnly) {
+          ownership = provider.getVestedOwnershipByInvestor();
+        } else {
+          ownership = provider.getOwnershipByInvestor();
+        }
 
         if (ownership.isEmpty) {
           return const Center(child: Text('No shareholdings yet'));

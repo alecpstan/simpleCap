@@ -15,6 +15,7 @@ import '../widgets/valuation_wizard.dart';
 import '../widgets/help_icon.dart';
 import '../widgets/transaction_editor.dart';
 import '../widgets/stat_pill.dart';
+import '../widgets/info_widgets.dart';
 import '../utils/helpers.dart';
 
 class RoundsPage extends StatelessWidget {
@@ -1051,6 +1052,7 @@ class _RoundCardState extends State<_RoundCard> {
     final theme = Theme.of(context);
     final investor = provider.getInvestorById(t.investorId);
     final shareClass = provider.getShareClassById(t.shareClassId);
+    final hasVesting = provider.getVestingByTransaction(t.id) != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1077,9 +1079,17 @@ class _RoundCardState extends State<_RoundCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      investor?.name ?? 'Unknown',
-                      style: theme.textTheme.bodyMedium,
+                    Row(
+                      children: [
+                        Text(
+                          investor?.name ?? 'Unknown',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        if (hasVesting) ...[
+                          const SizedBox(width: 6),
+                          const TermChip(label: 'Vesting'),
+                        ],
+                      ],
                     ),
                     Text(
                       shareClass?.name ?? 'Unknown class',
