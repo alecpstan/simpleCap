@@ -9,6 +9,7 @@ import '../models/milestone.dart';
 import '../models/hours_vesting.dart';
 import '../models/tax_rule.dart';
 import '../models/option_grant.dart';
+import '../models/esop_pool_change.dart';
 import '../services/storage_service.dart';
 import '../utils/esop_helpers.dart' as esop;
 
@@ -40,6 +41,7 @@ class CapTableProvider extends ChangeNotifier {
   // === Task 2.1: ESOP dilution settings ===
   EsopDilutionMethod _esopDilutionMethod = EsopDilutionMethod.preRoundCap;
   double _esopPoolPercent = 10.0; // Default 10% ESOP pool
+  List<EsopPoolChange> _esopPoolChanges = []; // Pool change history
 
   // === Task 2.7: Authorized shares ===
   int _authorizedShares = 0;
@@ -65,6 +67,9 @@ class CapTableProvider extends ChangeNotifier {
   // ESOP settings getters
   EsopDilutionMethod get esopDilutionMethod => _esopDilutionMethod;
   double get esopPoolPercent => _esopPoolPercent;
+  List<EsopPoolChange> get esopPoolChanges => List.unmodifiable(
+    _esopPoolChanges..sort((a, b) => a.date.compareTo(b.date)),
+  );
 
   // Authorized shares getter
   int get authorizedShares => _authorizedShares;
@@ -148,50 +153,31 @@ class CapTableProvider extends ChangeNotifier {
         });
   }
 
-  /// Unallocated ESOP pool shares (total ESOP - allocated to employees)
+  /// Total ESOP pool shares (sum of all pool changes)
+  /// This is the total pool that can be allocated via option grants
   int get esopPoolShares {
-    final esopClasses = _shareClasses
-        .where((s) => s.type == ShareClassType.esop)
-        .map((s) => s.id)
-        .toSet();
-
-    if (esopClasses.isEmpty) return 0;
-
-    // Total ESOP shares created
-    return _transactions
-        .where((t) => esopClasses.contains(t.shareClassId))
-        .fold(0, (sum, t) => sum + t.sharesDelta);
+    if (_esopPoolChanges.isEmpty) return 0;
+    final total = _esopPoolChanges.fold(0, (sum, c) => sum + c.sharesDelta);
+    return total > 0 ? total : 0;
   }
 
-  /// ESOP shares that are unallocated (pool - allocated to specific employees)
+  /// Allocated ESOP shares = option grants that are still active
+  /// (not cancelled/forfeited). Includes both exercised and un-exercised.
+  int get allocatedEsopShares {
+    return _optionGrants
+        .where(
+          (g) =>
+              g.status != OptionGrantStatus.cancelled &&
+              g.status != OptionGrantStatus.forfeited,
+        )
+        .fold(0, (sum, g) => sum + g.numberOfOptions - g.cancelledCount);
+  }
+
+  /// ESOP shares that are unallocated (pool - allocated option grants)
   int get unallocatedEsopShares {
-    final esopClasses = _shareClasses
-        .where((s) => s.type == ShareClassType.esop)
-        .map((s) => s.id)
-        .toSet();
-
-    if (esopClasses.isEmpty) return 0;
-
-    // Find the ESOP pool holder (typically institution or designated holder)
-    final esopPoolHolders = _investors
-        .where(
-          (i) =>
-              i.type == InvestorType.institution ||
-              i.name.toLowerCase().contains('esop'),
-        )
-        .map((i) => i.id)
-        .toSet();
-
-    // Total ESOP in pool (held by pool holder)
-    final poolShares = _transactions
-        .where(
-          (t) =>
-              esopClasses.contains(t.shareClassId) &&
-              esopPoolHolders.contains(t.investorId),
-        )
-        .fold(0, (sum, t) => sum + t.sharesDelta);
-
-    return poolShares > 0 ? poolShares : 0;
+    final total = esopPoolShares;
+    final allocated = allocatedEsopShares;
+    return total > allocated ? total - allocated : 0;
   }
 
   /// Fully diluted share count (Task 1.1 - Fixed to include ESOP)
@@ -229,11 +215,61 @@ class CapTableProvider extends ChangeNotifier {
     _save();
   }
 
+  /// Update ESOP settings (target percentage and dilution method)
+  Future<void> updateEsopSettings({
+    double? targetPercent,
+    EsopDilutionMethod? dilutionMethod,
+  }) async {
+    if (targetPercent != null) {
+      _esopPoolPercent = targetPercent.clamp(0, 30);
+    }
+    if (dilutionMethod != null) {
+      _esopDilutionMethod = dilutionMethod;
+    }
+    notifyListeners();
+    await _save();
+  }
+
   /// Set authorized shares (Task 2.7)
   void setAuthorizedShares(int shares) {
     _authorizedShares = shares;
     notifyListeners();
     _save();
+  }
+
+  // === ESOP Pool Change CRUD ===
+
+  /// Add a pool change (addition or subtraction)
+  Future<void> addEsopPoolChange(EsopPoolChange change) async {
+    _esopPoolChanges.add(change);
+    await _save();
+    notifyListeners();
+  }
+
+  /// Update an existing pool change
+  Future<void> updateEsopPoolChange(EsopPoolChange change) async {
+    final index = _esopPoolChanges.indexWhere((c) => c.id == change.id);
+    if (index != -1) {
+      _esopPoolChanges[index] = change;
+      await _save();
+      notifyListeners();
+    }
+  }
+
+  /// Delete a pool change
+  Future<void> deleteEsopPoolChange(String id) async {
+    _esopPoolChanges.removeWhere((c) => c.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  /// Get a pool change by ID
+  EsopPoolChange? getEsopPoolChangeById(String id) {
+    try {
+      return _esopPoolChanges.firstWhere((c) => c.id == id);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Remaining shares that can be issued (authorized - issued)
@@ -347,6 +383,21 @@ class CapTableProvider extends ChangeNotifier {
           EsopDilutionMethod.values[data['esopDilutionMethod'] ??
               EsopDilutionMethod.preRoundCap.index];
       _esopPoolPercent = (data['esopPoolPercent'] ?? 10.0).toDouble();
+      _esopPoolChanges =
+          (data['esopPoolChanges'] as List<dynamic>?)
+              ?.map((e) => EsopPoolChange.fromJson(e))
+              .toList() ??
+          [];
+      // Migration: convert old reservedEsopShares to pool change
+      if (_esopPoolChanges.isEmpty && (data['reservedEsopShares'] ?? 0) > 0) {
+        _esopPoolChanges.add(
+          EsopPoolChange(
+            date: DateTime.now(),
+            sharesDelta: data['reservedEsopShares'],
+            notes: 'Migrated from previous version',
+          ),
+        );
+      }
       _authorizedShares = data['authorizedShares'] ?? 0;
     } catch (e) {
       debugPrint('Error loading data: $e');
@@ -393,6 +444,7 @@ class CapTableProvider extends ChangeNotifier {
       hoursVestingSchedules: _hoursVestingSchedules,
       taxRules: _taxRules,
       optionGrants: _optionGrants,
+      esopPoolChanges: _esopPoolChanges,
       companyName: _companyName,
       tableColumnWidths: _tableColumnWidths,
       themeModeIndex: _themeModeIndex,
@@ -1299,6 +1351,94 @@ class CapTableProvider extends ChangeNotifier {
     return _optionGrants.where((g) => g.investorId == investorId).toList();
   }
 
+  /// Get vesting percentage for an option grant
+  double getOptionVestingPercent(OptionGrant grant) {
+    if (grant.vestingScheduleId == null) return 100.0;
+    final vesting = getVestingScheduleById(grant.vestingScheduleId!);
+    if (vesting == null) return 100.0;
+    return vesting.vestingPercentage;
+  }
+
+  /// Get total vested options for a grant
+  int getVestedOptionsForGrant(OptionGrant grant) {
+    final vestingPercent = getOptionVestingPercent(grant);
+    return grant.vestedOptionsCount(vestingPercent);
+  }
+
+  /// Get exercisable options for a grant (vested minus exercised)
+  int getExercisableOptionsForGrant(OptionGrant grant) {
+    final vestingPercent = getOptionVestingPercent(grant);
+    return grant.exercisableOptionsCount(vestingPercent);
+  }
+
+  /// Get vested intrinsic value for a grant
+  double getVestedIntrinsicValueForGrant(OptionGrant grant) {
+    final vestingPercent = getOptionVestingPercent(grant);
+    return grant.vestedIntrinsicValue(latestSharePrice, vestingPercent);
+  }
+
+  /// Get total vested options for an investor across all their grants
+  int getVestedOptionsByInvestor(String investorId) {
+    final grants = getOptionGrantsByInvestor(investorId);
+    return grants.fold(0, (sum, g) {
+      if (g.status == OptionGrantStatus.cancelled ||
+          g.status == OptionGrantStatus.forfeited) {
+        return sum;
+      }
+      return sum + getVestedOptionsForGrant(g);
+    });
+  }
+
+  /// Get total exercisable options for an investor (vested - exercised)
+  int getExercisableOptionsByInvestor(String investorId) {
+    final grants = getOptionGrantsByInvestor(investorId);
+    return grants.fold(0, (sum, g) {
+      if (g.status == OptionGrantStatus.cancelled ||
+          g.status == OptionGrantStatus.forfeited ||
+          g.status == OptionGrantStatus.expired) {
+        return sum;
+      }
+      return sum + getExercisableOptionsForGrant(g);
+    });
+  }
+
+  /// Get total vested options value for an investor
+  double getVestedOptionsValueByInvestor(String investorId) {
+    final grants = getOptionGrantsByInvestor(investorId);
+    return grants.fold(0.0, (sum, g) {
+      if (g.status == OptionGrantStatus.cancelled ||
+          g.status == OptionGrantStatus.forfeited ||
+          g.status == OptionGrantStatus.expired) {
+        return sum;
+      }
+      return sum + getVestedIntrinsicValueForGrant(g);
+    });
+  }
+
+  /// Get total vested options across all investors
+  int get totalVestedOptions {
+    return activeOptionGrants.fold(
+      0,
+      (sum, g) => sum + getVestedOptionsForGrant(g),
+    );
+  }
+
+  /// Get total exercisable options across all investors
+  int get totalExercisableOptions {
+    return activeOptionGrants.fold(
+      0,
+      (sum, g) => sum + getExercisableOptionsForGrant(g),
+    );
+  }
+
+  /// Get total vested intrinsic value across all option grants
+  double get totalVestedIntrinsicValue {
+    return activeOptionGrants.fold(
+      0.0,
+      (sum, g) => sum + getVestedIntrinsicValueForGrant(g),
+    );
+  }
+
   /// Exercise options - creates a transaction and updates the grant
   Future<bool> exerciseOptions({
     required String grantId,
@@ -1460,7 +1600,11 @@ class CapTableProvider extends ChangeNotifier {
   }
 
   // Analysis methods
-  Map<String, double> getOwnershipByInvestor() {
+
+  /// Special ID for ESOP pool in ownership charts
+  static const String esopPoolId = '__ESOP_POOL__';
+
+  Map<String, double> getOwnershipByInvestor({bool includeEsopPool = true}) {
     final Map<String, int> sharesByInvestor = {};
     for (var investor in _investors) {
       final currentShares = getCurrentSharesByInvestor(investor.id);
@@ -1469,7 +1613,14 @@ class CapTableProvider extends ChangeNotifier {
       }
     }
 
-    final total = totalCurrentShares;
+    // Include ESOP pool as a separate entry if it has shares
+    final esopPool = esopPoolShares;
+    if (includeEsopPool && esopPool > 0) {
+      sharesByInvestor[esopPoolId] = esopPool;
+    }
+
+    // Total includes investor shares + ESOP pool
+    final total = totalCurrentShares + (includeEsopPool ? esopPool : 0);
     if (total == 0) return {};
 
     return sharesByInvestor.map(
@@ -1477,7 +1628,10 @@ class CapTableProvider extends ChangeNotifier {
     );
   }
 
-  Map<String, double> getOwnershipByShareClass() {
+  /// Check if an ID is the special ESOP pool ID
+  bool isEsopPoolId(String id) => id == esopPoolId;
+
+  Map<String, double> getOwnershipByShareClass({bool includeEsopPool = true}) {
     final Map<String, int> sharesByClass = {};
 
     // Use transactions to calculate current shares by class

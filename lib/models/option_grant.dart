@@ -121,10 +121,33 @@ class OptionGrant {
   /// Total value at strike price
   double get totalStrikeValue => numberOfOptions * strikePrice;
 
-  /// Calculate intrinsic value given current share price
+  /// Calculate intrinsic value given current share price (uses all remaining options)
   double intrinsicValue(double currentPrice) {
     if (currentPrice <= strikePrice) return 0;
     return remainingOptions * (currentPrice - strikePrice);
+  }
+
+  /// Calculate intrinsic value for vested options only (exercisable value)
+  /// This is more accurate as you can only exercise vested options
+  double vestedIntrinsicValue(double currentPrice, double vestingPercent) {
+    if (currentPrice <= strikePrice) return 0;
+    final vestedOptions = (numberOfOptions * vestingPercent / 100).round();
+    final exercisableOptions = (vestedOptions - exercisedCount).clamp(
+      0,
+      remainingOptions,
+    );
+    return exercisableOptions * (currentPrice - strikePrice);
+  }
+
+  /// Get number of vested options based on vesting percentage
+  int vestedOptionsCount(double vestingPercent) {
+    return (numberOfOptions * vestingPercent / 100).round();
+  }
+
+  /// Get exercisable options (vested minus already exercised)
+  int exercisableOptionsCount(double vestingPercent) {
+    final vested = vestedOptionsCount(vestingPercent);
+    return (vested - exercisedCount).clamp(0, remainingOptions);
   }
 
   /// Display name for status

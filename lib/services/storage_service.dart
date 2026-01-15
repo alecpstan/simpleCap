@@ -12,6 +12,7 @@ import '../models/milestone.dart';
 import '../models/hours_vesting.dart';
 import '../models/tax_rule.dart';
 import '../models/option_grant.dart';
+import '../models/esop_pool_change.dart';
 
 class StorageService {
   static const String _fileName = 'cap_table_data.json';
@@ -52,6 +53,7 @@ class StorageService {
       'hoursVestingSchedules': [],
       'taxRules': [],
       'optionGrants': [],
+      'esopPoolChanges': [],
       'companyName': 'My Company Pty Ltd',
       'tableColumnWidths': <String, double>{},
       'esopDilutionMethod': 1, // preRoundCap
@@ -71,6 +73,7 @@ class StorageService {
     required List<HoursVestingSchedule> hoursVestingSchedules,
     required List<TaxRule> taxRules,
     required List<OptionGrant> optionGrants,
+    required List<EsopPoolChange> esopPoolChanges,
     required String companyName,
     Map<String, double> tableColumnWidths = const {},
     int themeModeIndex = 0,
@@ -92,6 +95,7 @@ class StorageService {
           .toList(),
       'taxRules': taxRules.map((e) => e.toJson()).toList(),
       'optionGrants': optionGrants.map((e) => e.toJson()).toList(),
+      'esopPoolChanges': esopPoolChanges.map((e) => e.toJson()).toList(),
       'companyName': companyName,
       'tableColumnWidths': tableColumnWidths,
       'themeModeIndex': themeModeIndex,

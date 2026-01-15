@@ -180,10 +180,7 @@ class RoundsPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  ListTile(
-                    leading: const Icon(Icons.calendar_today),
-                    title: const Text('Date'),
-                    subtitle: Text(Formatters.date(selectedDate)),
+                  InkWell(
                     onTap: () async {
                       final date = await showDatePicker(
                         context: context,
@@ -195,6 +192,15 @@ class RoundsPage extends StatelessWidget {
                         setState(() => selectedDate = date);
                       }
                     },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Date',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: Icon(Icons.calendar_today, size: 18),
+                      ),
+                      child: Text(Formatters.date(selectedDate)),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TextField(

@@ -950,11 +950,7 @@ class _GenericTransactionEditDialogState
                 const SizedBox(height: 16),
 
                 if (widget.transaction.roundId == null) ...[
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Date'),
-                    subtitle: Text(Formatters.date(_date)),
-                    trailing: const Icon(Icons.calendar_today),
+                  InkWell(
                     onTap: () async {
                       final date = await showDatePicker(
                         context: context,
@@ -966,19 +962,37 @@ class _GenericTransactionEditDialogState
                         setState(() => _date = date);
                       }
                     },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Date',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: Icon(Icons.calendar_today, size: 18),
+                      ),
+                      child: Text(
+                        Formatters.date(_date),
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
                   ),
                 ] else ...[
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Date'),
-                    subtitle: Text(Formatters.date(_date)),
-                    trailing: Tooltip(
-                      message: 'Date is set by the investment round',
-                      child: Icon(
-                        Icons.lock_outline,
-                        size: 18,
-                        color: theme.colorScheme.outline,
+                  InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'Date',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: Tooltip(
+                        message: 'Date is set by the investment round',
+                        child: Icon(
+                          Icons.lock_outline,
+                          size: 18,
+                          color: theme.colorScheme.outline,
+                        ),
                       ),
+                    ),
+                    child: Text(
+                      Formatters.date(_date),
+                      style: theme.textTheme.bodyMedium,
                     ),
                   ),
                 ],

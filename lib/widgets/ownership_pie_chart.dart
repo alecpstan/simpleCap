@@ -37,15 +37,21 @@ class OwnershipPieChart extends StatelessWidget {
 
         ownership.forEach((id, percentage) {
           String name;
-          if (showByShareClass) {
+          Color color;
+
+          if (provider.isEsopPoolId(id)) {
+            // Special ESOP pool entry
+            name = 'ESOP Pool (Unallocated)';
+            color = Colors.grey.shade400; // Distinct color for ESOP pool
+          } else if (showByShareClass) {
             final shareClass = provider.getShareClassById(id);
             name = shareClass?.name ?? 'Unknown';
+            color = AppColors.getChartColor(colorIndex);
           } else {
             final investor = provider.getInvestorById(id);
             name = investor?.name ?? 'Unknown';
+            color = AppColors.getChartColor(colorIndex);
           }
-
-          final color = AppColors.getChartColor(colorIndex);
 
           sections.add(
             PieChartSectionData(

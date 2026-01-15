@@ -6,6 +6,7 @@ import '../models/transaction.dart';
 import '../models/investor.dart';
 import '../models/milestone.dart';
 import '../models/hours_vesting.dart';
+import '../models/option_grant.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/section_card.dart';
 import '../widgets/info_widgets.dart';
@@ -296,6 +297,44 @@ class _VestingPageState extends State<VestingPage> {
       );
     }
 
+    // Option grants with vesting
+    for (final grant in provider.optionGrants) {
+      // Only include grants that have a vesting schedule
+      if (grant.vestingScheduleId == null) continue;
+
+      final investor = provider.getInvestorById(grant.investorId);
+      final vestingPercent = provider.getOptionVestingPercent(grant);
+      final vestedOptions = provider.getVestedOptionsForGrant(grant);
+
+      _VestingStatus status;
+      if (grant.status == OptionGrantStatus.cancelled ||
+          grant.status == OptionGrantStatus.forfeited) {
+        status = _VestingStatus.terminated;
+      } else if (grant.status == OptionGrantStatus.fullyExercised) {
+        status = _VestingStatus.completed;
+      } else if (vestingPercent >= 100) {
+        status = _VestingStatus.completed;
+      } else if (grant.status == OptionGrantStatus.expired) {
+        status = _VestingStatus.terminated;
+      } else {
+        status = _VestingStatus.active;
+      }
+
+      items.add(
+        _VestingItem(
+          type: _VestingType.options,
+          id: grant.id,
+          investorName: investor?.name ?? 'Unknown',
+          investorType: investor?.type,
+          progress: vestingPercent / 100,
+          subtitle:
+              '${Formatters.compactNumber(vestedOptions)}/${Formatters.compactNumber(grant.numberOfOptions)} options @ ${Formatters.currency(grant.strikePrice)}',
+          status: status,
+          optionGrant: grant,
+        ),
+      );
+    }
+
     return items;
   }
 
@@ -457,7 +496,7 @@ class _VestingPageState extends State<VestingPage> {
 
 // ============ Helper Types ============
 
-enum _VestingType { timeBased, milestone, hours }
+enum _VestingType { timeBased, milestone, hours, options }
 
 enum _VestingStatus { active, completed, terminated }
 
@@ -472,6 +511,7 @@ class _VestingItem {
   final VestingSchedule? schedule;
   final Milestone? milestone;
   final HoursVestingSchedule? hoursSchedule;
+  final OptionGrant? optionGrant;
 
   _VestingItem({
     required this.type,
@@ -484,6 +524,7 @@ class _VestingItem {
     this.schedule,
     this.milestone,
     this.hoursSchedule,
+    this.optionGrant,
   });
 
   IconData get typeIcon {
@@ -494,6 +535,8 @@ class _VestingItem {
         return Icons.flag;
       case _VestingType.hours:
         return Icons.access_time;
+      case _VestingType.options:
+        return Icons.workspace_premium;
     }
   }
 
@@ -505,6 +548,8 @@ class _VestingItem {
         return Colors.orange;
       case _VestingType.hours:
         return Colors.teal;
+      case _VestingType.options:
+        return Colors.purple;
     }
   }
 
@@ -516,6 +561,8 @@ class _VestingItem {
         return 'Milestone';
       case _VestingType.hours:
         return 'Hours';
+      case _VestingType.options:
+        return 'Options';
     }
   }
 }
@@ -583,6 +630,15 @@ class _UnifiedSummaryCard extends StatelessWidget {
                 'Hours',
                 Colors.teal,
                 provider.hoursVestingSchedules.length,
+              ),
+              const SizedBox(width: 12),
+              _TypeIndicator(
+                Icons.workspace_premium,
+                'Options',
+                Colors.purple,
+                provider.optionGrants
+                    .where((g) => g.vestingScheduleId != null)
+                    .length,
               ),
             ],
           ),
@@ -737,6 +793,10 @@ class _UnifiedVestingCard extends StatelessWidget {
         if (item.hoursSchedule != null) {
           _showHoursDetails(context, item.hoursSchedule!);
         }
+      case _VestingType.options:
+        if (item.optionGrant != null) {
+          _showOptionDetails(context, item.optionGrant!);
+        }
     }
   }
 
@@ -761,6 +821,14 @@ class _UnifiedVestingCard extends StatelessWidget {
       context: context,
       builder: (context) =>
           _HoursDetailDialog(schedule: schedule, provider: provider),
+    );
+  }
+
+  void _showOptionDetails(BuildContext context, OptionGrant grant) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          OptionVestingDetailDialog(grant: grant, provider: provider),
     );
   }
 }
@@ -1608,19 +1676,23 @@ class _HoursDetailDialog extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Date'),
-                trailing: TextButton(
-                  onPressed: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: date,
-                      firstDate: schedule.startDate,
-                      lastDate: DateTime.now(),
-                    );
-                    if (picked != null) setState(() => date = picked);
-                  },
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: date,
+                    firstDate: schedule.startDate,
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) setState(() => date = picked);
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Date',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: Icon(Icons.calendar_today, size: 18),
+                  ),
                   child: Text(Formatters.date(date)),
                 ),
               ),
@@ -1688,19 +1760,23 @@ class _HoursDetailDialog extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Date'),
-                trailing: TextButton(
-                  onPressed: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: date,
-                      firstDate: schedule.startDate,
-                      lastDate: DateTime.now(),
-                    );
-                    if (picked != null) setState(() => date = picked);
-                  },
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: date,
+                    firstDate: schedule.startDate,
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) setState(() => date = picked);
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Date',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: Icon(Icons.calendar_today, size: 18),
+                  ),
                   child: Text(Formatters.date(date)),
                 ),
               ),
@@ -1775,6 +1851,248 @@ class _HoursDetailDialog extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Dialog showing option grant vesting details
+class OptionVestingDetailDialog extends StatelessWidget {
+  final OptionGrant grant;
+  final CapTableProvider provider;
+
+  const OptionVestingDetailDialog({
+    super.key,
+    required this.grant,
+    required this.provider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final investor = provider.getInvestorById(grant.investorId);
+    final shareClass = provider.getShareClassById(grant.shareClassId);
+    final vesting = grant.vestingScheduleId != null
+        ? provider.getVestingScheduleById(grant.vestingScheduleId!)
+        : null;
+
+    final vestingPercent = provider.getOptionVestingPercent(grant);
+    final vestedOptions = provider.getVestedOptionsForGrant(grant);
+    final exercisableOptions = provider.getExercisableOptionsForGrant(grant);
+    final vestedValue = provider.getVestedIntrinsicValueForGrant(grant);
+    final currentPrice = provider.latestSharePrice;
+    final inTheMoney = currentPrice > grant.strikePrice;
+
+    Color statusColor;
+    String statusText;
+    if (grant.status == OptionGrantStatus.fullyExercised) {
+      statusColor = Colors.green;
+      statusText = 'Fully Exercised';
+    } else if (grant.status == OptionGrantStatus.cancelled ||
+        grant.status == OptionGrantStatus.forfeited) {
+      statusColor = Colors.red;
+      statusText = grant.statusDisplayName;
+    } else if (grant.status == OptionGrantStatus.expired) {
+      statusColor = Colors.grey;
+      statusText = 'Expired';
+    } else if (vestingPercent >= 100) {
+      statusColor = Colors.green;
+      statusText = 'Fully Vested';
+    } else if (vesting != null && !vesting.cliffPassed) {
+      statusColor = Colors.orange;
+      statusText = 'In Cliff';
+    } else {
+      statusColor = Colors.blue;
+      statusText = 'Vesting';
+    }
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.workspace_premium, color: Colors.purple),
+          const SizedBox(width: 8),
+          Expanded(child: Text(investor?.name ?? 'Option Vesting')),
+        ],
+      ),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Status badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Vesting progress
+              Text(
+                '${vestingPercent.toStringAsFixed(1)}% vested',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: vestingPercent / 100,
+                  backgroundColor: statusColor.withValues(alpha: 0.1),
+                  color: statusColor,
+                  minHeight: 8,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Options breakdown
+              Row(
+                children: [
+                  Expanded(
+                    child: ResultChip(
+                      label: 'Total',
+                      value: Formatters.compactNumber(grant.numberOfOptions),
+                      color: Colors.blue,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ResultChip(
+                      label: 'Vested',
+                      value: Formatters.compactNumber(vestedOptions),
+                      color: Colors.indigo,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: ResultChip(
+                      label: 'Exercised',
+                      value: Formatters.compactNumber(grant.exercisedCount),
+                      color: Colors.green,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ResultChip(
+                      label: 'Exercisable',
+                      value: Formatters.compactNumber(exercisableOptions),
+                      color: exercisableOptions > 0
+                          ? Colors.orange
+                          : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Value section
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: inTheMoney
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: inTheMoney
+                        ? Colors.green.withValues(alpha: 0.3)
+                        : Colors.grey.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          inTheMoney ? Icons.trending_up : Icons.trending_flat,
+                          color: inTheMoney ? Colors.green : Colors.grey,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          inTheMoney ? 'In The Money' : 'Out of Money',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: inTheMoney ? Colors.green : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _DetailRow(
+                      label: 'Strike Price',
+                      value: Formatters.currency(grant.strikePrice),
+                    ),
+                    _DetailRow(
+                      label: 'Current Price',
+                      value: Formatters.currency(currentPrice),
+                    ),
+                    if (inTheMoney)
+                      _DetailRow(
+                        label: 'Vested Value',
+                        value: Formatters.currency(vestedValue),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Grant details
+              _DetailRow(
+                label: 'Share Class',
+                value: shareClass?.name ?? 'Unknown',
+              ),
+              _DetailRow(
+                label: 'Grant Date',
+                value: Formatters.date(grant.grantDate),
+              ),
+              _DetailRow(
+                label: 'Expiry Date',
+                value: Formatters.date(grant.expiryDate),
+              ),
+              if (vesting != null) ...[
+                const SizedBox(height: 8),
+                _DetailRow(
+                  label: 'Vesting',
+                  value:
+                      '${vesting.vestingPeriodMonths ~/ 12}yr with ${vesting.cliffMonths}mo cliff',
+                ),
+                if (vesting.nextVestingDate != null)
+                  _DetailRow(
+                    label: 'Next Vest',
+                    value: Formatters.date(vesting.nextVestingDate!),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }
@@ -1924,23 +2242,27 @@ class _MilestoneDialogState extends State<_MilestoneDialog> {
               ),
             ],
             const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Deadline'),
-              trailing: TextButton(
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate:
-                        _deadline ??
-                        DateTime.now().add(const Duration(days: 365)),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime(2100),
-                  );
-                  if (picked != null) {
-                    setState(() => _deadline = picked);
-                  }
-                },
+            InkWell(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate:
+                      _deadline ??
+                      DateTime.now().add(const Duration(days: 365)),
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime(2100),
+                );
+                if (picked != null) {
+                  setState(() => _deadline = picked);
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Deadline',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: Icon(Icons.calendar_today, size: 18),
+                ),
                 child: Text(
                   _deadline != null ? Formatters.date(_deadline!) : 'None',
                 ),
@@ -2175,21 +2497,25 @@ class _HoursVestingDialogState extends State<_HoursVestingDialog> {
               ),
             ],
             const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Start Date'),
-              trailing: TextButton(
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _startDate,
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime.now(),
-                  );
-                  if (picked != null) {
-                    setState(() => _startDate = picked);
-                  }
-                },
+            InkWell(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _startDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now(),
+                );
+                if (picked != null) {
+                  setState(() => _startDate = picked);
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Start Date',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: Icon(Icons.calendar_today, size: 18),
+                ),
                 child: Text(Formatters.date(_startDate)),
               ),
             ),
@@ -2312,11 +2638,7 @@ class _TerminateVestingDialogState extends State<_TerminateVestingDialog> {
           const SizedBox(height: 24),
 
           // Termination Date
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Termination Date'),
-            subtitle: Text(Formatters.date(_terminationDate)),
-            trailing: const Icon(Icons.calendar_today),
+          InkWell(
             onTap: () async {
               final date = await showDatePicker(
                 context: context,
@@ -2328,6 +2650,15 @@ class _TerminateVestingDialogState extends State<_TerminateVestingDialog> {
                 setState(() => _terminationDate = date);
               }
             },
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Termination Date',
+                border: OutlineInputBorder(),
+                isDense: true,
+                suffixIcon: Icon(Icons.calendar_today, size: 18),
+              ),
+              child: Text(Formatters.date(_terminationDate)),
+            ),
           ),
 
           const SizedBox(height: 16),
@@ -2551,11 +2882,7 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
                 const SizedBox(height: 16),
 
                 // Start Date
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Start Date'),
-                  subtitle: Text(Formatters.date(_startDate)),
-                  trailing: const Icon(Icons.calendar_today),
+                InkWell(
                   onTap: () async {
                     final date = await showDatePicker(
                       context: context,
@@ -2567,6 +2894,15 @@ class _VestingScheduleDialogState extends State<VestingScheduleDialog> {
                       setState(() => _startDate = date);
                     }
                   },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Start Date',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: Icon(Icons.calendar_today, size: 18),
+                    ),
+                    child: Text(Formatters.date(_startDate)),
+                  ),
                 ),
                 const SizedBox(height: 16),
 

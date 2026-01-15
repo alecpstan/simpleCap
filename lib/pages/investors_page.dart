@@ -10,7 +10,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/avatars.dart';
 import '../widgets/expandable_card.dart';
 import '../widgets/dialogs.dart';
-import '../widgets/help_icon.dart';
+import '../widgets/form_fields.dart';
 import '../widgets/transaction_editor.dart';
 import 'options_page.dart';
 import 'convertibles_page.dart';
@@ -244,25 +244,18 @@ class InvestorsPage extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(
+                  AppTextField(
                     controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Name *',
-                      hintText: 'John Smith',
-                      prefixIcon: Icon(Icons.person),
-                    ),
+                    labelText: 'Name *',
+                    hintText: 'John Smith',
+                    prefixIcon: Icons.person,
                     autofocus: true,
                   ),
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<InvestorType>(
-                    initialValue: selectedType,
-                    decoration: InputDecoration(
-                      labelText: 'Investor Type',
-                      prefixIcon: const Icon(Icons.category),
-                      suffixIcon: const HelpIcon(
-                        helpKey: 'investors.investorType',
-                      ),
-                    ),
+                  AppDropdownField<InvestorType>(
+                    value: selectedType,
+                    labelText: 'Investor Type',
+                    helpKey: 'investors.investorType',
                     items: InvestorType.values.map((type) {
                       return DropdownMenuItem(
                         value: type,
@@ -274,60 +267,44 @@ class InvestorsPage extends StatelessWidget {
                     },
                   ),
                   const SizedBox(height: 16),
-                  TextField(
+                  AppTextField(
                     controller: emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      hintText: 'john@example.com',
-                      prefixIcon: Icon(Icons.email),
-                    ),
+                    labelText: 'Email',
+                    hintText: 'john@example.com',
+                    prefixIcon: Icons.email,
                     keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 16),
-                  TextField(
+                  AppTextField(
                     controller: phoneController,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone',
-                      hintText: '+61 400 000 000',
-                      prefixIcon: Icon(Icons.phone),
-                    ),
+                    labelText: 'Phone',
+                    hintText: '+61 400 000 000',
+                    prefixIcon: Icons.phone,
                     keyboardType: TextInputType.phone,
                   ),
                   const SizedBox(height: 16),
-                  TextField(
+                  AppTextField(
                     controller: companyController,
-                    decoration: const InputDecoration(
-                      labelText: 'Company/Fund',
-                      hintText: 'Acme Ventures',
-                      prefixIcon: Icon(Icons.business),
-                    ),
+                    labelText: 'Company/Fund',
+                    hintText: 'Acme Ventures',
+                    prefixIcon: Icons.business,
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SwitchListTile(
-                          title: const Text('Pro-rata Rights'),
-                          subtitle: const Text(
-                            'Can maintain ownership in future rounds',
-                          ),
-                          value: hasProRata,
-                          onChanged: (value) {
-                            setState(() => hasProRata = value);
-                          },
-                        ),
-                      ),
-                      const HelpIcon(helpKey: 'investors.proRataRights'),
-                    ],
+                  AppSwitchField(
+                    value: hasProRata,
+                    title: 'Pro-rata Rights',
+                    subtitle: 'Can maintain ownership in future rounds',
+                    helpKey: 'investors.proRataRights',
+                    onChanged: (value) {
+                      setState(() => hasProRata = value);
+                    },
                   ),
                   const SizedBox(height: 16),
-                  TextField(
+                  AppTextField(
                     controller: notesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes',
-                      hintText: 'Additional information...',
-                      prefixIcon: Icon(Icons.notes),
-                    ),
+                    labelText: 'Notes',
+                    hintText: 'Additional information...',
+                    prefixIcon: Icons.notes,
                     maxLines: 2,
                   ),
                 ],
@@ -875,28 +852,9 @@ class _InvestorCardState extends State<_InvestorCard> {
   ) {
     final theme = Theme.of(context);
     final shareClass = provider.getShareClassById(grant.shareClassId);
-    final vesting = grant.vestingScheduleId != null
-        ? provider.getVestingScheduleById(grant.vestingScheduleId!)
-        : null;
 
-    // Calculate vested percent
-    double vestedPercent = 100.0;
-    if (vesting != null) {
-      final now = DateTime.now();
-      final monthsElapsed = (now.difference(vesting.startDate).inDays / 30.44)
-          .floor();
-      if (monthsElapsed < vesting.cliffMonths) {
-        vestedPercent = 0;
-      } else {
-        final vestedMonths = monthsElapsed.clamp(
-          0,
-          vesting.vestingPeriodMonths,
-        );
-        vestedPercent = (vestedMonths / vesting.vestingPeriodMonths * 100)
-            .clamp(0, 100)
-            .toDouble();
-      }
-    }
+    // Use provider methods for consistent vesting calculations
+    final vestedPercent = provider.getOptionVestingPercent(grant);
 
     final isActive =
         grant.status == OptionGrantStatus.active ||

@@ -6,6 +6,7 @@ import '../models/transaction.dart';
 import '../providers/cap_table_provider.dart';
 import '../utils/helpers.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/form_fields.dart';
 import '../widgets/section_card.dart';
 import '../widgets/info_widgets.dart';
 import '../widgets/help_icon.dart';
@@ -525,27 +526,26 @@ class _ConvertibleDialogState extends State<ConvertibleDialog> {
             ],
 
             // Dates
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Issue Date'),
-              trailing: TextButton(
-                onPressed: () => _pickDate(context, isIssue: true),
-                child: Text(Formatters.date(_issueDate)),
-              ),
+            AppDateField(
+              value: _issueDate,
+              labelText: 'Issue Date',
+              firstDate: DateTime(2000),
+              lastDate: DateTime(2100),
+              onChanged: (date) => setState(() => _issueDate = date),
             ),
-            if (_type == ConvertibleType.convertibleNote)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Maturity Date'),
-                trailing: TextButton(
-                  onPressed: () => _pickDate(context, isIssue: false),
-                  child: Text(
-                    _maturityDate != null
-                        ? Formatters.date(_maturityDate!)
-                        : 'Set',
-                  ),
-                ),
+            if (_type == ConvertibleType.convertibleNote) ...[
+              const SizedBox(height: 16),
+              AppDateField(
+                value:
+                    _maturityDate ??
+                    DateTime.now().add(const Duration(days: 365)),
+                labelText: 'Maturity Date',
+                firstDate: _issueDate,
+                lastDate: DateTime(2100),
+                onChanged: (date) => setState(() => _maturityDate = date),
               ),
+            ],
+            const SizedBox(height: 16),
 
             // Checkboxes
             CheckboxListTile(
@@ -584,24 +584,6 @@ class _ConvertibleDialogState extends State<ConvertibleDialog> {
     return _investorId != null &&
         _principalController.text.isNotEmpty &&
         double.tryParse(_principalController.text) != null;
-  }
-
-  Future<void> _pickDate(BuildContext context, {required bool isIssue}) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isIssue ? _issueDate : (_maturityDate ?? DateTime.now()),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (picked != null) {
-      setState(() {
-        if (isIssue) {
-          _issueDate = picked;
-        } else {
-          _maturityDate = picked;
-        }
-      });
-    }
   }
 
   void _save() {
@@ -875,31 +857,12 @@ class _ConversionDialogState extends State<ConversionDialog> {
                 ),
                 const SizedBox(height: 12),
                 // Conversion date
-                InkWell(
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: _conversionDate,
-                      firstDate: convertible.issueDate,
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (date != null) {
-                      setState(() => _conversionDate = date);
-                    }
-                  },
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Conversion Date',
-                      border: OutlineInputBorder(),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(Formatters.date(_conversionDate)),
-                        const Icon(Icons.calendar_today, size: 18),
-                      ],
-                    ),
-                  ),
+                AppDateField(
+                  value: _conversionDate,
+                  labelText: 'Conversion Date',
+                  firstDate: convertible.issueDate,
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  onChanged: (date) => setState(() => _conversionDate = date),
                 ),
               ],
               const SizedBox(height: 16),
@@ -1597,25 +1560,12 @@ class _EditConversionTransactionDialogState
             const SizedBox(height: 12),
 
             // Conversion date
-            InkWell(
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _conversionDate,
-                  firstDate: widget.convertible.issueDate,
-                  lastDate: DateTime.now(),
-                );
-                if (date != null) setState(() => _conversionDate = date);
-              },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Conversion Date',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: Icon(Icons.calendar_today, size: 18),
-                ),
-                child: Text(Formatters.date(_conversionDate)),
-              ),
+            AppDateField(
+              value: _conversionDate,
+              labelText: 'Conversion Date',
+              firstDate: widget.convertible.issueDate,
+              lastDate: DateTime.now(),
+              onChanged: (date) => setState(() => _conversionDate = date),
             ),
           ],
         ),

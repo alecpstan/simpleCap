@@ -5,6 +5,7 @@ import '../widgets/ownership_pie_chart.dart';
 import '../widgets/section_card.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/help_icon.dart';
+import '../widgets/info_widgets.dart';
 import '../utils/helpers.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -36,6 +37,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
             // Ownership chart section
             SliverToBoxAdapter(child: _buildOwnershipChart(context, provider)),
+
+            // Options summary section
+            SliverToBoxAdapter(child: _buildOptionsSection(context, provider)),
 
             // Dividend chart section
             SliverToBoxAdapter(child: _buildDividendChart(context, provider)),
@@ -214,6 +218,128 @@ class _DashboardPageState extends State<DashboardPage> {
             showByShareClass: _showByShareClass,
             showVestedOnly: _showVestedOnly && !_showByShareClass,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptionsSection(BuildContext context, CapTableProvider provider) {
+    // Only show if there are option grants
+    if (provider.optionGrants.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final theme = Theme.of(context);
+    final activeGrants = provider.activeOptionGrants;
+    final totalGranted = provider.optionGrants.fold(
+      0,
+      (sum, g) => sum + g.numberOfOptions,
+    );
+    final totalVested = provider.totalVestedOptions;
+    final totalExercised = provider.totalOptionsExercised;
+    final exercisable = provider.totalExercisableOptions;
+    final vestedValue = provider.totalVestedIntrinsicValue;
+    final currentPrice = provider.latestSharePrice;
+    final hasInTheMoney = activeGrants.any((g) => currentPrice > g.strikePrice);
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: SectionCard(
+        title: 'Stock Options',
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasInTheMoney && vestedValue > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.trending_up, size: 14, color: Colors.green),
+                    const SizedBox(width: 4),
+                    Text(
+                      Formatters.compactCurrency(vestedValue),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Text(
+              '${activeGrants.length} active',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Stats row
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ResultChip(
+                  label: 'Total Granted',
+                  value: Formatters.compactNumber(totalGranted),
+                  color: Colors.blue,
+                ),
+                ResultChip(
+                  label: 'Vested',
+                  value: Formatters.compactNumber(totalVested),
+                  color: Colors.indigo,
+                ),
+                ResultChip(
+                  label: 'Exercised',
+                  value: Formatters.compactNumber(totalExercised),
+                  color: Colors.green,
+                ),
+                ResultChip(
+                  label: 'Exercisable',
+                  value: Formatters.compactNumber(exercisable),
+                  color: exercisable > 0 && hasInTheMoney
+                      ? Colors.orange
+                      : Colors.grey,
+                ),
+              ],
+            ),
+            if (hasInTheMoney && vestedValue > 0) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.green.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.green, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Vested options have ${Formatters.currency(vestedValue)} intrinsic value at current share price',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

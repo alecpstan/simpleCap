@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/esop_pool_change.dart';
 import '../models/investor.dart';
 import '../models/option_grant.dart';
 import '../models/share_class.dart';
@@ -8,6 +9,7 @@ import '../models/vesting_schedule.dart';
 import '../providers/cap_table_provider.dart';
 import '../utils/helpers.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/form_fields.dart';
 import '../widgets/section_card.dart';
 import '../widgets/info_widgets.dart';
 import '../widgets/avatars.dart';
@@ -99,20 +101,16 @@ class OptionsPage extends StatelessWidget {
   }
 
   Widget _buildSummaryCards(BuildContext context, CapTableProvider provider) {
-    final activeGrants = provider.activeOptionGrants;
     final totalGranted = provider.optionGrants.fold(
       0,
       (sum, g) => sum + g.numberOfOptions,
     );
     final totalExercised = provider.totalOptionsExercised;
     final totalRemaining = provider.totalOptionsGranted;
+    final totalVested = provider.totalVestedOptions;
 
-    // Calculate total intrinsic value
-    final currentPrice = provider.latestSharePrice;
-    final totalIntrinsicValue = activeGrants.fold(
-      0.0,
-      (sum, g) => sum + g.intrinsicValue(currentPrice),
-    );
+    // Use vested intrinsic value for accurate representation
+    final vestedIntrinsicValue = provider.totalVestedIntrinsicValue;
 
     return Wrap(
       spacing: 12,
@@ -122,6 +120,11 @@ class OptionsPage extends StatelessWidget {
           label: 'Total Granted',
           value: Formatters.compactNumber(totalGranted),
           color: Colors.blue,
+        ),
+        ResultChip(
+          label: 'Vested',
+          value: Formatters.compactNumber(totalVested),
+          color: Colors.indigo,
         ),
         ResultChip(
           label: 'Exercised',
@@ -134,8 +137,8 @@ class OptionsPage extends StatelessWidget {
           color: Colors.orange,
         ),
         ResultChip(
-          label: 'Intrinsic Value',
-          value: Formatters.compactCurrency(totalIntrinsicValue),
+          label: 'Vested Value',
+          value: Formatters.compactCurrency(vestedIntrinsicValue),
           color: Colors.purple,
         ),
       ],
@@ -145,8 +148,50 @@ class OptionsPage extends StatelessWidget {
   Widget _buildPoolManagement(BuildContext context, CapTableProvider provider) {
     final theme = Theme.of(context);
     final poolShares = provider.esopPoolShares;
+    final hasPool = provider.esopPoolChanges.isNotEmpty;
+
+    // If no pool exists yet, show creation prompt
+    if (!hasPool) {
+      return SectionCard(
+        title: 'ESOP Pool',
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Column(
+            children: [
+              Icon(
+                Icons.card_giftcard_outlined,
+                size: 48,
+                color: theme.colorScheme.outline,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No ESOP Pool Created',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Create an Employee Share Option Pool to grant options to employees, advisors, and contractors.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => _showTopUpDialog(context, provider),
+                icon: const Icon(Icons.add),
+                label: const Text('Create ESOP Pool'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final allocatedShares = provider.allocatedEsopShares;
     final unallocatedShares = provider.unallocatedEsopShares;
-    final allocatedShares = poolShares - unallocatedShares;
     final totalShares = provider.totalCurrentShares;
 
     // Calculate percentages
@@ -176,9 +221,15 @@ class OptionsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          // Settings button
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, size: 20),
+            tooltip: 'Pool Settings',
+            onPressed: () => _showPoolSettingsDialog(context, provider),
+          ),
           IconButton(
             icon: const Icon(Icons.add_circle_outline, size: 20),
-            tooltip: 'Top Up Pool',
+            tooltip: 'Add to Pool',
             onPressed: () => _showTopUpDialog(context, provider),
           ),
         ],
@@ -211,7 +262,7 @@ class OptionsPage extends StatelessWidget {
                   ),
                   // Unallocated portion
                   Expanded(
-                    flex: unallocatedShares > 0 ? unallocatedShares : 0,
+                    flex: unallocatedShares > 0 ? unallocatedShares : 1,
                     child: Container(
                       color: Colors.blue.shade200,
                       alignment: Alignment.center,
@@ -225,18 +276,6 @@ class OptionsPage extends StatelessWidget {
                           : null,
                     ),
                   ),
-                  // Empty space if pool is small
-                  if (poolShares == 0)
-                    Expanded(
-                      child: Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        alignment: Alignment.center,
-                        child: Text(
-                          'No pool created',
-                          style: theme.textTheme.labelSmall,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -356,13 +395,25 @@ class OptionsPage extends StatelessWidget {
     BuildContext context,
     CapTableProvider provider, {
     int? suggestedShares,
+    EsopPoolChange? existingChange,
   }) {
     showDialog(
       context: context,
-      builder: (context) => _TopUpPoolDialog(
+      builder: (context) => _PoolChangeDialog(
         provider: provider,
         suggestedShares: suggestedShares,
+        existingChange: existingChange,
       ),
+    );
+  }
+
+  void _showPoolSettingsDialog(
+    BuildContext context,
+    CapTableProvider provider,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => _PoolSettingsDialog(provider: provider),
     );
   }
 
@@ -375,15 +426,10 @@ class OptionsPage extends StatelessWidget {
       children: grants.map((g) {
         final investor = provider.getInvestorById(g.investorId);
         final shareClass = provider.getShareClassById(g.shareClassId);
-        final vesting = g.vestingScheduleId != null
-            ? provider.getVestingScheduleById(g.vestingScheduleId!)
-            : null;
 
-        // Calculate vested options
-        final vestedPercent = vesting != null
-            ? _calculateVestedPercent(vesting, g.numberOfOptions)
-            : 100.0;
-        final vestedOptions = (g.numberOfOptions * vestedPercent / 100).round();
+        // Use provider methods for consistent vesting calculations
+        final vestedPercent = provider.getOptionVestingPercent(g);
+        final vestedOptions = provider.getVestedOptionsForGrant(g);
 
         return _OptionGrantTile(
           grant: g,
@@ -397,21 +443,6 @@ class OptionsPage extends StatelessWidget {
         );
       }).toList(),
     );
-  }
-
-  double _calculateVestedPercent(VestingSchedule vesting, int totalOptions) {
-    final now = DateTime.now();
-    final monthsElapsed = (now.difference(vesting.startDate).inDays / 30.44)
-        .floor();
-
-    // Check cliff
-    if (monthsElapsed < vesting.cliffMonths) return 0;
-
-    // Calculate vested portion
-    final vestedMonths = monthsElapsed.clamp(0, vesting.vestingPeriodMonths);
-    return (vestedMonths / vesting.vestingPeriodMonths * 100)
-        .clamp(0, 100)
-        .toDouble();
   }
 
   Widget _buildHistorySection(
@@ -704,11 +735,15 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
       _strikePriceController.text = widget.provider.latestSharePrice
           .toStringAsFixed(2);
 
-      // Default to ESOP share class if exists
-      final esopClass = widget.provider.shareClasses
-          .where((s) => s.type == ShareClassType.esop)
-          .firstOrNull;
-      _selectedShareClassId = esopClass?.id;
+      // Default to ESOP share class only if pool exists and has available shares
+      final hasEsopPool = widget.provider.esopPoolChanges.isNotEmpty;
+      final unallocatedEsop = widget.provider.unallocatedEsopShares;
+      if (hasEsopPool && unallocatedEsop > 0) {
+        final esopClass = widget.provider.shareClasses
+            .where((s) => s.type == ShareClassType.esop)
+            .firstOrNull;
+        _selectedShareClassId = esopClass?.id;
+      }
     }
   }
 
@@ -721,7 +756,6 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     // Allow all investors to receive options
     final investors = widget.provider.investors.toList();
 
@@ -742,13 +776,9 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
                     widget.provider.getInvestorById(_selectedInvestorId!),
                   ),
                 ] else ...[
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedInvestorId,
-                    decoration: const InputDecoration(
-                      labelText: 'Recipient',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
+                  AppDropdownField<String>(
+                    value: _selectedInvestorId,
+                    labelText: 'Recipient',
                     items: investors.map((i) {
                       return DropdownMenuItem(value: i.id, child: Text(i.name));
                     }).toList(),
@@ -762,13 +792,9 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextFormField(
+                      child: AppTextField(
                         controller: _optionsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Options',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
+                        labelText: 'Options',
                         keyboardType: TextInputType.number,
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Required';
@@ -779,14 +805,10 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: TextFormField(
+                      child: AppTextField(
                         controller: _strikePriceController,
-                        decoration: const InputDecoration(
-                          labelText: 'Strike Price',
-                          prefixText: '\$ ',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
+                        labelText: 'Strike Price',
+                        prefixText: '\$ ',
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
@@ -802,73 +824,29 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
                 const SizedBox(height: 12),
 
                 // Share class
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedShareClassId,
-                  decoration: const InputDecoration(
-                    labelText: 'Share Class',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: widget.provider.shareClasses.map((s) {
-                    return DropdownMenuItem(value: s.id, child: Text(s.name));
-                  }).toList(),
-                  validator: (v) => v == null ? 'Select share class' : null,
-                  onChanged: (v) => setState(() => _selectedShareClassId = v),
-                ),
+                _buildShareClassDropdown(),
                 const SizedBox(height: 12),
 
                 // Dates row
                 Row(
                   children: [
                     Expanded(
-                      child: InkWell(
-                        onTap: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: _grantDate,
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2100),
-                          );
-                          if (date != null) setState(() => _grantDate = date);
-                        },
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Grant Date',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                            suffixIcon: Icon(Icons.calendar_today, size: 18),
-                          ),
-                          child: Text(
-                            Formatters.date(_grantDate),
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ),
+                      child: AppDateField(
+                        value: _grantDate,
+                        labelText: 'Grant Date',
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                        onChanged: (date) => setState(() => _grantDate = date),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: InkWell(
-                        onTap: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: _expiryDate,
-                            firstDate: _grantDate,
-                            lastDate: DateTime(2100),
-                          );
-                          if (date != null) setState(() => _expiryDate = date);
-                        },
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Expiry Date',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                            suffixIcon: Icon(Icons.calendar_today, size: 18),
-                          ),
-                          child: Text(
-                            Formatters.date(_expiryDate),
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ),
+                      child: AppDateField(
+                        value: _expiryDate,
+                        labelText: 'Expiry Date',
+                        firstDate: _grantDate,
+                        lastDate: DateTime(2100),
+                        onChanged: (date) => setState(() => _expiryDate = date),
                       ),
                     ),
                   ],
@@ -876,25 +854,19 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
                 const SizedBox(height: 12),
 
                 // Vesting toggle
-                SwitchListTile(
-                  title: const Text('Add Vesting Schedule'),
+                AppSwitchField(
                   value: _hasVesting,
+                  title: 'Add Vesting Schedule',
                   onChanged: (v) => setState(() => _hasVesting = v),
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
                 ),
 
                 if (_hasVesting) ...[
                   Row(
                     children: [
                       Expanded(
-                        child: DropdownButtonFormField<int>(
-                          initialValue: _vestingMonths,
-                          decoration: const InputDecoration(
-                            labelText: 'Vesting Period',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
+                        child: AppDropdownField<int>(
+                          value: _vestingMonths,
+                          labelText: 'Vesting Period',
                           items: [24, 36, 48, 60].map((m) {
                             return DropdownMenuItem(
                               value: m,
@@ -906,13 +878,9 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: DropdownButtonFormField<int>(
-                          initialValue: _cliffMonths,
-                          decoration: const InputDecoration(
-                            labelText: 'Cliff',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
+                        child: AppDropdownField<int>(
+                          value: _cliffMonths,
+                          labelText: 'Cliff',
                           items: [0, 6, 12, 18, 24].map((m) {
                             return DropdownMenuItem(
                               value: m,
@@ -946,6 +914,25 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedInvestorId == null || _selectedShareClassId == null) return;
+
+    // Safety check: prevent ESOP grant if no pool exists
+    final selectedClass = widget.provider.getShareClassById(
+      _selectedShareClassId!,
+    );
+    if (selectedClass?.type == ShareClassType.esop) {
+      final hasEsopPool = widget.provider.esopPoolChanges.isNotEmpty;
+      if (!hasEsopPool) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Cannot grant options: ESOP pool has not been created',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
 
     final options = int.parse(_optionsController.text);
     final strikePrice = double.parse(_strikePriceController.text);
@@ -1043,6 +1030,132 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
     }
   }
 
+  Widget _buildShareClassDropdown() {
+    final unallocatedEsop = widget.provider.unallocatedEsopShares;
+    final hasEsopPool = widget.provider.esopPoolChanges.isNotEmpty;
+    final requestedOptions = int.tryParse(_optionsController.text) ?? 0;
+
+    // Calculate available ESOP for this grant (in edit mode, add back current grant)
+    int availableForGrant = unallocatedEsop;
+    if (isEditing && widget.grant != null) {
+      final currentGrant = widget.grant!;
+      final currentShareClass = widget.provider.getShareClassById(
+        currentGrant.shareClassId,
+      );
+      if (currentShareClass?.type == ShareClassType.esop) {
+        availableForGrant += currentGrant.numberOfOptions;
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppDropdownField<String>(
+          value: _selectedShareClassId,
+          labelText: 'Share Class',
+          items: widget.provider.shareClasses.map((s) {
+            final isEsop = s.type == ShareClassType.esop;
+            final isDisabled =
+                isEsop && (!hasEsopPool || availableForGrant <= 0);
+
+            return DropdownMenuItem(
+              value: s.id,
+              enabled: !isDisabled,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      s.name,
+                      style: isDisabled
+                          ? TextStyle(color: Colors.grey.shade400)
+                          : null,
+                    ),
+                  ),
+                  if (isEsop && hasEsopPool)
+                    Text(
+                      '(${Formatters.number(availableForGrant)} available)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: availableForGrant > 0
+                            ? Colors.grey.shade600
+                            : Colors.red.shade400,
+                      ),
+                    ),
+                  if (isEsop && !hasEsopPool)
+                    Text(
+                      '(no pool)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.red.shade400,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }).toList(),
+          validator: (v) {
+            if (v == null) return 'Select share class';
+            // Check if ESOP selected and validate pool
+            final selectedClass = widget.provider.getShareClassById(v);
+            if (selectedClass?.type == ShareClassType.esop) {
+              if (!hasEsopPool) {
+                return 'ESOP pool has not been created';
+              }
+              if (requestedOptions > availableForGrant) {
+                return 'Insufficient ESOP pool (${Formatters.number(availableForGrant)} available)';
+              }
+            }
+            return null;
+          },
+          onChanged: (v) {
+            final selectedClass = v != null
+                ? widget.provider.getShareClassById(v)
+                : null;
+            // Show warning if selecting ESOP with insufficient pool
+            if (selectedClass?.type == ShareClassType.esop) {
+              if (!hasEsopPool) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Please create an ESOP pool first before granting options',
+                    ),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return; // Don't update selection
+              }
+            }
+            setState(() => _selectedShareClassId = v);
+          },
+        ),
+        // Show warning if ESOP selected with insufficient pool
+        if (_selectedShareClassId != null) ...[
+          Builder(
+            builder: (context) {
+              final selectedClass = widget.provider.getShareClassById(
+                _selectedShareClassId!,
+              );
+              if (selectedClass?.type == ShareClassType.esop) {
+                if (requestedOptions > availableForGrant &&
+                    requestedOptions > 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: InfoBox.warning(
+                      text:
+                          'Requested options (${Formatters.number(requestedOptions)}) exceed available ESOP pool (${Formatters.number(availableForGrant)}). Please reduce the number or top up the pool.',
+                      compact: true,
+                    ),
+                  );
+                }
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildLockedInvestorTile(Investor? investor) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1103,15 +1216,15 @@ class GrantDetailsDialog extends StatelessWidget {
         ? provider.getVestingScheduleById(grant.vestingScheduleId!)
         : null;
     final currentPrice = provider.latestSharePrice;
-    final intrinsicValue = grant.intrinsicValue(currentPrice);
     final inTheMoney = currentPrice > grant.strikePrice;
 
-    // Calculate vested options
-    final vestedPercent = vesting != null
-        ? _calculateVestedPercent(vesting, grant.numberOfOptions)
-        : 100.0;
-    final vestedOptions = (grant.numberOfOptions * vestedPercent / 100).round();
-    final exercisableOptions = vestedOptions - grant.exercisedCount;
+    // Use provider methods for consistent vesting calculations
+    final vestedPercent = provider.getOptionVestingPercent(grant);
+    final vestedOptions = provider.getVestedOptionsForGrant(grant);
+    final exercisableOptions = provider.getExercisableOptionsForGrant(grant);
+    final vestedIntrinsicValue = provider.getVestedIntrinsicValueForGrant(
+      grant,
+    );
     final canExercise = grant.canExercise && exercisableOptions > 0;
 
     // Get linked transaction if any
@@ -1283,7 +1396,7 @@ class GrantDetailsDialog extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            'Intrinsic value: ${Formatters.currency(intrinsicValue)}',
+                            'Vested intrinsic value: ${Formatters.currency(vestedIntrinsicValue)}',
                             style: theme.textTheme.bodySmall,
                           ),
                         ],
@@ -1409,19 +1522,6 @@ class GrantDetailsDialog extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  double _calculateVestedPercent(VestingSchedule vesting, int totalOptions) {
-    final now = DateTime.now();
-    final monthsElapsed = (now.difference(vesting.startDate).inDays / 30.44)
-        .floor();
-
-    if (monthsElapsed < vesting.cliffMonths) return 0;
-
-    final vestedMonths = monthsElapsed.clamp(0, vesting.vestingPeriodMonths);
-    return (vestedMonths / vesting.vestingPeriodMonths * 100)
-        .clamp(0, 100)
-        .toDouble();
   }
 
   Widget _buildTransactionTile(
@@ -1568,45 +1668,28 @@ class _ExerciseOptionsDialogState extends State<ExerciseOptionsDialog> {
             const SizedBox(height: 12),
 
             // Options to exercise
-            TextFormField(
+            AppTextField(
               controller: _optionsController,
-              decoration: InputDecoration(
-                labelText: 'Options to Exercise',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: TextButton(
-                  onPressed: () {
-                    _optionsController.text = widget.maxExercisable.toString();
-                    setState(() {});
-                  },
-                  child: const Text('All'),
-                ),
-              ),
+              labelText: 'Options to Exercise',
               keyboardType: TextInputType.number,
               onChanged: (_) => setState(() {}),
+              suffix: TextButton(
+                onPressed: () {
+                  _optionsController.text = widget.maxExercisable.toString();
+                  setState(() {});
+                },
+                child: const Text('All'),
+              ),
             ),
             const SizedBox(height: 12),
 
             // Exercise date
-            InkWell(
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _exerciseDate,
-                  firstDate: widget.grant.grantDate,
-                  lastDate: widget.grant.expiryDate,
-                );
-                if (date != null) setState(() => _exerciseDate = date);
-              },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Exercise Date',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: Icon(Icons.calendar_today, size: 18),
-                ),
-                child: Text(Formatters.date(_exerciseDate)),
-              ),
+            AppDateField(
+              value: _exerciseDate,
+              labelText: 'Exercise Date',
+              firstDate: widget.grant.grantDate,
+              lastDate: widget.grant.expiryDate,
+              onChanged: (date) => setState(() => _exerciseDate = date),
             ),
             const SizedBox(height: 12),
 
@@ -1782,38 +1865,21 @@ class _EditExerciseTransactionDialogState
             const SizedBox(height: 12),
 
             // Shares exercised
-            TextFormField(
+            AppTextField(
               controller: _sharesController,
-              decoration: const InputDecoration(
-                labelText: 'Shares (Options Exercised)',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
+              labelText: 'Shares (Options Exercised)',
               keyboardType: TextInputType.number,
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
 
             // Exercise date
-            InkWell(
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _exerciseDate,
-                  firstDate: widget.grant.grantDate,
-                  lastDate: DateTime.now(),
-                );
-                if (date != null) setState(() => _exerciseDate = date);
-              },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Exercise Date',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: Icon(Icons.calendar_today, size: 18),
-                ),
-                child: Text(Formatters.date(_exerciseDate)),
-              ),
+            AppDateField(
+              value: _exerciseDate,
+              labelText: 'Exercise Date',
+              firstDate: widget.grant.grantDate,
+              lastDate: DateTime.now(),
+              onChanged: (date) => setState(() => _exerciseDate = date),
             ),
             const SizedBox(height: 12),
 
@@ -1928,200 +1994,219 @@ class _EditExerciseTransactionDialogState
   }
 }
 
-/// Dialog for topping up the ESOP pool
-class _TopUpPoolDialog extends StatefulWidget {
+/// Dialog for adding/editing ESOP pool changes
+class _PoolChangeDialog extends StatefulWidget {
   final CapTableProvider provider;
+  final EsopPoolChange? existingChange; // null = add mode, non-null = edit mode
   final int? suggestedShares;
 
-  const _TopUpPoolDialog({required this.provider, this.suggestedShares});
+  const _PoolChangeDialog({
+    required this.provider,
+    this.existingChange,
+    this.suggestedShares,
+  });
+
+  bool get isEditMode => existingChange != null;
 
   @override
-  State<_TopUpPoolDialog> createState() => _TopUpPoolDialogState();
+  State<_PoolChangeDialog> createState() => _PoolChangeDialogState();
 }
 
-class _TopUpPoolDialogState extends State<_TopUpPoolDialog> {
+class _PoolChangeDialogState extends State<_PoolChangeDialog> {
   final _formKey = GlobalKey<FormState>();
   final _sharesController = TextEditingController();
-  String? _selectedShareClassId;
-  String? _selectedPoolHolderId;
-  late DateTime _grantDate;
+  final _notesController = TextEditingController();
+  late DateTime _selectedDate;
+  bool _isSubtraction = false;
 
   @override
   void initState() {
     super.initState();
-    _grantDate = DateTime.now();
-
-    // Pre-fill suggested shares
-    if (widget.suggestedShares != null) {
-      _sharesController.text = widget.suggestedShares.toString();
-    }
-
-    // Find existing ESOP share class
-    final esopClasses = widget.provider.shareClasses
-        .where((s) => s.type == ShareClassType.esop)
-        .toList();
-    if (esopClasses.isNotEmpty) {
-      _selectedShareClassId = esopClasses.first.id;
-    }
-
-    // Find ESOP pool holder
-    final poolHolders = widget.provider.investors
-        .where(
-          (i) =>
-              i.type == InvestorType.institution ||
-              i.name.toLowerCase().contains('esop') ||
-              i.name.toLowerCase().contains('pool'),
-        )
-        .toList();
-    if (poolHolders.isNotEmpty) {
-      _selectedPoolHolderId = poolHolders.first.id;
+    if (widget.isEditMode) {
+      // Edit mode - populate from existing
+      final change = widget.existingChange!;
+      _sharesController.text = change.absoluteShares.toString();
+      _notesController.text = change.notes ?? '';
+      _selectedDate = change.date;
+      _isSubtraction = change.isReduction;
+    } else {
+      // Add mode
+      _selectedDate = DateTime.now();
+      if (widget.suggestedShares != null) {
+        _sharesController.text = widget.suggestedShares.toString();
+      }
     }
   }
 
   @override
   void dispose() {
     _sharesController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final shareClasses = widget.provider.shareClasses;
-    final investors = widget.provider.investors;
-
     // Calculate preview
-    final newShares = int.tryParse(_sharesController.text) ?? 0;
+    final inputShares = int.tryParse(_sharesController.text) ?? 0;
+    final sharesDelta = _isSubtraction ? -inputShares : inputShares;
     final currentPool = widget.provider.esopPoolShares;
     final totalShares = widget.provider.totalCurrentShares;
+    final isCreatingPool = widget.provider.esopPoolChanges.isEmpty;
+
+    // In edit mode, we need to subtract the old value first
+    final oldDelta = widget.existingChange?.sharesDelta ?? 0;
+    final netPoolChange = sharesDelta - oldDelta;
+    final newPool = currentPool + netPoolChange;
     final newPoolPercent = totalShares > 0
-        ? ((currentPool + newShares) / (totalShares + newShares)) * 100
+        ? (newPool /
+                  (totalShares + (newPool > currentPool ? netPoolChange : 0))) *
+              100
         : 0.0;
 
+    // Quick suggestions based on cap table
+    final suggestion5pct = (totalShares * 0.05).round();
+    final suggestion10pct = (totalShares * 0.10).round();
+    final suggestion15pct = (totalShares * 0.15).round();
+
+    // Determine dialog title
+    String dialogTitle;
+    if (widget.isEditMode) {
+      dialogTitle = 'Edit Pool Change';
+    } else if (isCreatingPool) {
+      dialogTitle = 'Create ESOP Pool';
+    } else {
+      dialogTitle = 'Add to ESOP Pool';
+    }
+
     return AlertDialog(
-      title: const Text('Top Up ESOP Pool'),
+      title: Text(dialogTitle),
       content: SizedBox(
         width: 400,
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Info card
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.3,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: theme.colorScheme.primary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Info card (only show if pool exists)
+                if (!isCreatingPool)
+                  InfoBox.info(
+                    text:
                         'Current pool: ${Formatters.number(currentPool)} shares',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Shares to add
-              TextFormField(
-                controller: _sharesController,
-                decoration: const InputDecoration(
-                  labelText: 'Shares to Add',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                keyboardType: TextInputType.number,
-                onChanged: (_) => setState(() {}),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Required';
-                  if (int.tryParse(v) == null || int.parse(v) <= 0) {
-                    return 'Enter a valid number';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // Share class
-              DropdownButtonFormField<String>(
-                key: ValueKey('shareclass_$_selectedShareClassId'),
-                initialValue: _selectedShareClassId,
-                decoration: const InputDecoration(
-                  labelText: 'Share Class',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: shareClasses.map((s) {
-                  return DropdownMenuItem(value: s.id, child: Text(s.name));
-                }).toList(),
-                onChanged: (v) => setState(() => _selectedShareClassId = v),
-                validator: (v) => v == null ? 'Select share class' : null,
-              ),
-              const SizedBox(height: 12),
-
-              // Pool holder
-              DropdownButtonFormField<String>(
-                key: ValueKey('poolholder_$_selectedPoolHolderId'),
-                initialValue: _selectedPoolHolderId,
-                decoration: const InputDecoration(
-                  labelText: 'Pool Holder',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  helperText: 'Usually "ESOP Pool" or company institution',
-                ),
-                items: investors.map((i) {
-                  return DropdownMenuItem(value: i.id, child: Text(i.name));
-                }).toList(),
-                onChanged: (v) => setState(() => _selectedPoolHolderId = v),
-                validator: (v) => v == null ? 'Select pool holder' : null,
-              ),
-              const SizedBox(height: 16),
-
-              // Preview
-              if (newShares > 0)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.shade200),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'After Top-Up',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: Colors.green.shade700,
-                          fontWeight: FontWeight.bold,
-                        ),
+                if (!isCreatingPool) const SizedBox(height: 16),
+
+                // Add or Subtract toggle (only show if pool already exists)
+                if (!isCreatingPool)
+                  AppSegmentedField<bool>(
+                    selected: {_isSubtraction},
+                    segments: const [
+                      ButtonSegment(
+                        value: false,
+                        label: Text('Add'),
+                        icon: Icon(Icons.add, size: 16),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Pool: ${Formatters.number(currentPool + newShares)} shares',
+                      ButtonSegment(
+                        value: true,
+                        label: Text('Subtract'),
+                        icon: Icon(Icons.remove, size: 16),
                       ),
-                      Text(
-                        'Cap table %: ${newPoolPercent.toStringAsFixed(1)}%',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                    ],
+                    onSelectionChanged: (value) {
+                      setState(() => _isSubtraction = value.first);
+                    },
+                  ),
+                if (!isCreatingPool) const SizedBox(height: 16),
+
+                // Quick suggestions (only for additions when creating or not subtracting)
+                if (!_isSubtraction && !widget.isEditMode) ...[
+                  QuickValueChips(
+                    label: isCreatingPool
+                        ? 'Suggested pool size (% of cap table):'
+                        : 'Quick add (% of cap table):',
+                    values: [
+                      QuickValue(
+                        '5% (${Formatters.number(suggestion5pct)})',
+                        suggestion5pct,
+                      ),
+                      QuickValue(
+                        '10% (${Formatters.number(suggestion10pct)})',
+                        suggestion10pct,
+                      ),
+                      QuickValue(
+                        '15% (${Formatters.number(suggestion15pct)})',
+                        suggestion15pct,
+                      ),
+                    ],
+                    onSelected: (value) => setState(() {
+                      _sharesController.text = value.toString();
+                    }),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Shares input
+                AppTextField(
+                  controller: _sharesController,
+                  labelText: _isSubtraction
+                      ? 'Shares to Remove'
+                      : 'Shares to Add',
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    final shares = int.tryParse(v);
+                    if (shares == null || shares <= 0) {
+                      return 'Enter a valid number';
+                    }
+                    if (_isSubtraction &&
+                        shares > widget.provider.unallocatedEsopShares) {
+                      return 'Cannot exceed unallocated shares (${widget.provider.unallocatedEsopShares})';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Date picker
+                AppDateField(
+                  value: _selectedDate,
+                  labelText: 'Date',
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  onChanged: (date) => setState(() => _selectedDate = date),
+                ),
+                const SizedBox(height: 16),
+
+                // Notes
+                AppTextField(
+                  controller: _notesController,
+                  labelText: 'Notes (optional)',
+                  hintText: 'e.g., Series A condition, Board resolution',
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+
+                // Preview
+                if (inputShares > 0)
+                  PreviewBox(
+                    title: widget.isEditMode ? 'After Update' : 'After Change',
+                    color: _isSubtraction ? Colors.orange : Colors.green,
+                    rows: [
+                      PreviewRow(
+                        'Pool',
+                        '${Formatters.number(newPool)} shares',
+                      ),
+                      PreviewRow(
+                        'Cap table %',
+                        '${newPoolPercent.toStringAsFixed(1)}%',
                       ),
                     ],
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -2130,39 +2215,404 @@ class _TopUpPoolDialogState extends State<_TopUpPoolDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _save, child: const Text('Add Shares')),
+        FilledButton(
+          onPressed: _save,
+          child: Text(
+            widget.isEditMode
+                ? 'Update'
+                : (widget.provider.esopPoolChanges.isEmpty
+                      ? 'Create Pool'
+                      : 'Save'),
+          ),
+        ),
       ],
     );
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedShareClassId == null || _selectedPoolHolderId == null) return;
 
-    final shares = int.parse(_sharesController.text);
+    final inputShares = int.parse(_sharesController.text);
+    final sharesDelta = _isSubtraction ? -inputShares : inputShares;
+    final notes = _notesController.text.trim().isEmpty
+        ? null
+        : _notesController.text.trim();
 
-    // Create a grant transaction to the pool
-    final transaction = Transaction(
-      investorId: _selectedPoolHolderId!,
-      shareClassId: _selectedShareClassId!,
-      type: TransactionType.grant,
-      numberOfShares: shares,
-      pricePerShare: 0, // Pool shares are issued at $0
-      date: _grantDate,
-      notes: 'ESOP pool top-up',
-    );
-
-    await widget.provider.addTransaction(transaction);
+    if (widget.isEditMode) {
+      // Update existing
+      final updated = widget.existingChange!.copyWith(
+        date: _selectedDate,
+        sharesDelta: sharesDelta,
+        notes: notes,
+      );
+      await widget.provider.updateEsopPoolChange(updated);
+    } else {
+      // Create new
+      final change = EsopPoolChange(
+        date: _selectedDate,
+        sharesDelta: sharesDelta,
+        notes: notes,
+      );
+      await widget.provider.addEsopPoolChange(change);
+    }
 
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Added ${Formatters.number(shares)} shares to ESOP pool',
+            widget.isEditMode
+                ? 'Pool change updated'
+                : '${_isSubtraction ? "Removed" : "Added"} ${Formatters.number(inputShares)} shares ${_isSubtraction ? "from" : "to"} ESOP pool',
           ),
         ),
       );
+    }
+  }
+}
+
+/// Dialog to edit ESOP pool settings and view change history
+class _PoolSettingsDialog extends StatefulWidget {
+  final CapTableProvider provider;
+
+  const _PoolSettingsDialog({required this.provider});
+
+  @override
+  State<_PoolSettingsDialog> createState() => _PoolSettingsDialogState();
+}
+
+class _PoolSettingsDialogState extends State<_PoolSettingsDialog> {
+  late TextEditingController _targetPercentController;
+  late EsopDilutionMethod _dilutionMethod;
+
+  @override
+  void initState() {
+    super.initState();
+    _targetPercentController = TextEditingController(
+      text: widget.provider.esopPoolPercent.toString(),
+    );
+    _dilutionMethod = widget.provider.esopDilutionMethod;
+  }
+
+  @override
+  void dispose() {
+    _targetPercentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final changes = widget.provider.esopPoolChanges;
+
+    return AlertDialog(
+      title: const Text('ESOP Pool Settings'),
+      content: SizedBox(
+        width: 500,
+        height: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Pool summary
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.3,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Current Pool Status',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildInfoRow(
+                      'Total Pool',
+                      Formatters.number(widget.provider.esopPoolShares),
+                    ),
+                    _buildInfoRow(
+                      'Allocated (via grants)',
+                      Formatters.number(widget.provider.allocatedEsopShares),
+                    ),
+                    _buildInfoRow(
+                      'Available',
+                      Formatters.number(widget.provider.unallocatedEsopShares),
+                    ),
+                    _buildInfoRow(
+                      'Options Exercised',
+                      Formatters.number(widget.provider.totalOptionsExercised),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Pool Change History
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Pool Change History',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _addPoolChange(context),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (changes.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'No pool changes recorded yet',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: changes.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                    ),
+                    itemBuilder: (context, index) {
+                      final change = changes[index];
+                      return ListTile(
+                        dense: true,
+                        leading: Icon(
+                          change.isAddition
+                              ? Icons.add_circle
+                              : Icons.remove_circle,
+                          color: change.isAddition
+                              ? Colors.green
+                              : Colors.orange,
+                          size: 20,
+                        ),
+                        title: Row(
+                          children: [
+                            Text(
+                              '${change.isAddition ? "+" : ""}${Formatters.number(change.sharesDelta)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: change.isAddition
+                                    ? Colors.green
+                                    : Colors.orange,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              Formatters.date(change.date),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.outline,
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle:
+                            change.notes != null && change.notes!.isNotEmpty
+                            ? Text(
+                                change.notes!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : null,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              tooltip: 'Edit',
+                              onPressed: () => _editPoolChange(context, change),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, size: 18),
+                              tooltip: 'Delete',
+                              onPressed: () =>
+                                  _deletePoolChange(context, change),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 20),
+
+              // Target percentage
+              AppTextField(
+                controller: _targetPercentController,
+                labelText: 'Target Pool Percentage',
+                suffixText: '%',
+                hintText: 'Recommended: 10-15% for most startups',
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Dilution method
+              Text(
+                'Dilution Calculation Method',
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              ...EsopDilutionMethod.values.map((method) {
+                return RadioListTile<EsopDilutionMethod>(
+                  title: Text(_getMethodTitle(method)),
+                  subtitle: Text(
+                    _getMethodDescription(method),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  value: method,
+                  groupValue: _dilutionMethod,
+                  onChanged: (v) => setState(() => _dilutionMethod = v!),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Save Settings')),
+      ],
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  void _addPoolChange(BuildContext context) async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => _PoolChangeDialog(provider: widget.provider),
+    );
+    if (mounted) setState(() {}); // Refresh the list
+  }
+
+  void _editPoolChange(BuildContext context, EsopPoolChange change) async {
+    await showDialog(
+      context: context,
+      builder: (ctx) =>
+          _PoolChangeDialog(provider: widget.provider, existingChange: change),
+    );
+    if (mounted) setState(() {}); // Refresh the list
+  }
+
+  void _deletePoolChange(BuildContext context, EsopPoolChange change) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Pool Change?'),
+        content: Text(
+          'Remove ${change.isAddition ? "+" : ""}${Formatters.number(change.sharesDelta)} shares from ${Formatters.date(change.date)}?\n\n'
+          'This will affect the total pool size.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await widget.provider.deleteEsopPoolChange(change.id);
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Pool change deleted')));
+      }
+    }
+  }
+
+  String _getMethodTitle(EsopDilutionMethod method) {
+    switch (method) {
+      case EsopDilutionMethod.preRoundCap:
+        return 'Pre-Round Cap (AU-style)';
+      case EsopDilutionMethod.postRoundCap:
+        return 'Post-Round Cap (US-style)';
+      case EsopDilutionMethod.fixedShares:
+        return 'Fixed Shares';
+    }
+  }
+
+  String _getMethodDescription(EsopDilutionMethod method) {
+    switch (method) {
+      case EsopDilutionMethod.preRoundCap:
+        return 'ESOP % based on pre-money cap table';
+      case EsopDilutionMethod.postRoundCap:
+        return 'ESOP % based on post-money cap table';
+      case EsopDilutionMethod.fixedShares:
+        return 'Fixed number of shares, no percentage';
+    }
+  }
+
+  Future<void> _save() async {
+    final targetPercent = double.tryParse(_targetPercentController.text) ?? 10;
+
+    await widget.provider.updateEsopSettings(
+      targetPercent: targetPercent,
+      dilutionMethod: _dilutionMethod,
+    );
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('ESOP settings updated')));
     }
   }
 }
