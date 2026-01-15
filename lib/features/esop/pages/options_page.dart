@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/esop_pool_change.dart';
 import '../../core/models/investor.dart';
@@ -7,6 +8,8 @@ import '../../core/models/share_class.dart';
 import '../../core/models/transaction.dart';
 import '../../core/models/vesting_schedule.dart';
 import '../../core/providers/core_cap_table_provider.dart' hide EsopDilutionMethod;
+import '../../valuations/providers/valuations_provider.dart';
+import '../../valuations/widgets/valuation_wizard_screen.dart';
 import '../providers/esop_provider.dart';
 import '../../../shared/utils/helpers.dart';
 import '../../../shared/widgets/empty_state.dart';
@@ -22,8 +25,8 @@ class OptionsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<CoreCapTableProvider, EsopProvider>(
-      builder: (context, coreProvider, esopProvider, child) {
+    return Consumer3<CoreCapTableProvider, EsopProvider, ValuationsProvider>(
+      builder: (context, coreProvider, esopProvider, valuationsProvider, child) {
         if (coreProvider.isLoading || !esopProvider.isInitialized) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -38,62 +41,54 @@ class OptionsPage extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(title: const Text('Options & ESOP')),
-          body: grants.isEmpty
-              ? Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const EmptyState(
-                      icon: Icons.card_giftcard,
-                      title: 'No Option Grants',
-                      subtitle:
-                          'Grant stock options to employees, advisors, or contractors.',
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ESOP Pool Management - always visible
+                _buildPoolManagement(context, coreProvider, esopProvider),
+                const SizedBox(height: 16),
+
+                // Summary stats - always visible
+                _buildSummaryCards(context, esopProvider),
+                const SizedBox(height: 24),
+
+                // Show empty state or grants list
+                if (grants.isEmpty)
+                  const EmptyState(
+                    icon: Icons.card_giftcard,
+                    title: 'No Option Grants',
+                    subtitle:
+                        'Grant stock options to employees, advisors, or contractors.',
+                  )
+                else ...[
+                  // Active grants
+                  if (activeGrants.isNotEmpty) ...[
+                    SectionCard(
+                      title: 'Active Grants',
+                      trailing: Text(
+                        '${activeGrants.length} active',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      child: _buildGrantsList(
+                        context,
+                        coreProvider,
+                        esopProvider,
+                        activeGrants,
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: () => _showGrantDialog(context, coreProvider, esopProvider),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Grant Options'),
-                    ),
                   ],
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ESOP Pool Management
-                      _buildPoolManagement(context, coreProvider, esopProvider),
-                      const SizedBox(height: 16),
 
-                      // Summary stats
-                      _buildSummaryCards(context, esopProvider),
-                      const SizedBox(height: 24),
-
-                      // Active grants
-                      if (activeGrants.isNotEmpty) ...[
-                        SectionCard(
-                          title: 'Active Grants',
-                          trailing: Text(
-                            '${activeGrants.length} active',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          child: _buildGrantsList(
-                            context,
-                            coreProvider,
-                            esopProvider,
-                            activeGrants,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Exercised/cancelled/expired
-                      _buildHistorySection(context, coreProvider, esopProvider, grants),
-                    ],
-                  ),
-                ),
+                  // Exercised/cancelled/expired
+                  _buildHistorySection(context, coreProvider, esopProvider, grants),
+                ],
+              ],
+            ),
+          ),
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _showGrantDialog(context, coreProvider, esopProvider),
+            onPressed: () => _showGrantDialog(context, coreProvider, esopProvider, valuationsProvider),
             icon: const Icon(Icons.add),
             label: const Text('Grant Options'),
           ),
@@ -530,12 +525,14 @@ class OptionsPage extends StatelessWidget {
     BuildContext context,
     CoreCapTableProvider coreProvider,
     EsopProvider esopProvider,
+    ValuationsProvider valuationsProvider,
   ) {
     showDialog(
       context: context,
       builder: (context) => GrantOptionsDialog(
         coreProvider: coreProvider,
         esopProvider: esopProvider,
+        valuationsProvider: valuationsProvider,
       ),
     );
   }
@@ -712,12 +709,14 @@ class _StatChip extends StatelessWidget {
 class GrantOptionsDialog extends StatefulWidget {
   final CoreCapTableProvider coreProvider;
   final EsopProvider esopProvider;
+  final ValuationsProvider valuationsProvider;
   final OptionGrant? grant; // If provided, we're editing
 
   const GrantOptionsDialog({
     super.key,
     required this.coreProvider,
     required this.esopProvider,
+    required this.valuationsProvider,
     this.grant,
   });
 
@@ -742,6 +741,7 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
   bool _hasVesting = true;
   int _vestingMonths = 48;
   int _cliffMonths = 12;
+  String? _strikePriceSourceText;
 
   bool get isEditing => widget.grant != null;
 
@@ -769,9 +769,19 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
         }
       }
     } else {
-      // Default strike price to current valuation
-      _strikePriceController.text = widget.provider.latestSharePrice
-          .toStringAsFixed(2);
+      // Try to calculate strike price from latest valuation
+      final latestValuation = widget.valuationsProvider.getLatestValuationBeforeDate(DateTime.now());
+      final totalShares = widget.provider.totalIssuedShares;
+
+      if (latestValuation != null && totalShares > 0) {
+        final impliedPrice = latestValuation.preMoneyValue / totalShares;
+        _strikePriceController.text = impliedPrice.toStringAsFixed(2);
+        _strikePriceSourceText = 'Strike price from ${DateFormat.yMMMd().format(latestValuation.date)} valuation';
+      } else {
+        // Fallback to existing share price
+        _strikePriceController.text = widget.provider.latestSharePrice
+            .toStringAsFixed(2);
+      }
 
       // Default to ESOP share class only if pool exists and has available shares
       final hasEsopPool = widget.provider.esopPoolChanges.isNotEmpty;
@@ -781,6 +791,21 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
             .where((s) => s.type == ShareClassType.esop)
             .firstOrNull;
         _selectedShareClassId = esopClass?.id;
+      }
+
+      // Show snackbar after dialog opens if we pre-filled from valuation
+      if (_strikePriceSourceText != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(_strikePriceSourceText!),
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        });
       }
     }
   }
@@ -849,6 +874,18 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
                         prefixText: '\$ ',
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
+                        ),
+                        suffix: ValuationWizardButton(
+                          currentValuation: double.tryParse(_strikePriceController.text),
+                          onValuationSelected: (value) {
+                            final totalShares = widget.provider.totalIssuedShares;
+                            if (totalShares > 0) {
+                              final impliedPrice = value / totalShares;
+                              setState(() {
+                                _strikePriceController.text = impliedPrice.toStringAsFixed(2);
+                              });
+                            }
+                          },
                         ),
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Required';
@@ -1465,63 +1502,34 @@ class GrantDetailsDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        // Show Undo Exercise if already exercised, otherwise show Exercise
-        if (grant.exercisedCount > 0) ...[
+        // Show Exercise button if there are exercisable options
+        if (canExercise)
           FilledButton.icon(
-            onPressed: () async {
-              final navigator = Navigator.of(context);
-              final confirmed = await showConfirmDialog(
+            onPressed: () {
+              Navigator.pop(context);
+              showDialog(
                 context: context,
-                title: 'Undo Exercise',
-                message:
-                    'This will remove the exercise transaction and restore the options to their original state. Are you sure?',
+                builder: (context) => ExerciseOptionsDialog(
+                  grant: grant,
+                  coreProvider: coreProvider,
+                  esopProvider: esopProvider,
+                  maxExercisable: exercisableOptions,
+                ),
               );
-              if (confirmed && context.mounted) {
-                final success = await esopProvider.undoOptionExercise(
-                  grantId: grant.id,
-                );
-                if (success) {
-                  navigator.pop();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Exercise undone')),
-                    );
-                  }
-                }
-              }
             },
-            icon: const Icon(Icons.undo, size: 18),
-            label: const Text('Undo Exercise'),
-          ),
-        ] else ...[
-          FilledButton.icon(
-            onPressed: canExercise
-                ? () {
-                    Navigator.pop(context);
-                    showDialog(
-                      context: context,
-                      builder: (context) => ExerciseOptionsDialog(
-                        grant: grant,
-                        coreProvider: coreProvider,
-                        esopProvider: esopProvider,
-                        maxExercisable: exercisableOptions,
-                      ),
-                    );
-                  }
-                : null,
             icon: const Icon(Icons.check_circle, size: 18),
             label: const Text('Exercise'),
           ),
-        ],
         TextButton.icon(
           onPressed: (exerciseTransaction == null && grant.exercisedCount == 0)
               ? () {
                   Navigator.pop(context);
                   showDialog(
                     context: context,
-                    builder: (context) => GrantOptionsDialog(
+                    builder: (ctx) => GrantOptionsDialog(
                       coreProvider: coreProvider,
                       esopProvider: esopProvider,
+                      valuationsProvider: context.read<ValuationsProvider>(),
                       grant: grant,
                     ),
                   );

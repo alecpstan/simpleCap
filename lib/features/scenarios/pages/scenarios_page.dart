@@ -7,7 +7,7 @@ import '../providers/scenarios_provider.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/info_widgets.dart';
 import '../../../shared/widgets/avatars.dart';
-import '../widgets/valuation_wizard.dart';
+import '../../valuations/widgets/valuation_wizard_screen.dart';
 import '../../../shared/widgets/help_icon.dart';
 import '../../../shared/utils/helpers.dart';
 
@@ -698,23 +698,62 @@ class _ScenariosPageState extends State<ScenariosPage>
       }
     }
 
-    // Step 2: Distribute remaining value pro-rata
+    // Step 2: Handle non-participating preferred conversion option
+    // Non-participating preferred can choose the HIGHER of:
+    // - Their liquidation preference (already calculated), OR
+    // - Their pro-rata share of FULL exit value (as if converted to common)
+    final nonParticipatingHoldings = investorHoldings
+        .where((h) =>
+            !h.shareClass.participating &&
+            h.shareClass.liquidationPreference > 0)
+        .toList();
+
+    for (final h in nonParticipatingHoldings) {
+      // Calculate what they would get pro-rata on FULL exit value
+      final proRataValue = (h.shares / totalShares) * exitValue;
+      // Calculate what they got as preference
+      var preferenceValue = h.invested * h.shareClass.liquidationPreference;
+      if (h.shareClass.dividendRate > 0) {
+        final dividends = provider.getAccruedDividendsByInvestor(h.investorId);
+        final totalInvested = provider.getInvestmentByInvestor(h.investorId);
+        if (totalInvested > 0) {
+          preferenceValue += dividends * (h.invested / totalInvested);
+        }
+      }
+
+      // If pro-rata is better, they convert (give up preference for pro-rata)
+      if (proRataValue > preferenceValue) {
+        // Remove their preference, give them pro-rata instead
+        proceeds[h.investorId] =
+            (proceeds[h.investorId] ?? 0) - preferenceValue + proRataValue;
+        // Adjust remaining value: add back preference, subtract pro-rata
+        remainingValue = remainingValue + preferenceValue - proRataValue;
+      }
+    }
+
+    // Step 3: Distribute remaining value pro-rata to eligible holders
     if (remainingValue > 0) {
-      // For participating preferred, they get their share too
-      // For non-participating, they already got their preference
+      // Eligible for remaining: participating preferred + common
+      // (Non-participating who converted already got their full pro-rata above)
       double eligibleShares = 0;
       for (final h in investorHoldings) {
-        if (h.shareClass.participating ||
-            h.shareClass.liquidationPreference == 0) {
+        // Common shares (no liquidation preference)
+        if (h.shareClass.liquidationPreference == 0) {
           eligibleShares += h.shares;
         }
+        // Participating preferred
+        else if (h.shareClass.participating) {
+          eligibleShares += h.shares;
+        }
+        // Non-participating who converted are already paid, skip them
       }
 
       if (eligibleShares > 0) {
         final perShare = remainingValue / eligibleShares;
         for (final h in investorHoldings) {
-          if (h.shareClass.participating ||
-              h.shareClass.liquidationPreference == 0) {
+          final isEligible = h.shareClass.liquidationPreference == 0 ||
+              h.shareClass.participating;
+          if (isEligible) {
             final proRata = h.shares * perShare;
             proceeds[h.investorId] = (proceeds[h.investorId] ?? 0) + proRata;
           }

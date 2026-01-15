@@ -10,6 +10,7 @@ import '../models/hours_vesting.dart';
 import '../models/tax_rule.dart';
 import '../../esop/models/option_grant.dart';
 import '../../esop/models/esop_pool_change.dart';
+import '../../valuations/models/valuation.dart';
 import '../services/storage_service.dart';
 import '../../esop/esop_helpers.dart' as esop;
 
@@ -32,6 +33,7 @@ class CoreCapTableProvider extends ChangeNotifier {
   List<HoursVestingSchedule> _hoursVestingSchedules = [];
   List<TaxRule> _taxRules = [];
   List<OptionGrant> _optionGrants = [];
+  List<Valuation> _valuations = [];
   String _companyName = 'My Company Pty Ltd';
   bool _isLoading = true;
   Map<String, double> _tableColumnWidths = {};
@@ -61,6 +63,9 @@ class CoreCapTableProvider extends ChangeNotifier {
       List.unmodifiable(_hoursVestingSchedules);
   List<TaxRule> get taxRules => List.unmodifiable(_taxRules);
   List<OptionGrant> get optionGrants => List.unmodifiable(_optionGrants);
+  List<Valuation> get valuations => List.unmodifiable(
+    _valuations..sort((a, b) => b.date.compareTo(a.date)), // Newest first
+  );
   bool get showFullyDiluted => _showFullyDiluted;
   int get themeModeIndex => _themeModeIndex;
 
@@ -162,14 +167,19 @@ class CoreCapTableProvider extends ChangeNotifier {
   }
 
   /// Allocated ESOP shares = option grants that are still active
-  /// (not cancelled/forfeited). Includes both exercised and un-exercised.
+  /// (not cancelled/forfeited) AND use an ESOP share class type.
+  /// Includes both exercised and un-exercised.
   int get allocatedEsopShares {
     return _optionGrants
-        .where(
-          (g) =>
-              g.status != OptionGrantStatus.cancelled &&
-              g.status != OptionGrantStatus.forfeited,
-        )
+        .where((g) {
+          if (g.status == OptionGrantStatus.cancelled ||
+              g.status == OptionGrantStatus.forfeited) {
+            return false;
+          }
+          // Only count grants using ESOP share class type
+          final shareClass = getShareClassById(g.shareClassId);
+          return shareClass?.type == ShareClassType.esop;
+        })
         .fold(0, (sum, g) => sum + g.numberOfOptions - g.cancelledCount);
   }
 
@@ -319,6 +329,9 @@ class CoreCapTableProvider extends ChangeNotifier {
       _optionGrants = (data['optionGrants'] as List? ?? [])
           .map((e) => OptionGrant.fromJson(e))
           .toList();
+      _valuations = (data['valuations'] as List? ?? [])
+          .map((e) => Valuation.fromJson(e))
+          .toList();
       _companyName = data['companyName'] ?? 'My Company Pty Ltd';
       _tableColumnWidths =
           (data['tableColumnWidths'] as Map<String, dynamic>?)?.map(
@@ -393,6 +406,7 @@ class CoreCapTableProvider extends ChangeNotifier {
       hoursVestingSchedules: _hoursVestingSchedules,
       taxRules: _taxRules,
       optionGrants: _optionGrants,
+      valuations: _valuations,
       esopPoolChanges: _esopPoolChanges,
       companyName: _companyName,
       tableColumnWidths: _tableColumnWidths,
@@ -447,6 +461,36 @@ class CoreCapTableProvider extends ChangeNotifier {
     _convertibles = List.from(convertibles);
     await _save();
     notifyListeners();
+  }
+
+  /// Called by ValuationsProvider when valuations data changes.
+  /// Updates internal state and persists to storage.
+  Future<void> syncValuationsData({
+    required List<Valuation> valuations,
+  }) async {
+    _valuations = List.from(valuations);
+    await _save();
+    notifyListeners();
+  }
+
+  /// Get a valuation by ID
+  Valuation? getValuationById(String id) {
+    try {
+      return _valuations.firstWhere((v) => v.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Get the most recent valuation before a given date
+  /// Used to auto-populate pre-money valuations for rounds
+  Valuation? getLatestValuationBeforeDate(DateTime date) {
+    final beforeDate = _valuations
+        .where((v) => v.date.isBefore(date) || v.date.isAtSameMomentAs(date))
+        .toList();
+    if (beforeDate.isEmpty) return null;
+    beforeDate.sort((a, b) => b.date.compareTo(a.date));
+    return beforeDate.first;
   }
 
   /// Delete a transaction by ID (used by feature providers for undo operations)

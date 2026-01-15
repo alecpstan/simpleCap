@@ -42,11 +42,7 @@ Future<InvestmentDialogResult> showInvestmentDialog({
 
   // Check if we have investors to add
   if (!isEditing && provider.investors.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Add investors first before adding them to a round'),
-      ),
-    );
+    showInfoSnackbar(context, 'Add investors first before adding them to a round');
     return InvestmentDialogResult.cancelled();
   }
 

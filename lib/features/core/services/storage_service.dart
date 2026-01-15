@@ -13,6 +13,7 @@ import '../models/hours_vesting.dart';
 import '../models/tax_rule.dart';
 import '../../esop/models/option_grant.dart';
 import '../../esop/models/esop_pool_change.dart';
+import '../../valuations/models/valuation.dart';
 
 class StorageService {
   static const String _fileName = 'cap_table_data.json';
@@ -53,6 +54,7 @@ class StorageService {
       'hoursVestingSchedules': [],
       'taxRules': [],
       'optionGrants': [],
+      'valuations': [],
       'esopPoolChanges': [],
       'companyName': 'My Company Pty Ltd',
       'tableColumnWidths': <String, double>{},
@@ -73,6 +75,7 @@ class StorageService {
     required List<HoursVestingSchedule> hoursVestingSchedules,
     required List<TaxRule> taxRules,
     required List<OptionGrant> optionGrants,
+    required List<Valuation> valuations,
     required List<EsopPoolChange> esopPoolChanges,
     required String companyName,
     Map<String, double> tableColumnWidths = const {},
@@ -95,6 +98,7 @@ class StorageService {
           .toList(),
       'taxRules': taxRules.map((e) => e.toJson()).toList(),
       'optionGrants': optionGrants.map((e) => e.toJson()).toList(),
+      'valuations': valuations.map((e) => e.toJson()).toList(),
       'esopPoolChanges': esopPoolChanges.map((e) => e.toJson()).toList(),
       'companyName': companyName,
       'tableColumnWidths': tableColumnWidths,

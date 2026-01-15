@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'features/core/providers/core_cap_table_provider.dart';
 import 'features/esop/providers/esop_provider.dart';
 import 'features/convertibles/providers/convertibles_provider.dart';
+import 'features/valuations/providers/valuations_provider.dart';
 import 'features/scenarios/providers/scenarios_provider.dart';
 import 'features/core/pages/dashboard_page.dart';
 import 'features/core/pages/investors_page.dart';
@@ -76,6 +77,19 @@ class MainApp extends StatelessWidget {
                 convertibles: provider.convertibles,
               ),
               onAddTransaction: core.addTransaction,
+            );
+            return provider;
+          },
+        ),
+        ChangeNotifierProxyProvider<CoreCapTableProvider, ValuationsProvider>(
+          create: (_) => ValuationsProvider(),
+          update: (_, core, valuations) {
+            final provider = valuations ?? ValuationsProvider();
+            provider.updateFromCore(
+              valuations: core.valuations,
+              onSave: () => core.syncValuationsData(
+                valuations: provider.valuations,
+              ),
             );
             return provider;
           },

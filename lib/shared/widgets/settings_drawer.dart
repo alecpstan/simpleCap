@@ -5,10 +5,10 @@ import '../../features/scenarios/pages/scenarios_page.dart';
 import '../../features/events/pages/events_timeline_page.dart';
 import '../../features/convertibles/pages/convertibles_page.dart';
 import '../../features/esop/pages/options_page.dart';
+import '../../features/valuations/pages/valuations_page.dart';
 import '../../features/core/providers/core_cap_table_provider.dart';
 import '../services/export_import_service.dart';
 import 'dialogs.dart';
-import '../../features/scenarios/widgets/valuation_wizard.dart';
 
 class SettingsDrawer extends StatelessWidget {
   const SettingsDrawer({super.key});
@@ -79,12 +79,17 @@ class SettingsDrawer extends StatelessWidget {
                 ),
 
                 ListTile(
-                  leading: const Icon(Icons.auto_awesome),
-                  title: const Text('Valuation Wizard'),
-                  subtitle: const Text('Help determine pre-money valuation'),
+                  leading: const Icon(Icons.assessment),
+                  title: const Text('Valuations'),
+                  subtitle: const Text('Track company valuations over time'),
                   onTap: () {
                     Navigator.pop(context); // Close drawer
-                    ValuationWizard.show(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ValuationsPage(),
+                      ),
+                    );
                   },
                 ),
 

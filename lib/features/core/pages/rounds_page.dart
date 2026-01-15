@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/investment_round.dart';
 import '../../convertibles/models/convertible_instrument.dart';
@@ -7,12 +8,13 @@ import '../models/share_class.dart';
 import '../models/transaction.dart';
 import '../providers/core_cap_table_provider.dart';
 import '../../convertibles/providers/convertibles_provider.dart';
+import '../../valuations/providers/valuations_provider.dart';
+import '../../valuations/widgets/valuation_wizard_screen.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/avatars.dart';
 import '../../../shared/widgets/expandable_card.dart';
 import '../../../shared/widgets/dialogs.dart';
 import 'investment_dialog.dart';
-import '../../scenarios/widgets/valuation_wizard.dart';
 import '../../../shared/widgets/help_icon.dart';
 import 'transaction_editor.dart';
 import '../../../shared/widgets/stat_pill.dart';
@@ -118,9 +120,6 @@ class RoundsPage extends StatelessWidget {
   }) async {
     final isEditing = round != null;
     final nameController = TextEditingController(text: round?.name ?? '');
-    final preMoneyController = TextEditingController(
-      text: round?.preMoneyValuation.toString() ?? '',
-    );
     final priceController = TextEditingController(
       text: round?.pricePerShare?.toString() ?? '',
     );
@@ -131,6 +130,37 @@ class RoundsPage extends StatelessWidget {
     var selectedType = round?.type ?? RoundType.seed;
     var selectedDate = round?.date ?? DateTime.now();
     var isClosed = round?.isClosed ?? false;
+
+    // Auto-populate pre-money from latest valuation if creating new round
+    final valuationsProvider = context.read<ValuationsProvider>();
+    String? preMoneySourceText;
+    final preMoneyController = TextEditingController();
+
+    if (isEditing) {
+      preMoneyController.text = round.preMoneyValuation.toString();
+    } else {
+      // Try to get latest valuation before the selected date
+      final latestValuation = valuationsProvider.getLatestValuationBeforeDate(selectedDate);
+      if (latestValuation != null) {
+        preMoneyController.text = latestValuation.preMoneyValue.round().toString();
+        preMoneySourceText = 'Pre-money pre-filled from ${DateFormat.yMMMd().format(latestValuation.date)} valuation';
+      }
+    }
+
+    // Show snackbar after dialog opens if we pre-filled
+    if (preMoneySourceText != null && context.mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(preMoneySourceText!),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      });
+    }
 
     final result = await showDialog<bool>(
       context: context,
