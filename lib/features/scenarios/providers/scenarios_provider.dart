@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../core/models/share_class.dart';
+import '../../core/providers/core_cap_table_provider.dart';
+import '../models/saved_scenario.dart';
 
 /// Result model for exit waterfall calculations
 class WaterfallRow {
@@ -29,13 +31,89 @@ class WaterfallRow {
 /// - Exit waterfall analysis
 /// - New round simulations
 /// - Pro-rata calculations
+/// - Saved scenarios
 ///
 /// It reads data from CoreCapTableProvider for calculations
 /// but doesn't modify core data.
 class ScenariosProvider extends ChangeNotifier {
+  CoreCapTableProvider? _coreProvider;
+
+  // Saved scenarios
+  List<SavedScenario> _savedScenarios = [];
+
   // Cache for scenario results
   Map<String, double> _lastDilutionResults = {};
   List<WaterfallRow> _lastWaterfallResults = [];
+
+  // Getters for saved scenarios
+  List<SavedScenario> get savedScenarios => List.unmodifiable(_savedScenarios);
+
+  List<SavedScenario> getScenariosByType(ScenarioType type) {
+    return _savedScenarios.where((s) => s.type == type).toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  Map<ScenarioType, List<SavedScenario>> get scenariosByType {
+    final grouped = <ScenarioType, List<SavedScenario>>{};
+    for (final type in ScenarioType.values) {
+      grouped[type] = getScenariosByType(type);
+    }
+    return grouped;
+  }
+
+  /// Update reference to core provider
+  void updateCoreProvider(CoreCapTableProvider coreProvider) {
+    _coreProvider = coreProvider;
+  }
+
+  /// Load saved scenarios from core provider
+  void loadSavedScenarios(List<SavedScenario> scenarios) {
+    _savedScenarios = List.from(scenarios);
+    notifyListeners();
+  }
+
+  /// Save a new scenario
+  Future<SavedScenario> saveScenario({
+    required String name,
+    required ScenarioType type,
+    required Map<String, dynamic> parameters,
+  }) async {
+    final scenario = SavedScenario(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name,
+      type: type,
+      parameters: parameters,
+    );
+
+    _savedScenarios.add(scenario);
+    await _syncWithCore();
+    notifyListeners();
+    return scenario;
+  }
+
+  /// Update an existing scenario
+  Future<void> updateScenario(SavedScenario scenario) async {
+    final index = _savedScenarios.indexWhere((s) => s.id == scenario.id);
+    if (index >= 0) {
+      _savedScenarios[index] = scenario.copyWith(updatedAt: DateTime.now());
+      await _syncWithCore();
+      notifyListeners();
+    }
+  }
+
+  /// Delete a scenario
+  Future<void> deleteScenario(String id) async {
+    _savedScenarios.removeWhere((s) => s.id == id);
+    await _syncWithCore();
+    notifyListeners();
+  }
+
+  /// Sync saved scenarios with core provider for persistence
+  Future<void> _syncWithCore() async {
+    if (_coreProvider != null) {
+      await _coreProvider!.syncScenariosData(scenarios: _savedScenarios);
+    }
+  }
 
   // Getters for cached results
   Map<String, double> get lastDilutionResults =>

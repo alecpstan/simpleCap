@@ -94,7 +94,15 @@ class MainApp extends StatelessWidget {
             return provider;
           },
         ),
-        ChangeNotifierProvider(create: (_) => ScenariosProvider()),
+        ChangeNotifierProxyProvider<CoreCapTableProvider, ScenariosProvider>(
+          create: (_) => ScenariosProvider(),
+          update: (_, core, scenarios) {
+            final provider = scenarios ?? ScenariosProvider();
+            provider.updateCoreProvider(core);
+            provider.loadSavedScenarios(core.savedScenarios);
+            return provider;
+          },
+        ),
       ],
       child: Consumer<CoreCapTableProvider>(
         builder: (context, provider, _) {

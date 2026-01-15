@@ -11,6 +11,7 @@ import '../models/tax_rule.dart';
 import '../../esop/models/option_grant.dart';
 import '../../esop/models/esop_pool_change.dart';
 import '../../valuations/models/valuation.dart';
+import '../../scenarios/models/saved_scenario.dart';
 import '../services/storage_service.dart';
 import '../../esop/esop_helpers.dart' as esop;
 
@@ -34,6 +35,7 @@ class CoreCapTableProvider extends ChangeNotifier {
   List<TaxRule> _taxRules = [];
   List<OptionGrant> _optionGrants = [];
   List<Valuation> _valuations = [];
+  List<SavedScenario> _savedScenarios = [];
   String _companyName = 'My Company Pty Ltd';
   bool _isLoading = true;
   Map<String, double> _tableColumnWidths = {};
@@ -66,6 +68,7 @@ class CoreCapTableProvider extends ChangeNotifier {
   List<Valuation> get valuations => List.unmodifiable(
     _valuations..sort((a, b) => b.date.compareTo(a.date)), // Newest first
   );
+  List<SavedScenario> get savedScenarios => List.unmodifiable(_savedScenarios);
   bool get showFullyDiluted => _showFullyDiluted;
   int get themeModeIndex => _themeModeIndex;
 
@@ -332,6 +335,9 @@ class CoreCapTableProvider extends ChangeNotifier {
       _valuations = (data['valuations'] as List? ?? [])
           .map((e) => Valuation.fromJson(e))
           .toList();
+      _savedScenarios = (data['savedScenarios'] as List? ?? [])
+          .map((e) => SavedScenario.fromJson(e))
+          .toList();
       _companyName = data['companyName'] ?? 'My Company Pty Ltd';
       _tableColumnWidths =
           (data['tableColumnWidths'] as Map<String, dynamic>?)?.map(
@@ -407,6 +413,7 @@ class CoreCapTableProvider extends ChangeNotifier {
       taxRules: _taxRules,
       optionGrants: _optionGrants,
       valuations: _valuations,
+      savedScenarios: _savedScenarios,
       esopPoolChanges: _esopPoolChanges,
       companyName: _companyName,
       tableColumnWidths: _tableColumnWidths,
@@ -469,6 +476,16 @@ class CoreCapTableProvider extends ChangeNotifier {
     required List<Valuation> valuations,
   }) async {
     _valuations = List.from(valuations);
+    await _save();
+    notifyListeners();
+  }
+
+  /// Called by ScenariosProvider when saved scenarios data changes.
+  /// Updates internal state and persists to storage.
+  Future<void> syncScenariosData({
+    required List<SavedScenario> scenarios,
+  }) async {
+    _savedScenarios = List.from(scenarios);
     await _save();
     notifyListeners();
   }

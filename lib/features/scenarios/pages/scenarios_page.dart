@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/share_class.dart';
 import '../../core/providers/core_cap_table_provider.dart';
 import '../providers/scenarios_provider.dart';
+import '../models/saved_scenario.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/info_widgets.dart';
 import '../../../shared/widgets/avatars.dart';
@@ -40,6 +41,9 @@ class _ScenariosPageState extends State<ScenariosPage>
   final _simPreMoneyController = TextEditingController();
   double _simEsopExpansion = 0;
   List<_SimulationResult> _simulationResults = [];
+
+  // Currently loaded scenario (for editing)
+  SavedScenario? _loadedScenario;
 
   @override
   void initState() {
@@ -103,6 +107,22 @@ class _ScenariosPageState extends State<ScenariosPage>
       appBar: AppBar(
         title: const Text('Scenarios'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmark_outline),
+            tooltip: 'Saved Scenarios',
+            onPressed: () => Scaffold.of(context).openEndDrawer(),
+          ),
+          Builder(
+            builder: (context) {
+              return IconButton(
+                icon: const Icon(Icons.save_outlined),
+                tooltip: 'Save Current Scenario',
+                onPressed: () => _showSaveDialog(context),
+              );
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -112,6 +132,7 @@ class _ScenariosPageState extends State<ScenariosPage>
           ],
         ),
       ),
+      endDrawer: _buildSavedScenariosDrawer(),
       body: Consumer2<CoreCapTableProvider, ScenariosProvider>(
         builder: (context, coreProvider, scenariosProvider, child) {
           if (coreProvider.isLoading) {
@@ -129,6 +150,337 @@ class _ScenariosPageState extends State<ScenariosPage>
         },
       ),
     );
+  }
+
+  Widget _buildSavedScenariosDrawer() {
+    return Consumer<ScenariosProvider>(
+      builder: (context, scenariosProvider, child) {
+        final scenariosByType = scenariosProvider.scenariosByType;
+        final hasScenarios = scenariosByType.values.any((list) => list.isNotEmpty);
+
+        return Drawer(
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bookmark, size: 28),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Saved Scenarios',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: hasScenarios
+                      ? ListView(
+                          children: [
+                            for (final type in ScenarioType.values)
+                              if (scenariosByType[type]!.isNotEmpty) ...[
+                                _buildScenarioTypeSection(
+                                  context,
+                                  type,
+                                  scenariosByType[type]!,
+                                  scenariosProvider,
+                                ),
+                              ],
+                          ],
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.bookmark_border,
+                                size: 64,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No saved scenarios yet',
+                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                  color: Theme.of(context).colorScheme.outline,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Use the save button to save\nyour current scenario',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.outline,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildScenarioTypeSection(
+    BuildContext context,
+    ScenarioType type,
+    List<SavedScenario> scenarios,
+    ScenariosProvider provider,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            type.displayName,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+        ...scenarios.map((scenario) => _buildScenarioTile(context, scenario, provider)),
+      ],
+    );
+  }
+
+  Widget _buildScenarioTile(
+    BuildContext context,
+    SavedScenario scenario,
+    ScenariosProvider provider,
+  ) {
+    return ListTile(
+      leading: Icon(_getScenarioIcon(scenario.type)),
+      title: Text(scenario.name),
+      subtitle: Text(
+        scenario.summary,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete_outline, size: 20),
+        onPressed: () => _confirmDelete(context, scenario, provider),
+      ),
+      onTap: () {
+        _loadScenario(scenario);
+        Navigator.pop(context); // Close drawer
+      },
+    );
+  }
+
+  IconData _getScenarioIcon(ScenarioType type) {
+    switch (type) {
+      case ScenarioType.dilution:
+        return Icons.calculate;
+      case ScenarioType.exitWaterfall:
+        return Icons.waterfall_chart;
+      case ScenarioType.newRound:
+        return Icons.science;
+    }
+  }
+
+  void _loadScenario(SavedScenario scenario) {
+    setState(() {
+      _loadedScenario = scenario;
+
+      // Switch to the appropriate tab
+      switch (scenario.type) {
+        case ScenarioType.dilution:
+          _tabController.animateTo(0);
+          _newSharesController.text = scenario.parameters['newShares']?.toString() ?? '';
+          _newInvestmentController.text = scenario.parameters['investment']?.toString() ?? '';
+          _preMoneyController.text = scenario.parameters['preMoney']?.toString() ?? '';
+          // Trigger recalculation
+          final provider = context.read<CoreCapTableProvider>();
+          if (_preMoneyController.text.isNotEmpty && _newInvestmentController.text.isNotEmpty) {
+            _calculateFromValuation(provider);
+          } else if (_newSharesController.text.isNotEmpty) {
+            _calculateDilution(provider);
+          }
+          break;
+
+        case ScenarioType.exitWaterfall:
+          _tabController.animateTo(1);
+          _exitValuationController.text = scenario.parameters['exitValuation']?.toString() ?? '';
+          // Trigger recalculation
+          final coreProvider = context.read<CoreCapTableProvider>();
+          _calculateExitWaterfall(coreProvider);
+          break;
+
+        case ScenarioType.newRound:
+          _tabController.animateTo(2);
+          _simRoundNameController.text = scenario.parameters['roundName']?.toString() ?? '';
+          _simRaiseAmountController.text = scenario.parameters['raiseAmount']?.toString() ?? '';
+          _simPreMoneyController.text = scenario.parameters['preMoney']?.toString() ?? '';
+          _simEsopExpansion = (scenario.parameters['esopExpansion'] as num?)?.toDouble() ?? 0;
+          // Trigger recalculation
+          final roundProvider = context.read<CoreCapTableProvider>();
+          _simulateNewRound(roundProvider);
+          break;
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Loaded "${scenario.name}"'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _showSaveDialog(BuildContext context) async {
+    final scenariosProvider = context.read<ScenariosProvider>();
+    final currentTab = _tabController.index;
+    final type = ScenarioType.values[currentTab];
+
+    // Get current parameters based on tab
+    final parameters = _getCurrentParameters(type);
+    if (parameters.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter some values first before saving')),
+      );
+      return;
+    }
+
+    final nameController = TextEditingController(
+      text: _loadedScenario?.type == type ? _loadedScenario?.name : '',
+    );
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Save ${type.displayName}'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Scenario Name',
+            hintText: 'e.g., Series A Planning',
+          ),
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, nameController.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      // Check if we're updating an existing scenario
+      if (_loadedScenario != null && _loadedScenario!.type == type) {
+        await scenariosProvider.updateScenario(
+          _loadedScenario!.copyWith(
+            name: result,
+            parameters: parameters,
+          ),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(this.context).showSnackBar(
+            SnackBar(content: Text('Updated "$result"')),
+          );
+        }
+      } else {
+        await scenariosProvider.saveScenario(
+          name: result,
+          type: type,
+          parameters: parameters,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(this.context).showSnackBar(
+            SnackBar(content: Text('Saved "$result"')),
+          );
+        }
+      }
+    }
+  }
+
+  Map<String, dynamic> _getCurrentParameters(ScenarioType type) {
+    switch (type) {
+      case ScenarioType.dilution:
+        final newShares = double.tryParse(_newSharesController.text);
+        final investment = double.tryParse(_newInvestmentController.text);
+        final preMoney = double.tryParse(_preMoneyController.text);
+        if (newShares == null && investment == null && preMoney == null) {
+          return {};
+        }
+        return {
+          if (newShares != null) 'newShares': newShares,
+          if (investment != null) 'investment': investment,
+          if (preMoney != null) 'preMoney': preMoney,
+        };
+
+      case ScenarioType.exitWaterfall:
+        final exitValuation = double.tryParse(_exitValuationController.text);
+        if (exitValuation == null) return {};
+        return {'exitValuation': exitValuation};
+
+      case ScenarioType.newRound:
+        final raiseAmount = double.tryParse(_simRaiseAmountController.text);
+        final preMoney = double.tryParse(_simPreMoneyController.text);
+        if (raiseAmount == null && preMoney == null) return {};
+        return {
+          'roundName': _simRoundNameController.text,
+          if (raiseAmount != null) 'raiseAmount': raiseAmount,
+          if (preMoney != null) 'preMoney': preMoney,
+          'esopExpansion': _simEsopExpansion,
+        };
+    }
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    SavedScenario scenario,
+    ScenariosProvider provider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Scenario'),
+        content: Text('Delete "${scenario.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await provider.deleteScenario(scenario.id!);
+      if (_loadedScenario?.id == scenario.id) {
+        setState(() => _loadedScenario = null);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(content: Text('Deleted "${scenario.name}"')),
+        );
+      }
+    }
   }
 
   Widget _buildDilutionTab(
