@@ -1,7 +1,7 @@
 name: simple_cap
 description: "Simple Cap Table management App for Australian Pty Ltd companies"
 publish_to: "none"
-version: 0.1.0
+version: 0.2.0
 
 environment:
   sdk: ^3.10.4
@@ -9,11 +9,28 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  provider: ^6.1.2
+
+  # State Management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Database
+  drift: ^2.18.0
+  sqlite3_flutter_libs: ^0.5.21
   path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Utilities
   uuid: ^4.5.1
   intl: ^0.20.2
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.9.0
+  shared_preferences: ^2.2.2
+
+  # Charts
   fl_chart: ^1.1.1
+
+  # File handling
   file_picker: ^8.0.0+1
 
 dev_dependencies:
@@ -21,6 +38,13 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.3
+
+  # Code generation
+  build_runner: ^2.4.9
+  riverpod_generator: ^2.4.0
+  freezed: ^2.5.2
+  json_serializable: ^6.8.0
+  drift_dev: ^2.18.0
 
 flutter_launcher_icons:
   android: true
