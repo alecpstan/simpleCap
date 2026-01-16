@@ -11,8 +11,7 @@ enum ShareClassType {
   preferenceC,
   esop,
   options,
-  performanceRights,
-  custom;
+  performanceRights;
 
   String get displayName => switch (this) {
     ordinary => 'Ordinary',
@@ -22,7 +21,6 @@ enum ShareClassType {
     esop => 'ESOP',
     options => 'Options',
     performanceRights => 'Performance Rights',
-    custom => 'Custom',
   };
 
   /// Whether this class represents potential (not yet issued) shares.

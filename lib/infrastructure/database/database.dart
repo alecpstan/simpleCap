@@ -29,6 +29,7 @@ part 'database.g.dart';
     SavedScenarios,
     Transfers,
     MfnUpgrades,
+    EsopPoolExpansions,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -38,7 +39,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration {
@@ -83,6 +84,24 @@ class AppDatabase extends _$AppDatabase {
         // Migration from version 3 to 4: Add transfers table
         if (from < 4) {
           await m.createTable(transfers);
+        }
+        // Migration from version 4 to 5: Add roundId to convertibles
+        if (from < 5) {
+          final convertiblesColumns = await customSelect(
+            "PRAGMA table_info(convertibles)",
+          ).get();
+          final hasRoundId = convertiblesColumns.any(
+            (row) => row.read<String>('name') == 'round_id',
+          );
+          if (!hasRoundId) {
+            await customStatement(
+              'ALTER TABLE convertibles ADD COLUMN round_id TEXT REFERENCES rounds(id)',
+            );
+          }
+        }
+        // Migration from version 5 to 6: Add EsopPoolExpansions table
+        if (from < 6) {
+          await m.createTable(esopPoolExpansions);
         }
       },
       beforeOpen: (details) async {
@@ -476,6 +495,61 @@ class AppDatabase extends _$AppDatabase {
       mfnUpgrades,
     )..where((u) => u.sourceConvertibleId.equals(sourceConvertibleId))).go();
     return upgrades;
+  }
+
+  // ===========================================================================
+  // ESOP Pool Expansion Operations
+  // ===========================================================================
+
+  /// Get all pool expansions for a company.
+  Future<List<EsopPoolExpansion>> getPoolExpansions(String companyId) {
+    return (select(esopPoolExpansions)
+          ..where((e) => e.companyId.equals(companyId))
+          ..orderBy([(e) => OrderingTerm.desc(e.expansionDate)]))
+        .get();
+  }
+
+  /// Watch pool expansions for real-time updates.
+  Stream<List<EsopPoolExpansion>> watchPoolExpansions(String companyId) {
+    return (select(esopPoolExpansions)
+          ..where((e) => e.companyId.equals(companyId))
+          ..orderBy([(e) => OrderingTerm.desc(e.expansionDate)]))
+        .watch();
+  }
+
+  /// Get expansions for a specific pool.
+  Future<List<EsopPoolExpansion>> getExpansionsForPool(String poolId) {
+    return (select(esopPoolExpansions)
+          ..where((e) => e.poolId.equals(poolId))
+          ..orderBy([(e) => OrderingTerm.desc(e.expansionDate)]))
+        .get();
+  }
+
+  /// Watch expansions for a specific pool.
+  Stream<List<EsopPoolExpansion>> watchExpansionsForPool(String poolId) {
+    return (select(esopPoolExpansions)
+          ..where((e) => e.poolId.equals(poolId))
+          ..orderBy([(e) => OrderingTerm.desc(e.expansionDate)]))
+        .watch();
+  }
+
+  /// Insert a pool expansion record.
+  Future<void> insertPoolExpansion(EsopPoolExpansionsCompanion expansion) {
+    return into(esopPoolExpansions).insert(expansion);
+  }
+
+  /// Delete a pool expansion record.
+  Future<void> deletePoolExpansion(String id) async {
+    await (delete(esopPoolExpansions)..where((e) => e.id.equals(id))).go();
+  }
+
+  /// Get the most recent expansion for a pool (for reversal).
+  Future<EsopPoolExpansion?> getLatestExpansionForPool(String poolId) {
+    return (select(esopPoolExpansions)
+          ..where((e) => e.poolId.equals(poolId))
+          ..orderBy([(e) => OrderingTerm.desc(e.expansionDate)])
+          ..limit(1))
+        .getSingleOrNull();
   }
 
   // ===========================================================================

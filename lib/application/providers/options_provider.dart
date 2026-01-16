@@ -292,6 +292,44 @@ class OptionGrantMutations extends _$OptionGrantMutations {
     );
   }
 
+  /// Undo exercise (revert exercised options back to outstanding).
+  Future<void> unexercise({
+    required String id,
+    required int sharesToUnexercise,
+  }) async {
+    final db = ref.read(databaseProvider);
+    final existing = await db.getOptionGrant(id);
+    if (existing == null) throw Exception('Option grant not found');
+
+    if (sharesToUnexercise > existing.exercisedCount) {
+      throw Exception('Cannot unexercise more than exercised count');
+    }
+
+    final newExercisedCount = existing.exercisedCount - sharesToUnexercise;
+
+    await db.upsertOptionGrant(
+      OptionGrantsCompanion(
+        id: Value(id),
+        companyId: Value(existing.companyId),
+        stakeholderId: Value(existing.stakeholderId),
+        shareClassId: Value(existing.shareClassId),
+        status: Value('active'), // Revert to active when unexercising
+        quantity: Value(existing.quantity),
+        strikePrice: Value(existing.strikePrice),
+        grantDate: Value(existing.grantDate),
+        expiryDate: Value(existing.expiryDate),
+        exercisedCount: Value(newExercisedCount),
+        cancelledCount: Value(existing.cancelledCount),
+        vestingScheduleId: Value(existing.vestingScheduleId),
+        roundId: Value(existing.roundId),
+        allowsEarlyExercise: Value(existing.allowsEarlyExercise),
+        notes: Value(existing.notes),
+        createdAt: Value(existing.createdAt),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
   Future<void> cancel({required String id, required int sharesToCancel}) async {
     final db = ref.read(databaseProvider);
     final existing = await db.getOptionGrant(id);

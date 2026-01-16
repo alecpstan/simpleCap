@@ -30,22 +30,49 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     }
 
     return Scaffold(
-      body: Column(
-        children: [
-          _buildHeader(context, roundsSummaryAsync),
-          Expanded(
-            child: roundsAsync.when(
-              data: (rounds) {
-                if (rounds.isEmpty) {
-                  return EmptyState.noItems(
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: _buildHeader(context, roundsSummaryAsync)),
+          roundsAsync.when(
+            data: (rounds) {
+              if (rounds.isEmpty) {
+                return SliverFillRemaining(
+                  child: EmptyState.noItems(
                     itemType: 'round',
                     onAdd: () => RoundBuilderPage.show(context),
-                  );
-                }
-                return _buildRoundsList(context, rounds);
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => EmptyState.error(
+                  ),
+                );
+              }
+              final hasDraft = rounds.any((r) => r.status == 'draft');
+
+              // Calculate which round can be reopened
+              final closedRounds = rounds.where((r) => r.status == 'closed').toList();
+              closedRounds.sort((a, b) => b.date.compareTo(a.date));
+              final mostRecentClosed = closedRounds.isNotEmpty ? closedRounds.first : null;
+              final hasDraftMoreRecent = mostRecentClosed != null &&
+                  rounds.any((r) => r.status == 'draft' && r.date.isAfter(mostRecentClosed.date));
+              final reopenableId = (mostRecentClosed != null && !hasDraftMoreRecent)
+                  ? mostRecentClosed.id
+                  : null;
+
+              return SliverList(
+                delegate: SliverChildListDelegate([
+                  if (hasDraft) _buildDraftNotice(context),
+                  ...rounds.map((round) => _buildRoundCard(
+                    context,
+                    round,
+                    canReopen: round.id == reopenableId,
+                    key: ValueKey(round.id),
+                  )),
+                  const SizedBox(height: 80),
+                ]),
+              );
+            },
+            loading: () => const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (e, _) => SliverFillRemaining(
+              child: EmptyState.error(
                 message: e.toString(),
                 onRetry: () => ref.invalidate(roundsStreamProvider),
               ),
@@ -53,10 +80,16 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => RoundBuilderPage.show(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Build Round'),
+      floatingActionButton: roundsAsync.whenOrNull(
+        data: (rounds) {
+          final hasDraft = rounds.any((r) => r.status == 'draft');
+          if (hasDraft) return null;
+          return FloatingActionButton.extended(
+            onPressed: () => RoundBuilderPage.show(context),
+            icon: const Icon(Icons.add),
+            label: const Text('Build Round'),
+          );
+        },
       ),
     );
   }
@@ -130,18 +163,7 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     );
   }
 
-  Widget _buildRoundsList(BuildContext context, List<Round> rounds) {
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 80),
-      itemCount: rounds.length,
-      itemBuilder: (context, index) {
-        final round = rounds[index];
-        return _buildRoundCard(context, round, key: ValueKey(round.id));
-      },
-    );
-  }
-
-  Widget _buildRoundCard(BuildContext context, Round round, {Key? key}) {
+  Widget _buildRoundCard(BuildContext context, Round round, {required bool canReopen, Key? key}) {
     final theme = Theme.of(context);
 
     return ExpandableCard(
@@ -161,12 +183,10 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
           color: theme.colorScheme.outline,
         ),
       ),
-      badges: [
-        StatusBadge(
-          label: _formatStatus(round.status),
-          color: _getStatusColor(round.status),
-        ),
-      ],
+      cornerBadge: StatusBadge(
+        label: _formatStatus(round.status),
+        color: _getStatusColor(round.status),
+      ),
       chips: [
         if (round.amountRaised > 0)
           MetricChip(
@@ -211,7 +231,7 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
               value: Formatters.currency(round.pricePerShare!),
             ),
           // Holdings in this round
-          _buildRoundHoldingsSection(context, round.id),
+          _buildRoundHoldingsSection(context, round.id, isDraft: round.status == 'draft'),
           // Convertibles converted in this round
           _buildRoundConvertiblesSection(context, round.id),
           if (round.notes != null && round.notes!.isNotEmpty) ...[
@@ -234,7 +254,7 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
             icon: const Icon(Icons.check, size: 18),
             label: const Text('Close'),
           ),
-        if (round.status == 'closed')
+        if (canReopen)
           TextButton.icon(
             onPressed: () => _reopenRound(context, round),
             icon: const Icon(Icons.undo, size: 18),
@@ -310,7 +330,33 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     }
   }
 
-  Widget _buildRoundHoldingsSection(BuildContext context, String roundId) {
+  Widget _buildDraftNotice(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 18, color: Colors.orange.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Close the current draft round before creating a new one.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoundHoldingsSection(BuildContext context, String roundId, {bool isDraft = false}) {
     final holdingsAsync = ref.watch(holdingsStreamProvider);
     final stakeholdersAsync = ref.watch(stakeholdersStreamProvider);
     final shareClassesAsync = ref.watch(shareClassesStreamProvider);
@@ -347,6 +393,7 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                 acquiredDate: h.acquiredDate,
                 roundName: stakeholderName, // Show investor name in round context
                 hasVesting: h.vestingScheduleId != null,
+                isDraft: isDraft,
                 onTap: () => HoldingDetailDialog.show(
                   context: context,
                   holding: h,

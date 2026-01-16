@@ -38,10 +38,12 @@ Map<String, dynamic> _$$StakeholderImplToJson(_$StakeholderImpl instance) =>
 
 const _$StakeholderTypeEnumMap = {
   StakeholderType.founder: 'founder',
-  StakeholderType.angel: 'angel',
-  StakeholderType.vcFund: 'vcFund',
   StakeholderType.employee: 'employee',
   StakeholderType.advisor: 'advisor',
+  StakeholderType.investor: 'investor',
+  StakeholderType.angel: 'angel',
+  StakeholderType.vcFund: 'vcFund',
   StakeholderType.institution: 'institution',
+  StakeholderType.company: 'company',
   StakeholderType.other: 'other',
 };

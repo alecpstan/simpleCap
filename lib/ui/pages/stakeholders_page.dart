@@ -413,6 +413,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     final optionsAsync = ref.watch(optionGrantsStreamProvider);
     final convertiblesAsync = ref.watch(convertiblesStreamProvider);
     final warrantsAsync = ref.watch(warrantsStreamProvider);
+    final roundsAsync = ref.watch(roundsStreamProvider);
 
     // Calculate ownership percentage
     final ownershipPercent = ownershipAsync.whenOrNull(
@@ -464,6 +465,22 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
       },
     );
 
+    // Check if stakeholder has any draft holdings
+    final hasDraftEquity = holdingsAsync.whenOrNull(
+      data: (holdings) {
+        final draftRoundIds = roundsAsync.whenOrNull(
+          data: (rounds) => {
+            for (final r in rounds)
+              if (r.status == 'draft') r.id,
+          },
+        );
+        if (draftRoundIds == null) return false;
+        return holdings.any(
+          (h) => h.roundId != null && draftRoundIds.contains(h.roundId),
+        );
+      },
+    ) ?? false;
+
     return ExpandableCard(
       leading: EntityAvatar(
         name: stakeholder.name,
@@ -510,6 +527,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
             color: Colors.teal,
           ),
       ],
+      cornerBadge: hasDraftEquity ? StatusBadge.draft() : null,
       expandedContent: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -608,10 +626,12 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
           classes.where((c) => c.id == holding.shareClassId).firstOrNull?.name,
     );
     final roundsAsync = ref.watch(roundsStreamProvider);
-    final roundName = roundsAsync.whenOrNull(
+    final round = roundsAsync.whenOrNull(
       data: (rounds) =>
-          rounds.where((r) => r.id == holding.roundId).firstOrNull?.name,
+          rounds.where((r) => r.id == holding.roundId).firstOrNull,
     );
+    final roundName = round?.name;
+    final isDraft = round?.status == 'draft';
     final hasVesting = holding.vestingScheduleId != null;
 
     return HoldingItem(
@@ -622,6 +642,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
       acquiredDate: holding.acquiredDate,
       roundName: roundName,
       hasVesting: hasVesting,
+      isDraft: isDraft,
       onTap: () => HoldingDetailDialog.show(
         context: context,
         holding: holding,

@@ -300,6 +300,44 @@ class Transfers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// ESOP pool expansion history table.
+///
+/// Tracks when ESOP pools are expanded to meet target percentage or other
+/// requirements. Enables proper reversal if an expansion needs to be undone.
+class EsopPoolExpansions extends Table {
+  TextColumn get id => text()();
+  TextColumn get companyId => text().references(Companies, #id)();
+
+  /// The pool that was expanded
+  TextColumn get poolId => text().references(EsopPools, #id)();
+
+  /// Pool size BEFORE expansion
+  IntColumn get previousSize => integer()();
+
+  /// Pool size AFTER expansion
+  IntColumn get newSize => integer()();
+
+  /// The shares added in this expansion
+  IntColumn get sharesAdded => integer()();
+
+  /// Reason for expansion: 'target_percentage', 'manual', 'round_requirement'
+  TextColumn get reason => text()();
+
+  /// Board resolution reference if applicable
+  TextColumn get resolutionReference => text().nullable()();
+
+  /// Date the expansion was recorded
+  DateTimeColumn get expansionDate => dateTime()();
+
+  /// Notes about the expansion
+  TextColumn get notes => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// MFN (Most Favored Nation) upgrade history table.
 ///
 /// Tracks when convertibles with MFN clauses have their terms upgraded

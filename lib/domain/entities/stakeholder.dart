@@ -6,20 +6,24 @@ part 'stakeholder.g.dart';
 /// Types of stakeholders who can hold securities.
 enum StakeholderType {
   founder,
-  angel,
-  vcFund,
   employee,
   advisor,
+  investor,
+  angel,
+  vcFund,
   institution,
+  company,
   other;
 
   String get displayName => switch (this) {
     founder => 'Founder',
-    angel => 'Angel Investor',
-    vcFund => 'VC Fund',
     employee => 'Employee',
     advisor => 'Advisor',
+    investor => 'Investor',
+    angel => 'Angel Investor',
+    vcFund => 'VC Fund',
     institution => 'Institution',
+    company => 'Company',
     other => 'Other',
   };
 }

@@ -174,6 +174,7 @@ class WarrantMutations extends _$WarrantMutations {
   Future<void> exercise({
     required String id,
     required int sharesToExercise,
+    DateTime? exerciseDate,
   }) async {
     final db = ref.read(databaseProvider);
     final warrant = await db.getWarrant(id);
@@ -184,7 +185,7 @@ class WarrantMutations extends _$WarrantMutations {
     if (sharesToExercise > outstanding) return;
 
     final newExercised = warrant.exercisedCount + sharesToExercise;
-    final now = DateTime.now();
+    final effectiveDate = exerciseDate ?? DateTime.now();
 
     await (db.update(db.warrants)..where((w) => w.id.equals(id))).write(
       WarrantsCompanion(
@@ -192,6 +193,29 @@ class WarrantMutations extends _$WarrantMutations {
         status: Value(
           newExercised == warrant.quantity ? 'exercised' : 'active',
         ),
+        updatedAt: Value(effectiveDate),
+      ),
+    );
+  }
+
+  /// Undo exercise (revert exercised warrants back to outstanding).
+  Future<void> unexercise({
+    required String id,
+    required int sharesToUnexercise,
+  }) async {
+    final db = ref.read(databaseProvider);
+    final warrant = await db.getWarrant(id);
+    if (warrant == null) return;
+
+    if (sharesToUnexercise > warrant.exercisedCount) return;
+
+    final newExercised = warrant.exercisedCount - sharesToUnexercise;
+    final now = DateTime.now();
+
+    await (db.update(db.warrants)..where((w) => w.id.equals(id))).write(
+      WarrantsCompanion(
+        exercisedCount: Value(newExercised),
+        status: const Value('active'), // Revert to active when unexercising
         updatedAt: Value(now),
       ),
     );

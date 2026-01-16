@@ -212,7 +212,7 @@ final roundsSummaryProvider = AutoDisposeFutureProvider<RoundsSummary>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef RoundsSummaryRef = AutoDisposeFutureProviderRef<RoundsSummary>;
-String _$roundMutationsHash() => r'545e29cabf7639c8c8d4097d49ee921d727edf9a';
+String _$roundMutationsHash() => r'cdc2de55c306ec75d4e029926ef1269af7ddc1d2';
 
 /// Notifier for round mutations.
 ///

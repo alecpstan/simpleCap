@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../infrastructure/database/database.dart';
 import 'database_provider.dart';
 import 'company_provider.dart';
+import 'holdings_provider.dart';
 
 part 'esop_pools_provider.g.dart';
 
@@ -363,4 +364,251 @@ Future<bool> canGrantFromPool(
   if (summary == null) return false;
 
   return summary.pool.status == 'active' && quantity <= summary.available;
+}
+
+// =============================================================================
+// ESOP Pool Expansion Detection
+// =============================================================================
+
+/// Represents a pool that needs expansion to meet its target percentage.
+class PoolExpansionNeeded {
+  final EsopPool pool;
+  final double currentPercent;
+  final double targetPercent;
+  final int currentSize;
+  final int suggestedNewSize;
+  final int sharesToAdd;
+
+  PoolExpansionNeeded({
+    required this.pool,
+    required this.currentPercent,
+    required this.targetPercent,
+    required this.currentSize,
+    required this.suggestedNewSize,
+    required this.sharesToAdd,
+  });
+
+  String get expansionDescription {
+    final percentDiff = (targetPercent - currentPercent).abs();
+    return 'Pool is ${currentPercent.toStringAsFixed(1)}% of company, '
+        'target is ${targetPercent.toStringAsFixed(1)}% '
+        '(${percentDiff.toStringAsFixed(1)}% below target)';
+  }
+}
+
+/// Detects pools that need expansion to meet their target percentage.
+@riverpod
+Future<List<PoolExpansionNeeded>> poolsNeedingExpansion(
+  PoolsNeedingExpansionRef ref,
+) async {
+  final pools = await ref.watch(esopPoolsStreamProvider.future);
+  final ownershipSummary = await ref.watch(ownershipSummaryProvider.future);
+
+  final totalShares = ownershipSummary.totalIssuedShares;
+  if (totalShares == 0) return [];
+
+  final needsExpansion = <PoolExpansionNeeded>[];
+
+  for (final pool in pools) {
+    // Skip pools without a target percentage
+    if (pool.targetPercentage == null) continue;
+
+    // Skip non-active pools
+    if (pool.status != 'active') continue;
+
+    final targetPercent = pool.targetPercentage!;
+
+    // Calculate what the pool size represents as a percentage of total
+    // Total company = total shares + pool size (pool is part of fully diluted)
+    final fullyDiluted = totalShares + pool.poolSize;
+    final currentPercent = (pool.poolSize / fullyDiluted) * 100;
+
+    // Check if current percentage is below target (with small tolerance)
+    if (currentPercent < targetPercent - 0.1) {
+      // Calculate the needed pool size to meet target
+      // target% = newPoolSize / (totalShares + newPoolSize) * 100
+      // Solving for newPoolSize:
+      // target/100 * (totalShares + newPoolSize) = newPoolSize
+      // target/100 * totalShares + target/100 * newPoolSize = newPoolSize
+      // target/100 * totalShares = newPoolSize - target/100 * newPoolSize
+      // target/100 * totalShares = newPoolSize * (1 - target/100)
+      // newPoolSize = (target/100 * totalShares) / (1 - target/100)
+      final targetFraction = targetPercent / 100;
+      final suggestedNewSize =
+          ((targetFraction * totalShares) / (1 - targetFraction)).ceil();
+      final sharesToAdd = suggestedNewSize - pool.poolSize;
+
+      if (sharesToAdd > 0) {
+        needsExpansion.add(PoolExpansionNeeded(
+          pool: pool,
+          currentPercent: currentPercent,
+          targetPercent: targetPercent,
+          currentSize: pool.poolSize,
+          suggestedNewSize: suggestedNewSize,
+          sharesToAdd: sharesToAdd,
+        ));
+      }
+    }
+  }
+
+  return needsExpansion;
+}
+
+// =============================================================================
+// ESOP Pool Expansion History
+// =============================================================================
+
+/// Watches all pool expansions for the current company.
+@riverpod
+Stream<List<EsopPoolExpansion>> poolExpansionsStream(
+  PoolExpansionsStreamRef ref,
+) {
+  final companyId = ref.watch(currentCompanyIdProvider);
+  if (companyId == null) return Stream.value([]);
+
+  final db = ref.watch(databaseProvider);
+  return db.watchPoolExpansions(companyId);
+}
+
+/// Watches expansions for a specific pool.
+@riverpod
+Stream<List<EsopPoolExpansion>> poolExpansionHistoryStream(
+  PoolExpansionHistoryStreamRef ref,
+  String poolId,
+) {
+  final db = ref.watch(databaseProvider);
+  return db.watchExpansionsForPool(poolId);
+}
+
+/// Mutations for pool expansions (record, revert).
+@riverpod
+class PoolExpansionMutations extends _$PoolExpansionMutations {
+  @override
+  FutureOr<void> build() {}
+
+  /// Record a pool expansion with history tracking.
+  Future<void> expandPool({
+    required String poolId,
+    required int additionalShares,
+    required String reason,
+    String? resolutionReference,
+    String? notes,
+    DateTime? expansionDate,
+  }) async {
+    final db = ref.read(databaseProvider);
+    final companyId = ref.read(currentCompanyIdProvider);
+    if (companyId == null) throw Exception('No company selected');
+
+    final pool = await db.getEsopPool(poolId);
+    if (pool == null) throw Exception('Pool not found');
+
+    final now = DateTime.now();
+    final effectiveDate = expansionDate ?? now;
+    final previousSize = pool.poolSize;
+    final newSize = previousSize + additionalShares;
+
+    // Record the expansion in history
+    final expansionId = 'exp_${now.millisecondsSinceEpoch}';
+    await db.insertPoolExpansion(
+      EsopPoolExpansionsCompanion.insert(
+        id: expansionId,
+        companyId: companyId,
+        poolId: poolId,
+        previousSize: previousSize,
+        newSize: newSize,
+        sharesAdded: additionalShares,
+        reason: reason,
+        resolutionReference: Value(resolutionReference),
+        expansionDate: effectiveDate,
+        notes: Value(notes),
+        createdAt: now,
+      ),
+    );
+
+    // Update the pool size
+    await db.upsertEsopPool(
+      EsopPoolsCompanion(
+        id: Value(poolId),
+        companyId: Value(pool.companyId),
+        name: Value(pool.name),
+        shareClassId: Value(pool.shareClassId),
+        status: Value(pool.status),
+        poolSize: Value(newSize),
+        targetPercentage: Value(pool.targetPercentage),
+        establishedDate: Value(pool.establishedDate),
+        resolutionReference: Value(resolutionReference ?? pool.resolutionReference),
+        roundId: Value(pool.roundId),
+        defaultVestingScheduleId: Value(pool.defaultVestingScheduleId),
+        strikePriceMethod: Value(pool.strikePriceMethod),
+        defaultStrikePrice: Value(pool.defaultStrikePrice),
+        defaultExpiryYears: Value(pool.defaultExpiryYears),
+        notes: Value(pool.notes),
+        createdAt: Value(pool.createdAt),
+        updatedAt: Value(now),
+      ),
+    );
+
+    // Invalidate relevant providers
+    ref.invalidate(esopPoolsStreamProvider);
+    ref.invalidate(esopPoolByIdProvider(poolId));
+    ref.invalidate(esopPoolSummaryProvider(poolId));
+    ref.invalidate(poolExpansionsStreamProvider);
+    ref.invalidate(poolExpansionHistoryStreamProvider(poolId));
+    ref.invalidate(poolsNeedingExpansionProvider);
+  }
+
+  /// Revert the most recent expansion for a pool.
+  Future<void> revertLatestExpansion(String poolId) async {
+    final db = ref.read(databaseProvider);
+
+    final latestExpansion = await db.getLatestExpansionForPool(poolId);
+    if (latestExpansion == null) {
+      throw Exception('No expansion history found for this pool');
+    }
+
+    final pool = await db.getEsopPool(poolId);
+    if (pool == null) throw Exception('Pool not found');
+
+    // Verify the pool size matches what we expect
+    if (pool.poolSize != latestExpansion.newSize) {
+      throw Exception(
+        'Pool size has been modified since the last expansion. '
+        'Expected ${latestExpansion.newSize}, found ${pool.poolSize}',
+      );
+    }
+
+    // Revert the pool size
+    await db.upsertEsopPool(
+      EsopPoolsCompanion(
+        id: Value(poolId),
+        companyId: Value(pool.companyId),
+        name: Value(pool.name),
+        shareClassId: Value(pool.shareClassId),
+        status: Value(pool.status),
+        poolSize: Value(latestExpansion.previousSize),
+        targetPercentage: Value(pool.targetPercentage),
+        establishedDate: Value(pool.establishedDate),
+        resolutionReference: Value(pool.resolutionReference),
+        roundId: Value(pool.roundId),
+        defaultVestingScheduleId: Value(pool.defaultVestingScheduleId),
+        strikePriceMethod: Value(pool.strikePriceMethod),
+        defaultStrikePrice: Value(pool.defaultStrikePrice),
+        defaultExpiryYears: Value(pool.defaultExpiryYears),
+        notes: Value(pool.notes),
+        createdAt: Value(pool.createdAt),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+
+    // Delete the expansion record
+    await db.deletePoolExpansion(latestExpansion.id);
+
+    // Invalidate relevant providers
+    ref.invalidate(esopPoolsStreamProvider);
+    ref.invalidate(esopPoolByIdProvider(poolId));
+    ref.invalidate(esopPoolSummaryProvider(poolId));
+    ref.invalidate(poolExpansionsStreamProvider);
+    ref.invalidate(poolExpansionHistoryStreamProvider(poolId));
+    ref.invalidate(poolsNeedingExpansionProvider);
+  }
 }

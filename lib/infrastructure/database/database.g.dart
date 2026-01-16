@@ -11355,6 +11355,707 @@ class MfnUpgradesCompanion extends UpdateCompanion<MfnUpgrade> {
   }
 }
 
+class $EsopPoolExpansionsTable extends EsopPoolExpansions
+    with TableInfo<$EsopPoolExpansionsTable, EsopPoolExpansion> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EsopPoolExpansionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _companyIdMeta = const VerificationMeta(
+    'companyId',
+  );
+  @override
+  late final GeneratedColumn<String> companyId = GeneratedColumn<String>(
+    'company_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES companies (id)',
+    ),
+  );
+  static const VerificationMeta _poolIdMeta = const VerificationMeta('poolId');
+  @override
+  late final GeneratedColumn<String> poolId = GeneratedColumn<String>(
+    'pool_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES esop_pools (id)',
+    ),
+  );
+  static const VerificationMeta _previousSizeMeta = const VerificationMeta(
+    'previousSize',
+  );
+  @override
+  late final GeneratedColumn<int> previousSize = GeneratedColumn<int>(
+    'previous_size',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _newSizeMeta = const VerificationMeta(
+    'newSize',
+  );
+  @override
+  late final GeneratedColumn<int> newSize = GeneratedColumn<int>(
+    'new_size',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sharesAddedMeta = const VerificationMeta(
+    'sharesAdded',
+  );
+  @override
+  late final GeneratedColumn<int> sharesAdded = GeneratedColumn<int>(
+    'shares_added',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _resolutionReferenceMeta =
+      const VerificationMeta('resolutionReference');
+  @override
+  late final GeneratedColumn<String> resolutionReference =
+      GeneratedColumn<String>(
+        'resolution_reference',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _expansionDateMeta = const VerificationMeta(
+    'expansionDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> expansionDate =
+      GeneratedColumn<DateTime>(
+        'expansion_date',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    companyId,
+    poolId,
+    previousSize,
+    newSize,
+    sharesAdded,
+    reason,
+    resolutionReference,
+    expansionDate,
+    notes,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'esop_pool_expansions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EsopPoolExpansion> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('company_id')) {
+      context.handle(
+        _companyIdMeta,
+        companyId.isAcceptableOrUnknown(data['company_id']!, _companyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_companyIdMeta);
+    }
+    if (data.containsKey('pool_id')) {
+      context.handle(
+        _poolIdMeta,
+        poolId.isAcceptableOrUnknown(data['pool_id']!, _poolIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_poolIdMeta);
+    }
+    if (data.containsKey('previous_size')) {
+      context.handle(
+        _previousSizeMeta,
+        previousSize.isAcceptableOrUnknown(
+          data['previous_size']!,
+          _previousSizeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_previousSizeMeta);
+    }
+    if (data.containsKey('new_size')) {
+      context.handle(
+        _newSizeMeta,
+        newSize.isAcceptableOrUnknown(data['new_size']!, _newSizeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_newSizeMeta);
+    }
+    if (data.containsKey('shares_added')) {
+      context.handle(
+        _sharesAddedMeta,
+        sharesAdded.isAcceptableOrUnknown(
+          data['shares_added']!,
+          _sharesAddedMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sharesAddedMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('resolution_reference')) {
+      context.handle(
+        _resolutionReferenceMeta,
+        resolutionReference.isAcceptableOrUnknown(
+          data['resolution_reference']!,
+          _resolutionReferenceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expansion_date')) {
+      context.handle(
+        _expansionDateMeta,
+        expansionDate.isAcceptableOrUnknown(
+          data['expansion_date']!,
+          _expansionDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_expansionDateMeta);
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  EsopPoolExpansion map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EsopPoolExpansion(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      companyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}company_id'],
+      )!,
+      poolId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pool_id'],
+      )!,
+      previousSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}previous_size'],
+      )!,
+      newSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}new_size'],
+      )!,
+      sharesAdded: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shares_added'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      resolutionReference: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}resolution_reference'],
+      ),
+      expansionDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}expansion_date'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $EsopPoolExpansionsTable createAlias(String alias) {
+    return $EsopPoolExpansionsTable(attachedDatabase, alias);
+  }
+}
+
+class EsopPoolExpansion extends DataClass
+    implements Insertable<EsopPoolExpansion> {
+  final String id;
+  final String companyId;
+
+  /// The pool that was expanded
+  final String poolId;
+
+  /// Pool size BEFORE expansion
+  final int previousSize;
+
+  /// Pool size AFTER expansion
+  final int newSize;
+
+  /// The shares added in this expansion
+  final int sharesAdded;
+
+  /// Reason for expansion: 'target_percentage', 'manual', 'round_requirement'
+  final String reason;
+
+  /// Board resolution reference if applicable
+  final String? resolutionReference;
+
+  /// Date the expansion was recorded
+  final DateTime expansionDate;
+
+  /// Notes about the expansion
+  final String? notes;
+  final DateTime createdAt;
+  const EsopPoolExpansion({
+    required this.id,
+    required this.companyId,
+    required this.poolId,
+    required this.previousSize,
+    required this.newSize,
+    required this.sharesAdded,
+    required this.reason,
+    this.resolutionReference,
+    required this.expansionDate,
+    this.notes,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['company_id'] = Variable<String>(companyId);
+    map['pool_id'] = Variable<String>(poolId);
+    map['previous_size'] = Variable<int>(previousSize);
+    map['new_size'] = Variable<int>(newSize);
+    map['shares_added'] = Variable<int>(sharesAdded);
+    map['reason'] = Variable<String>(reason);
+    if (!nullToAbsent || resolutionReference != null) {
+      map['resolution_reference'] = Variable<String>(resolutionReference);
+    }
+    map['expansion_date'] = Variable<DateTime>(expansionDate);
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  EsopPoolExpansionsCompanion toCompanion(bool nullToAbsent) {
+    return EsopPoolExpansionsCompanion(
+      id: Value(id),
+      companyId: Value(companyId),
+      poolId: Value(poolId),
+      previousSize: Value(previousSize),
+      newSize: Value(newSize),
+      sharesAdded: Value(sharesAdded),
+      reason: Value(reason),
+      resolutionReference: resolutionReference == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resolutionReference),
+      expansionDate: Value(expansionDate),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory EsopPoolExpansion.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EsopPoolExpansion(
+      id: serializer.fromJson<String>(json['id']),
+      companyId: serializer.fromJson<String>(json['companyId']),
+      poolId: serializer.fromJson<String>(json['poolId']),
+      previousSize: serializer.fromJson<int>(json['previousSize']),
+      newSize: serializer.fromJson<int>(json['newSize']),
+      sharesAdded: serializer.fromJson<int>(json['sharesAdded']),
+      reason: serializer.fromJson<String>(json['reason']),
+      resolutionReference: serializer.fromJson<String?>(
+        json['resolutionReference'],
+      ),
+      expansionDate: serializer.fromJson<DateTime>(json['expansionDate']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'companyId': serializer.toJson<String>(companyId),
+      'poolId': serializer.toJson<String>(poolId),
+      'previousSize': serializer.toJson<int>(previousSize),
+      'newSize': serializer.toJson<int>(newSize),
+      'sharesAdded': serializer.toJson<int>(sharesAdded),
+      'reason': serializer.toJson<String>(reason),
+      'resolutionReference': serializer.toJson<String?>(resolutionReference),
+      'expansionDate': serializer.toJson<DateTime>(expansionDate),
+      'notes': serializer.toJson<String?>(notes),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  EsopPoolExpansion copyWith({
+    String? id,
+    String? companyId,
+    String? poolId,
+    int? previousSize,
+    int? newSize,
+    int? sharesAdded,
+    String? reason,
+    Value<String?> resolutionReference = const Value.absent(),
+    DateTime? expansionDate,
+    Value<String?> notes = const Value.absent(),
+    DateTime? createdAt,
+  }) => EsopPoolExpansion(
+    id: id ?? this.id,
+    companyId: companyId ?? this.companyId,
+    poolId: poolId ?? this.poolId,
+    previousSize: previousSize ?? this.previousSize,
+    newSize: newSize ?? this.newSize,
+    sharesAdded: sharesAdded ?? this.sharesAdded,
+    reason: reason ?? this.reason,
+    resolutionReference: resolutionReference.present
+        ? resolutionReference.value
+        : this.resolutionReference,
+    expansionDate: expansionDate ?? this.expansionDate,
+    notes: notes.present ? notes.value : this.notes,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  EsopPoolExpansion copyWithCompanion(EsopPoolExpansionsCompanion data) {
+    return EsopPoolExpansion(
+      id: data.id.present ? data.id.value : this.id,
+      companyId: data.companyId.present ? data.companyId.value : this.companyId,
+      poolId: data.poolId.present ? data.poolId.value : this.poolId,
+      previousSize: data.previousSize.present
+          ? data.previousSize.value
+          : this.previousSize,
+      newSize: data.newSize.present ? data.newSize.value : this.newSize,
+      sharesAdded: data.sharesAdded.present
+          ? data.sharesAdded.value
+          : this.sharesAdded,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      resolutionReference: data.resolutionReference.present
+          ? data.resolutionReference.value
+          : this.resolutionReference,
+      expansionDate: data.expansionDate.present
+          ? data.expansionDate.value
+          : this.expansionDate,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EsopPoolExpansion(')
+          ..write('id: $id, ')
+          ..write('companyId: $companyId, ')
+          ..write('poolId: $poolId, ')
+          ..write('previousSize: $previousSize, ')
+          ..write('newSize: $newSize, ')
+          ..write('sharesAdded: $sharesAdded, ')
+          ..write('reason: $reason, ')
+          ..write('resolutionReference: $resolutionReference, ')
+          ..write('expansionDate: $expansionDate, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    companyId,
+    poolId,
+    previousSize,
+    newSize,
+    sharesAdded,
+    reason,
+    resolutionReference,
+    expansionDate,
+    notes,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EsopPoolExpansion &&
+          other.id == this.id &&
+          other.companyId == this.companyId &&
+          other.poolId == this.poolId &&
+          other.previousSize == this.previousSize &&
+          other.newSize == this.newSize &&
+          other.sharesAdded == this.sharesAdded &&
+          other.reason == this.reason &&
+          other.resolutionReference == this.resolutionReference &&
+          other.expansionDate == this.expansionDate &&
+          other.notes == this.notes &&
+          other.createdAt == this.createdAt);
+}
+
+class EsopPoolExpansionsCompanion extends UpdateCompanion<EsopPoolExpansion> {
+  final Value<String> id;
+  final Value<String> companyId;
+  final Value<String> poolId;
+  final Value<int> previousSize;
+  final Value<int> newSize;
+  final Value<int> sharesAdded;
+  final Value<String> reason;
+  final Value<String?> resolutionReference;
+  final Value<DateTime> expansionDate;
+  final Value<String?> notes;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const EsopPoolExpansionsCompanion({
+    this.id = const Value.absent(),
+    this.companyId = const Value.absent(),
+    this.poolId = const Value.absent(),
+    this.previousSize = const Value.absent(),
+    this.newSize = const Value.absent(),
+    this.sharesAdded = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.resolutionReference = const Value.absent(),
+    this.expansionDate = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EsopPoolExpansionsCompanion.insert({
+    required String id,
+    required String companyId,
+    required String poolId,
+    required int previousSize,
+    required int newSize,
+    required int sharesAdded,
+    required String reason,
+    this.resolutionReference = const Value.absent(),
+    required DateTime expansionDate,
+    this.notes = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       companyId = Value(companyId),
+       poolId = Value(poolId),
+       previousSize = Value(previousSize),
+       newSize = Value(newSize),
+       sharesAdded = Value(sharesAdded),
+       reason = Value(reason),
+       expansionDate = Value(expansionDate),
+       createdAt = Value(createdAt);
+  static Insertable<EsopPoolExpansion> custom({
+    Expression<String>? id,
+    Expression<String>? companyId,
+    Expression<String>? poolId,
+    Expression<int>? previousSize,
+    Expression<int>? newSize,
+    Expression<int>? sharesAdded,
+    Expression<String>? reason,
+    Expression<String>? resolutionReference,
+    Expression<DateTime>? expansionDate,
+    Expression<String>? notes,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (companyId != null) 'company_id': companyId,
+      if (poolId != null) 'pool_id': poolId,
+      if (previousSize != null) 'previous_size': previousSize,
+      if (newSize != null) 'new_size': newSize,
+      if (sharesAdded != null) 'shares_added': sharesAdded,
+      if (reason != null) 'reason': reason,
+      if (resolutionReference != null)
+        'resolution_reference': resolutionReference,
+      if (expansionDate != null) 'expansion_date': expansionDate,
+      if (notes != null) 'notes': notes,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EsopPoolExpansionsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? companyId,
+    Value<String>? poolId,
+    Value<int>? previousSize,
+    Value<int>? newSize,
+    Value<int>? sharesAdded,
+    Value<String>? reason,
+    Value<String?>? resolutionReference,
+    Value<DateTime>? expansionDate,
+    Value<String?>? notes,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return EsopPoolExpansionsCompanion(
+      id: id ?? this.id,
+      companyId: companyId ?? this.companyId,
+      poolId: poolId ?? this.poolId,
+      previousSize: previousSize ?? this.previousSize,
+      newSize: newSize ?? this.newSize,
+      sharesAdded: sharesAdded ?? this.sharesAdded,
+      reason: reason ?? this.reason,
+      resolutionReference: resolutionReference ?? this.resolutionReference,
+      expansionDate: expansionDate ?? this.expansionDate,
+      notes: notes ?? this.notes,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (companyId.present) {
+      map['company_id'] = Variable<String>(companyId.value);
+    }
+    if (poolId.present) {
+      map['pool_id'] = Variable<String>(poolId.value);
+    }
+    if (previousSize.present) {
+      map['previous_size'] = Variable<int>(previousSize.value);
+    }
+    if (newSize.present) {
+      map['new_size'] = Variable<int>(newSize.value);
+    }
+    if (sharesAdded.present) {
+      map['shares_added'] = Variable<int>(sharesAdded.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (resolutionReference.present) {
+      map['resolution_reference'] = Variable<String>(resolutionReference.value);
+    }
+    if (expansionDate.present) {
+      map['expansion_date'] = Variable<DateTime>(expansionDate.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EsopPoolExpansionsCompanion(')
+          ..write('id: $id, ')
+          ..write('companyId: $companyId, ')
+          ..write('poolId: $poolId, ')
+          ..write('previousSize: $previousSize, ')
+          ..write('newSize: $newSize, ')
+          ..write('sharesAdded: $sharesAdded, ')
+          ..write('reason: $reason, ')
+          ..write('resolutionReference: $resolutionReference, ')
+          ..write('expansionDate: $expansionDate, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -11376,6 +12077,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SavedScenariosTable savedScenarios = $SavedScenariosTable(this);
   late final $TransfersTable transfers = $TransfersTable(this);
   late final $MfnUpgradesTable mfnUpgrades = $MfnUpgradesTable(this);
+  late final $EsopPoolExpansionsTable esopPoolExpansions =
+      $EsopPoolExpansionsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11396,6 +12099,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     savedScenarios,
     transfers,
     mfnUpgrades,
+    esopPoolExpansions,
   ];
 }
 
@@ -11688,6 +12392,30 @@ final class $$CompaniesTableReferences
     ).filter((f) => f.companyId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_mfnUpgradesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$EsopPoolExpansionsTable, List<EsopPoolExpansion>>
+  _esopPoolExpansionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.esopPoolExpansions,
+        aliasName: $_aliasNameGenerator(
+          db.companies.id,
+          db.esopPoolExpansions.companyId,
+        ),
+      );
+
+  $$EsopPoolExpansionsTableProcessedTableManager get esopPoolExpansionsRefs {
+    final manager = $$EsopPoolExpansionsTableTableManager(
+      $_db,
+      $_db.esopPoolExpansions,
+    ).filter((f) => f.companyId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _esopPoolExpansionsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -12064,6 +12792,31 @@ class $$CompaniesTableFilterComposer
           }) => $$MfnUpgradesTableFilterComposer(
             $db: $db,
             $table: $db.mfnUpgrades,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> esopPoolExpansionsRefs(
+    Expression<bool> Function($$EsopPoolExpansionsTableFilterComposer f) f,
+  ) {
+    final $$EsopPoolExpansionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.esopPoolExpansions,
+      getReferencedColumn: (t) => t.companyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EsopPoolExpansionsTableFilterComposer(
+            $db: $db,
+            $table: $db.esopPoolExpansions,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -12475,6 +13228,32 @@ class $$CompaniesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> esopPoolExpansionsRefs<T extends Object>(
+    Expression<T> Function($$EsopPoolExpansionsTableAnnotationComposer a) f,
+  ) {
+    final $$EsopPoolExpansionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.esopPoolExpansions,
+          getReferencedColumn: (t) => t.companyId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$EsopPoolExpansionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.esopPoolExpansions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$CompaniesTableTableManager
@@ -12505,6 +13284,7 @@ class $$CompaniesTableTableManager
             bool savedScenariosRefs,
             bool transfersRefs,
             bool mfnUpgradesRefs,
+            bool esopPoolExpansionsRefs,
           })
         > {
   $$CompaniesTableTableManager(_$AppDatabase db, $CompaniesTable table)
@@ -12570,6 +13350,7 @@ class $$CompaniesTableTableManager
                 savedScenariosRefs = false,
                 transfersRefs = false,
                 mfnUpgradesRefs = false,
+                esopPoolExpansionsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -12588,6 +13369,7 @@ class $$CompaniesTableTableManager
                     if (savedScenariosRefs) db.savedScenarios,
                     if (transfersRefs) db.transfers,
                     if (mfnUpgradesRefs) db.mfnUpgrades,
+                    if (esopPoolExpansionsRefs) db.esopPoolExpansions,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -12886,6 +13668,27 @@ class $$CompaniesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (esopPoolExpansionsRefs)
+                        await $_getPrefetchedData<
+                          Company,
+                          $CompaniesTable,
+                          EsopPoolExpansion
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CompaniesTableReferences
+                              ._esopPoolExpansionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CompaniesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).esopPoolExpansionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.companyId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -12921,6 +13724,7 @@ typedef $$CompaniesTableProcessedTableManager =
         bool savedScenariosRefs,
         bool transfersRefs,
         bool mfnUpgradesRefs,
+        bool esopPoolExpansionsRefs,
       })
     >;
 typedef $$StakeholdersTableCreateCompanionBuilder =
@@ -18176,6 +18980,30 @@ final class $$EsopPoolsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<$EsopPoolExpansionsTable, List<EsopPoolExpansion>>
+  _esopPoolExpansionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.esopPoolExpansions,
+        aliasName: $_aliasNameGenerator(
+          db.esopPools.id,
+          db.esopPoolExpansions.poolId,
+        ),
+      );
+
+  $$EsopPoolExpansionsTableProcessedTableManager get esopPoolExpansionsRefs {
+    final manager = $$EsopPoolExpansionsTableTableManager(
+      $_db,
+      $_db.esopPoolExpansions,
+    ).filter((f) => f.poolId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _esopPoolExpansionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$EsopPoolsTableFilterComposer
@@ -18324,6 +19152,31 @@ class $$EsopPoolsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> esopPoolExpansionsRefs(
+    Expression<bool> Function($$EsopPoolExpansionsTableFilterComposer f) f,
+  ) {
+    final $$EsopPoolExpansionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.esopPoolExpansions,
+      getReferencedColumn: (t) => t.poolId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EsopPoolExpansionsTableFilterComposer(
+            $db: $db,
+            $table: $db.esopPoolExpansions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 }
 
@@ -18609,6 +19462,32 @@ class $$EsopPoolsTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> esopPoolExpansionsRefs<T extends Object>(
+    Expression<T> Function($$EsopPoolExpansionsTableAnnotationComposer a) f,
+  ) {
+    final $$EsopPoolExpansionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.esopPoolExpansions,
+          getReferencedColumn: (t) => t.poolId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$EsopPoolExpansionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.esopPoolExpansions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$EsopPoolsTableTableManager
@@ -18628,6 +19507,7 @@ class $$EsopPoolsTableTableManager
             bool companyId,
             bool shareClassId,
             bool roundId,
+            bool esopPoolExpansionsRefs,
           })
         > {
   $$EsopPoolsTableTableManager(_$AppDatabase db, $EsopPoolsTable table)
@@ -18730,10 +19610,17 @@ class $$EsopPoolsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({companyId = false, shareClassId = false, roundId = false}) {
+              ({
+                companyId = false,
+                shareClassId = false,
+                roundId = false,
+                esopPoolExpansionsRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [],
+                  explicitlyWatchedTables: [
+                    if (esopPoolExpansionsRefs) db.esopPoolExpansions,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -18793,7 +19680,29 @@ class $$EsopPoolsTableTableManager
                         return state;
                       },
                   getPrefetchedDataCallback: (items) async {
-                    return [];
+                    return [
+                      if (esopPoolExpansionsRefs)
+                        await $_getPrefetchedData<
+                          EsopPool,
+                          $EsopPoolsTable,
+                          EsopPoolExpansion
+                        >(
+                          currentTable: table,
+                          referencedTable: $$EsopPoolsTableReferences
+                              ._esopPoolExpansionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$EsopPoolsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).esopPoolExpansionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.poolId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
                 );
               },
@@ -18813,7 +19722,12 @@ typedef $$EsopPoolsTableProcessedTableManager =
       $$EsopPoolsTableUpdateCompanionBuilder,
       (EsopPool, $$EsopPoolsTableReferences),
       EsopPool,
-      PrefetchHooks Function({bool companyId, bool shareClassId, bool roundId})
+      PrefetchHooks Function({
+        bool companyId,
+        bool shareClassId,
+        bool roundId,
+        bool esopPoolExpansionsRefs,
+      })
     >;
 typedef $$OptionGrantsTableCreateCompanionBuilder =
     OptionGrantsCompanion Function({
@@ -23860,6 +24774,553 @@ typedef $$MfnUpgradesTableProcessedTableManager =
         bool sourceConvertibleId,
       })
     >;
+typedef $$EsopPoolExpansionsTableCreateCompanionBuilder =
+    EsopPoolExpansionsCompanion Function({
+      required String id,
+      required String companyId,
+      required String poolId,
+      required int previousSize,
+      required int newSize,
+      required int sharesAdded,
+      required String reason,
+      Value<String?> resolutionReference,
+      required DateTime expansionDate,
+      Value<String?> notes,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$EsopPoolExpansionsTableUpdateCompanionBuilder =
+    EsopPoolExpansionsCompanion Function({
+      Value<String> id,
+      Value<String> companyId,
+      Value<String> poolId,
+      Value<int> previousSize,
+      Value<int> newSize,
+      Value<int> sharesAdded,
+      Value<String> reason,
+      Value<String?> resolutionReference,
+      Value<DateTime> expansionDate,
+      Value<String?> notes,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$EsopPoolExpansionsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $EsopPoolExpansionsTable,
+          EsopPoolExpansion
+        > {
+  $$EsopPoolExpansionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $CompaniesTable _companyIdTable(_$AppDatabase db) =>
+      db.companies.createAlias(
+        $_aliasNameGenerator(db.esopPoolExpansions.companyId, db.companies.id),
+      );
+
+  $$CompaniesTableProcessedTableManager get companyId {
+    final $_column = $_itemColumn<String>('company_id')!;
+
+    final manager = $$CompaniesTableTableManager(
+      $_db,
+      $_db.companies,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_companyIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $EsopPoolsTable _poolIdTable(_$AppDatabase db) =>
+      db.esopPools.createAlias(
+        $_aliasNameGenerator(db.esopPoolExpansions.poolId, db.esopPools.id),
+      );
+
+  $$EsopPoolsTableProcessedTableManager get poolId {
+    final $_column = $_itemColumn<String>('pool_id')!;
+
+    final manager = $$EsopPoolsTableTableManager(
+      $_db,
+      $_db.esopPools,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_poolIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$EsopPoolExpansionsTableFilterComposer
+    extends Composer<_$AppDatabase, $EsopPoolExpansionsTable> {
+  $$EsopPoolExpansionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get previousSize => $composableBuilder(
+    column: $table.previousSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get newSize => $composableBuilder(
+    column: $table.newSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sharesAdded => $composableBuilder(
+    column: $table.sharesAdded,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get resolutionReference => $composableBuilder(
+    column: $table.resolutionReference,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get expansionDate => $composableBuilder(
+    column: $table.expansionDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CompaniesTableFilterComposer get companyId {
+    final $$CompaniesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.companyId,
+      referencedTable: $db.companies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CompaniesTableFilterComposer(
+            $db: $db,
+            $table: $db.companies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$EsopPoolsTableFilterComposer get poolId {
+    final $$EsopPoolsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poolId,
+      referencedTable: $db.esopPools,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EsopPoolsTableFilterComposer(
+            $db: $db,
+            $table: $db.esopPools,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EsopPoolExpansionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $EsopPoolExpansionsTable> {
+  $$EsopPoolExpansionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get previousSize => $composableBuilder(
+    column: $table.previousSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get newSize => $composableBuilder(
+    column: $table.newSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sharesAdded => $composableBuilder(
+    column: $table.sharesAdded,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get resolutionReference => $composableBuilder(
+    column: $table.resolutionReference,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get expansionDate => $composableBuilder(
+    column: $table.expansionDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CompaniesTableOrderingComposer get companyId {
+    final $$CompaniesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.companyId,
+      referencedTable: $db.companies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CompaniesTableOrderingComposer(
+            $db: $db,
+            $table: $db.companies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$EsopPoolsTableOrderingComposer get poolId {
+    final $$EsopPoolsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poolId,
+      referencedTable: $db.esopPools,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EsopPoolsTableOrderingComposer(
+            $db: $db,
+            $table: $db.esopPools,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EsopPoolExpansionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EsopPoolExpansionsTable> {
+  $$EsopPoolExpansionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get previousSize => $composableBuilder(
+    column: $table.previousSize,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get newSize =>
+      $composableBuilder(column: $table.newSize, builder: (column) => column);
+
+  GeneratedColumn<int> get sharesAdded => $composableBuilder(
+    column: $table.sharesAdded,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<String> get resolutionReference => $composableBuilder(
+    column: $table.resolutionReference,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get expansionDate => $composableBuilder(
+    column: $table.expansionDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$CompaniesTableAnnotationComposer get companyId {
+    final $$CompaniesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.companyId,
+      referencedTable: $db.companies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CompaniesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.companies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$EsopPoolsTableAnnotationComposer get poolId {
+    final $$EsopPoolsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.poolId,
+      referencedTable: $db.esopPools,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EsopPoolsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.esopPools,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EsopPoolExpansionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $EsopPoolExpansionsTable,
+          EsopPoolExpansion,
+          $$EsopPoolExpansionsTableFilterComposer,
+          $$EsopPoolExpansionsTableOrderingComposer,
+          $$EsopPoolExpansionsTableAnnotationComposer,
+          $$EsopPoolExpansionsTableCreateCompanionBuilder,
+          $$EsopPoolExpansionsTableUpdateCompanionBuilder,
+          (EsopPoolExpansion, $$EsopPoolExpansionsTableReferences),
+          EsopPoolExpansion,
+          PrefetchHooks Function({bool companyId, bool poolId})
+        > {
+  $$EsopPoolExpansionsTableTableManager(
+    _$AppDatabase db,
+    $EsopPoolExpansionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EsopPoolExpansionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EsopPoolExpansionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EsopPoolExpansionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> companyId = const Value.absent(),
+                Value<String> poolId = const Value.absent(),
+                Value<int> previousSize = const Value.absent(),
+                Value<int> newSize = const Value.absent(),
+                Value<int> sharesAdded = const Value.absent(),
+                Value<String> reason = const Value.absent(),
+                Value<String?> resolutionReference = const Value.absent(),
+                Value<DateTime> expansionDate = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => EsopPoolExpansionsCompanion(
+                id: id,
+                companyId: companyId,
+                poolId: poolId,
+                previousSize: previousSize,
+                newSize: newSize,
+                sharesAdded: sharesAdded,
+                reason: reason,
+                resolutionReference: resolutionReference,
+                expansionDate: expansionDate,
+                notes: notes,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String companyId,
+                required String poolId,
+                required int previousSize,
+                required int newSize,
+                required int sharesAdded,
+                required String reason,
+                Value<String?> resolutionReference = const Value.absent(),
+                required DateTime expansionDate,
+                Value<String?> notes = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => EsopPoolExpansionsCompanion.insert(
+                id: id,
+                companyId: companyId,
+                poolId: poolId,
+                previousSize: previousSize,
+                newSize: newSize,
+                sharesAdded: sharesAdded,
+                reason: reason,
+                resolutionReference: resolutionReference,
+                expansionDate: expansionDate,
+                notes: notes,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$EsopPoolExpansionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({companyId = false, poolId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (companyId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.companyId,
+                                referencedTable:
+                                    $$EsopPoolExpansionsTableReferences
+                                        ._companyIdTable(db),
+                                referencedColumn:
+                                    $$EsopPoolExpansionsTableReferences
+                                        ._companyIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (poolId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.poolId,
+                                referencedTable:
+                                    $$EsopPoolExpansionsTableReferences
+                                        ._poolIdTable(db),
+                                referencedColumn:
+                                    $$EsopPoolExpansionsTableReferences
+                                        ._poolIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$EsopPoolExpansionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $EsopPoolExpansionsTable,
+      EsopPoolExpansion,
+      $$EsopPoolExpansionsTableFilterComposer,
+      $$EsopPoolExpansionsTableOrderingComposer,
+      $$EsopPoolExpansionsTableAnnotationComposer,
+      $$EsopPoolExpansionsTableCreateCompanionBuilder,
+      $$EsopPoolExpansionsTableUpdateCompanionBuilder,
+      (EsopPoolExpansion, $$EsopPoolExpansionsTableReferences),
+      EsopPoolExpansion,
+      PrefetchHooks Function({bool companyId, bool poolId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -23894,4 +25355,6 @@ class $AppDatabaseManager {
       $$TransfersTableTableManager(_db, _db.transfers);
   $$MfnUpgradesTableTableManager get mfnUpgrades =>
       $$MfnUpgradesTableTableManager(_db, _db.mfnUpgrades);
+  $$EsopPoolExpansionsTableTableManager get esopPoolExpansions =>
+      $$EsopPoolExpansionsTableTableManager(_db, _db.esopPoolExpansions);
 }

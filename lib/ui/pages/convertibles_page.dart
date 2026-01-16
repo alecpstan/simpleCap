@@ -689,14 +689,14 @@ class ConvertiblesPage extends ConsumerWidget {
     );
 
     if (confirmed && context.mounted) {
-      await ref
-          .read(convertibleMutationsProvider.notifier)
-          .delete(convertible.id);
-
-      // Check if this deletion should revert any MFN upgrades
+      // Revert MFN upgrades BEFORE deleting (to satisfy foreign key constraints)
       await ref
           .read(mfnMutationsProvider.notifier)
           .revertUpgradesFromSource(convertible.id);
+
+      await ref
+          .read(convertibleMutationsProvider.notifier)
+          .delete(convertible.id);
     }
   }
 }

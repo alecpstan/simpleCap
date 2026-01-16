@@ -19,6 +19,9 @@ class ExpandableCard extends StatefulWidget {
   /// Trailing widget when collapsed.
   final Widget? trailing;
 
+  /// Badge positioned in the top-right corner above the expand icon.
+  final Widget? cornerBadge;
+
   /// Summary chips below the title.
   final List<Widget>? chips;
 
@@ -50,6 +53,7 @@ class ExpandableCard extends StatefulWidget {
     this.titleBadge,
     this.subtitle,
     this.trailing,
+    this.cornerBadge,
     this.chips,
     this.badges,
     required this.expandedContent,
@@ -132,69 +136,80 @@ class _ExpandableCardState extends State<ExpandableCard>
           // Header - always visible
           InkWell(
             onTap: _handleTap,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (widget.leading != null) ...[
-                        widget.leading!,
-                        const SizedBox(width: 12),
-                      ],
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                      Row(
+                        children: [
+                          if (widget.leading != null) ...[
+                            widget.leading!,
+                            const SizedBox(width: 12),
+                          ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Flexible(
-                                  child: Text(
-                                    widget.title,
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w600),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        widget.title,
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(fontWeight: FontWeight.w600),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (widget.titleBadge != null) ...[
+                                      const SizedBox(width: 8),
+                                      widget.titleBadge!,
+                                    ],
+                                  ],
                                 ),
-                                if (widget.titleBadge != null) ...[
-                                  const SizedBox(width: 8),
-                                  widget.titleBadge!,
+                                if (widget.subtitle != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    widget.subtitle!,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.outline,
+                                    ),
+                                  ),
                                 ],
                               ],
                             ),
-                            if (widget.subtitle != null) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                widget.subtitle!,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.outline,
-                                ),
-                              ),
-                            ],
+                          ),
+                          if (widget.trailing != null) widget.trailing!,
+                          if (widget.showExpandIcon) ...[
+                            const SizedBox(width: 8),
+                            RotationTransition(
+                              turns: _iconTurns,
+                              child: const Icon(Icons.expand_more),
+                            ),
                           ],
-                        ),
+                        ],
                       ),
-                      if (widget.trailing != null) widget.trailing!,
-                      if (widget.showExpandIcon) ...[
-                        const SizedBox(width: 8),
-                        RotationTransition(
-                          turns: _iconTurns,
-                          child: const Icon(Icons.expand_more),
-                        ),
+                      if (widget.chips != null && widget.chips!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(spacing: 8, runSpacing: 4, children: widget.chips!),
+                      ],
+                      if (widget.badges != null && widget.badges!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(spacing: 8, runSpacing: 4, children: widget.badges!),
                       ],
                     ],
                   ),
-                  if (widget.chips != null && widget.chips!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 4, children: widget.chips!),
-                  ],
-                  if (widget.badges != null && widget.badges!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 4, children: widget.badges!),
-                  ],
-                ],
-              ),
+                ),
+                // Corner badge positioned in top-right
+                if (widget.cornerBadge != null)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: widget.cornerBadge!,
+                  ),
+              ],
             ),
           ),
 

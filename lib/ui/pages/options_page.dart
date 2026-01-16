@@ -325,6 +325,12 @@ class OptionsPage extends ConsumerWidget {
             ),
             tooltip: 'Exercise',
           ),
+        if (option.exercisedCount > 0)
+          IconButton(
+            icon: const Icon(Icons.undo_outlined),
+            onPressed: () => _showUnexerciseDialog(context, ref, option),
+            tooltip: 'Undo Exercise',
+          ),
         IconButton(
           icon: Icon(
             Icons.delete_outlined,
@@ -629,6 +635,56 @@ class OptionsPage extends ConsumerWidget {
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
+                InkWell(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: grantDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (date != null) {
+                      setDialogState(() {
+                        grantDate = date;
+                        // If expiry is before grant, adjust it
+                        if (expiryDate.isBefore(grantDate)) {
+                          expiryDate = grantDate.add(
+                            const Duration(days: 365 * 10),
+                          );
+                        }
+                      });
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Grant Date',
+                      suffixIcon: Icon(Icons.calendar_today, size: 18),
+                    ),
+                    child: Text(Formatters.date(grantDate)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: expiryDate,
+                      firstDate: grantDate,
+                      lastDate: DateTime(2100),
+                    );
+                    if (date != null) {
+                      setDialogState(() => expiryDate = date);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Expiry Date',
+                      suffixIcon: Icon(Icons.calendar_today, size: 18),
+                    ),
+                    child: Text(Formatters.date(expiryDate)),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 CheckboxListTile(
                   title: const Text('Allow Early Exercise'),
                   value: allowsEarlyExercise,
@@ -711,30 +767,190 @@ class OptionsPage extends ConsumerWidget {
     int maxShares,
   ) {
     final sharesController = TextEditingController();
+    final effectiveValuation = ref.read(effectiveValuationProvider).valueOrNull;
+    final ownership = ref.read(ownershipSummaryProvider).valueOrNull;
+
+    // Calculate current price per share if valuation available
+    double? pricePerShare;
+    if (effectiveValuation != null && ownership != null) {
+      final totalShares = ownership.totalIssuedShares;
+      if (totalShares > 0) {
+        pricePerShare = effectiveValuation.value / totalShares;
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final shares = int.tryParse(sharesController.text) ?? 0;
+          final totalCost = shares * option.strikePrice;
+          final currentValue = pricePerShare != null ? shares * pricePerShare : null;
+          final potentialGain = currentValue != null ? currentValue - totalCost : null;
+
+          return AlertDialog(
+            title: const Text('Exercise Options'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Up to ${Formatters.number(maxShares)} vested options available',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: sharesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Options to Exercise',
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Exercise Summary',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildSummaryRow(
+                    context,
+                    'Strike Price',
+                    Formatters.currency(option.strikePrice),
+                  ),
+                  _buildSummaryRow(
+                    context,
+                    'Total Cost to Exercise',
+                    Formatters.currency(totalCost),
+                    highlight: true,
+                  ),
+                  if (pricePerShare != null) ...[
+                    const SizedBox(height: 8),
+                    _buildSummaryRow(
+                      context,
+                      'Current Price/Share',
+                      Formatters.currency(pricePerShare),
+                    ),
+                    _buildSummaryRow(
+                      context,
+                      'Current Value',
+                      Formatters.currency(currentValue!),
+                    ),
+                    _buildSummaryRow(
+                      context,
+                      'Potential Gain',
+                      Formatters.currency(potentialGain!),
+                      valueColor: potentialGain >= 0 ? Colors.green : Colors.red,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Exercising converts options to actual shares. You pay the strike price to acquire shares.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: shares > 0 && shares <= maxShares
+                    ? () async {
+                        await ref
+                            .read(optionGrantMutationsProvider.notifier)
+                            .exercise(id: option.id, sharesToExercise: shares);
+
+                        if (context.mounted) Navigator.pop(context);
+                      }
+                    : null,
+                child: const Text('Exercise'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showUnexerciseDialog(
+    BuildContext context,
+    WidgetRef ref,
+    OptionGrant option,
+  ) {
+    final sharesController = TextEditingController();
+    final maxShares = option.exercisedCount;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Exercise Options'),
+        title: const Text('Undo Exercise'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Up to ${Formatters.number(maxShares)} options available',
+              'Revert up to ${Formatters.number(maxShares)} exercised options',
               style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Strike price: ${Formatters.currency(option.strikePrice)}',
-              style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
             TextField(
               controller: sharesController,
               decoration: const InputDecoration(
-                labelText: 'Options to Exercise',
+                labelText: 'Options to Unexercise',
               ),
               keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_outlined,
+                    size: 18,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This will revert exercised options back to outstanding. Use this to correct mistakes.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -744,17 +960,52 @@ class OptionsPage extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.orange,
+            ),
             onPressed: () async {
               final shares = int.tryParse(sharesController.text);
               if (shares == null || shares <= 0 || shares > maxShares) return;
 
               await ref
                   .read(optionGrantMutationsProvider.notifier)
-                  .exercise(id: option.id, sharesToExercise: shares);
+                  .unexercise(id: option.id, sharesToUnexercise: shares);
 
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('Exercise'),
+            child: const Text('Undo Exercise'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(
+    BuildContext context,
+    String label,
+    String value, {
+    bool highlight = false,
+    Color? valueColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: highlight
+                ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  )
+                : Theme.of(context).textTheme.bodyMedium,
+          ),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: highlight ? FontWeight.bold : FontWeight.w500,
+              color: valueColor,
+            ),
           ),
         ],
       ),

@@ -15,6 +15,7 @@ class ValuePage extends ConsumerStatefulWidget {
 
 class _ValuePageState extends ConsumerState<ValuePage> {
   bool _vestedOnly = false;
+  bool _excludeDraft = false;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +34,8 @@ class _ValuePageState extends ConsumerState<ValuePage> {
     final effectiveValuationAsync = ref.watch(effectiveValuationProvider);
     final ownershipAsync = ref.watch(ownershipSummaryProvider);
     final optionsAsync = ref.watch(optionGrantsStreamProvider);
+    final roundsAsync = ref.watch(roundsStreamProvider);
+    final shareClassesAsync = ref.watch(shareClassesStreamProvider);
 
     return Scaffold(
       body: holdingsAsync.when(
@@ -40,13 +43,25 @@ class _ValuePageState extends ConsumerState<ValuePage> {
           data: (stakeholders) => effectiveValuationAsync.when(
             data: (effectiveValuation) => ownershipAsync.when(
               data: (ownership) => optionsAsync.when(
-                data: (options) => _buildContent(
-                  context,
-                  holdings,
-                  stakeholders,
-                  options,
-                  effectiveValuation,
-                  ownership,
+                data: (options) => roundsAsync.when(
+                  data: (rounds) => shareClassesAsync.when(
+                    data: (shareClasses) => _buildContent(
+                      context,
+                      holdings,
+                      stakeholders,
+                      options,
+                      rounds,
+                      shareClasses,
+                      effectiveValuation,
+                      ownership,
+                    ),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => EmptyState.error(message: e.toString()),
+                  ),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => EmptyState.error(message: e.toString()),
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => EmptyState.error(message: e.toString()),
@@ -71,17 +86,17 @@ class _ValuePageState extends ConsumerState<ValuePage> {
     List<Holding> holdings,
     List<Stakeholder> stakeholders,
     List<OptionGrant> options,
+    List<Round> rounds,
+    List<ShareClassesData> shareClasses,
     EffectiveValuation? effectiveValuation,
     OwnershipSummary ownership,
   ) {
     if (effectiveValuation == null) {
-      return EmptyState(
+      return const EmptyState(
         icon: Icons.analytics,
         title: 'No Valuation Set',
         message:
             'Add a company valuation or funding round to see equity values.',
-        actionLabel: 'Add Valuation',
-        onAction: () => _showValuationDialog(context),
       );
     }
 
@@ -97,12 +112,23 @@ class _ValuePageState extends ConsumerState<ValuePage> {
 
     final pricePerShare = effectiveValuation.value / totalShares;
 
-    // Build stakeholder value data
+    // Build lookup maps
     final stakeholderMap = {for (final s in stakeholders) s.id: s};
+    final draftRoundIds = {
+      for (final r in rounds)
+        if (r.status == 'draft') r.id,
+    };
+    final shareClassNames = {for (final sc in shareClasses) sc.id: sc.name};
+    final roundNames = {for (final r in rounds) r.id: r.name};
+
+    // Build stakeholder value data
     final stakeholderValues = _calculateStakeholderValues(
       holdings,
       options,
       stakeholderMap,
+      draftRoundIds,
+      shareClassNames,
+      roundNames,
       pricePerShare,
     );
 
@@ -114,29 +140,37 @@ class _ValuePageState extends ConsumerState<ValuePage> {
       (sum, sv) => sum + (_vestedOnly ? sv.vestedValue : sv.totalValue),
     );
 
-    return Column(
-      children: [
-        _buildHeader(
-          context,
-          effectiveValuation,
-          pricePerShare,
-          totalValue,
-          totalShares,
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: _buildHeader(
+            context,
+            effectiveValuation,
+            pricePerShare,
+            totalValue,
+            totalShares,
+          ),
         ),
-        Expanded(
-          child: stakeholderValues.isEmpty
-              ? const EmptyState(
-                  icon: Icons.people,
-                  title: 'No Stakeholders',
-                  message: 'Add stakeholders with equity holdings.',
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 80),
-                  itemCount: stakeholderValues.length,
-                  itemBuilder: (context, index) =>
-                      _buildStakeholderCard(context, stakeholderValues[index]),
-                ),
-        ),
+        if (stakeholderValues.isEmpty)
+          const SliverFillRemaining(
+            child: EmptyState(
+              icon: Icons.people,
+              title: 'No Stakeholders',
+              message: 'Add stakeholders with equity holdings.',
+            ),
+          )
+        else
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                if (index == stakeholderValues.length) {
+                  return const SizedBox(height: 80);
+                }
+                return _buildStakeholderCard(context, stakeholderValues[index]);
+              },
+              childCount: stakeholderValues.length + 1,
+            ),
+          ),
       ],
     );
   }
@@ -153,22 +187,11 @@ class _ValuePageState extends ConsumerState<ValuePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Equity Value',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings_outlined),
-                onPressed: () => _showValuationDialog(context),
-                tooltip: 'Manage Valuations',
-              ),
-            ],
+          Text(
+            'Equity Value',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -219,14 +242,46 @@ class _ValuePageState extends ConsumerState<ValuePage> {
               );
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
-              const Text('Show vested equity only'),
-              const SizedBox(width: 8),
-              Switch(
-                value: _vestedOnly,
-                onChanged: (v) => setState(() => _vestedOnly = v),
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Vested only',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Transform.scale(
+                      scale: 0.8,
+                      child: Switch(
+                        value: _vestedOnly,
+                        onChanged: (v) => setState(() => _vestedOnly = v),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Exclude draft',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Transform.scale(
+                      scale: 0.8,
+                      child: Switch(
+                        value: _excludeDraft,
+                        onChanged: (v) => setState(() => _excludeDraft = v),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -258,6 +313,9 @@ class _ValuePageState extends ConsumerState<ValuePage> {
         color: _getTypeColor(sv.stakeholder.type),
       ),
       subtitle: Formatters.compactCurrency(displayValue),
+      trailing: sv.hasDraftEquity
+          ? StatusBadge(label: 'Draft', color: Colors.orange)
+          : null,
       chips: [
         MetricChip(
           label: 'Shares',
@@ -273,6 +331,27 @@ class _ValuePageState extends ConsumerState<ValuePage> {
       expandedContent: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Holdings section with colorful info boxes
+          if (sv.holdings.isNotEmpty) ...[
+            Text(
+              'Holdings',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...sv.holdings.map((h) => HoldingItem(
+              shareCount: h.holding.shareCount,
+              vestedCount: h.holding.vestedCount ?? h.holding.shareCount,
+              shareClassName: h.shareClassName,
+              costBasis: h.holding.costBasis,
+              acquiredDate: h.holding.acquiredDate,
+              roundName: h.roundName,
+              hasVesting: h.holding.vestingScheduleId != null,
+              isDraft: h.isDraft,
+            )),
+            const Divider(height: 24),
+          ],
           _buildDetailRow('Total Shares', Formatters.number(sv.totalShares)),
           if (sv.vestedShares != sv.totalShares) ...[
             _buildDetailRow(
@@ -282,6 +361,12 @@ class _ValuePageState extends ConsumerState<ValuePage> {
             _buildDetailRow(
               'Unvested Shares',
               Formatters.number(sv.totalShares - sv.vestedShares),
+            ),
+          ],
+          if (sv.hasDraftEquity) ...[
+            _buildDetailRow(
+              'Draft Shares',
+              Formatters.number(sv.draftShares),
             ),
           ],
           const Divider(),
@@ -294,6 +379,12 @@ class _ValuePageState extends ConsumerState<ValuePage> {
             _buildDetailRow(
               'Unvested Value',
               Formatters.currency(sv.totalValue - sv.vestedValue),
+            ),
+          ],
+          if (sv.hasDraftEquity) ...[
+            _buildDetailRow(
+              'Draft Value',
+              Formatters.currency(sv.draftValue),
             ),
           ],
           if (sv.optionShares > 0) ...[
@@ -344,6 +435,9 @@ class _ValuePageState extends ConsumerState<ValuePage> {
     List<Holding> holdings,
     List<OptionGrant> options,
     Map<String, Stakeholder> stakeholderMap,
+    Set<String> draftRoundIds,
+    Map<String, String> shareClassNames,
+    Map<String, String> roundNames,
     double pricePerShare,
   ) {
     final valueMap = <String, _StakeholderValue>{};
@@ -352,6 +446,12 @@ class _ValuePageState extends ConsumerState<ValuePage> {
     for (final holding in holdings) {
       final stakeholder = stakeholderMap[holding.stakeholderId];
       if (stakeholder == null) continue;
+
+      final isDraft =
+          holding.roundId != null && draftRoundIds.contains(holding.roundId);
+
+      // Skip draft holdings if excluding drafts
+      if (_excludeDraft && isDraft) continue;
 
       valueMap.putIfAbsent(
         stakeholder.id,
@@ -362,6 +462,19 @@ class _ValuePageState extends ConsumerState<ValuePage> {
       sv.totalShares += holding.shareCount;
       // For holdings, assume all are vested (non-option shares)
       sv.vestedShares += holding.shareCount;
+
+      // Track draft shares separately
+      if (isDraft) {
+        sv.draftShares += holding.shareCount;
+      }
+
+      // Store holding info for display
+      sv.holdings.add(_HoldingInfo(
+        holding: holding,
+        shareClassName: shareClassNames[holding.shareClassId] ?? 'Unknown',
+        roundName: holding.roundId != null ? roundNames[holding.roundId] : null,
+        isDraft: isDraft,
+      ));
     }
 
     // Process options (add option value potential)
@@ -397,19 +510,12 @@ class _ValuePageState extends ConsumerState<ValuePage> {
     for (final sv in valueMap.values) {
       sv.totalValue = sv.totalShares * pricePerShare;
       sv.vestedValue = sv.vestedShares * pricePerShare;
-      sv.ownershipPercent = totalAllShares > 0
-          ? (sv.totalShares / totalAllShares) * 100
-          : 0;
+      sv.draftValue = sv.draftShares * pricePerShare;
+      sv.ownershipPercent =
+          totalAllShares > 0 ? (sv.totalShares / totalAllShares) * 100 : 0;
     }
 
     return valueMap.values.toList();
-  }
-
-  void _showValuationDialog(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const _ValuationsManagementPage()),
-    );
   }
 }
 
@@ -419,246 +525,33 @@ class _StakeholderValue {
   int totalShares = 0;
   int vestedShares = 0;
   int optionShares = 0;
+  int draftShares = 0;
   double totalValue = 0;
   double vestedValue = 0;
   double optionValue = 0;
+  double draftValue = 0;
   double ownershipPercent = 0;
+
+  /// Holdings contributing to this stakeholder's value.
+  final List<_HoldingInfo> holdings = [];
+
+  /// Whether this stakeholder has any draft equity.
+  bool get hasDraftEquity => draftShares > 0;
 
   _StakeholderValue({required this.stakeholder});
 }
 
-/// Sub-page for managing company valuations.
-class _ValuationsManagementPage extends ConsumerWidget {
-  const _ValuationsManagementPage();
+/// Holding info for display in expanded card.
+class _HoldingInfo {
+  final Holding holding;
+  final String shareClassName;
+  final String? roundName;
+  final bool isDraft;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final valuationsAsync = ref.watch(valuationsStreamProvider);
-    final companyId = ref.watch(currentCompanyIdProvider);
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Company Valuations')),
-      body: valuationsAsync.when(
-        data: (valuations) {
-          if (valuations.isEmpty) {
-            return EmptyState.noItems(
-              itemType: 'valuation',
-              onAdd: () => _showAddDialog(context, ref, companyId!),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: valuations.length,
-            itemBuilder: (context, index) {
-              final valuation = valuations[index];
-              final isLatest = index == 0;
-              return _buildValuationCard(context, ref, valuation, isLatest);
-            },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => EmptyState.error(message: e.toString()),
-      ),
-      floatingActionButton: companyId != null
-          ? FloatingActionButton(
-              onPressed: () => _showAddDialog(context, ref, companyId),
-              child: const Icon(Icons.add),
-            )
-          : null,
-    );
-  }
-
-  Widget _buildValuationCard(
-    BuildContext context,
-    WidgetRef ref,
-    Valuation valuation,
-    bool isLatest,
-  ) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: isLatest ? Colors.green : Colors.grey.shade300,
-          child: Icon(
-            Icons.show_chart,
-            color: isLatest ? Colors.white : Colors.grey.shade600,
-          ),
-        ),
-        title: Text(Formatters.currency(valuation.preMoneyValue)),
-        subtitle: Text(
-          '${Formatters.date(valuation.date)} • ${ValuationMethod.displayName(valuation.method)}',
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isLatest)
-              const Chip(
-                label: Text('Current'),
-                backgroundColor: Colors.green,
-                labelStyle: TextStyle(color: Colors.white, fontSize: 12),
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-              ),
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => _showEditDialog(context, ref, valuation),
-            ),
-            IconButton(
-              icon: Icon(
-                Icons.delete_outlined,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              onPressed: () => _confirmDelete(context, ref, valuation),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddDialog(BuildContext context, WidgetRef ref, String companyId) {
-    _showValuationDialog(context, ref, companyId: companyId);
-  }
-
-  void _showEditDialog(
-    BuildContext context,
-    WidgetRef ref,
-    Valuation valuation,
-  ) {
-    _showValuationDialog(context, ref, valuation: valuation);
-  }
-
-  void _showValuationDialog(
-    BuildContext context,
-    WidgetRef ref, {
-    String? companyId,
-    Valuation? valuation,
-  }) {
-    final isEditing = valuation != null;
-    final valueController = TextEditingController(
-      text: valuation?.preMoneyValue.toString() ?? '',
-    );
-    final notesController = TextEditingController(text: valuation?.notes ?? '');
-
-    DateTime selectedDate = valuation?.date ?? DateTime.now();
-    String selectedMethod = valuation?.method ?? ValuationMethod.manual;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(isEditing ? 'Edit Valuation' : 'Add Valuation'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: valueController,
-                  decoration: const InputDecoration(
-                    labelText: 'Pre-Money Valuation',
-                    prefixText: '\$',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Date'),
-                  subtitle: Text(Formatters.date(selectedDate)),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (date != null) {
-                      setDialogState(() => selectedDate = date);
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedMethod,
-                  decoration: const InputDecoration(labelText: 'Method'),
-                  items: ValuationMethod.all
-                      .map(
-                        (m) => DropdownMenuItem(
-                          value: m,
-                          child: Text(ValuationMethod.displayName(m)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setDialogState(
-                    () => selectedMethod = v ?? ValuationMethod.manual,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: notesController,
-                  decoration: const InputDecoration(labelText: 'Notes'),
-                  maxLines: 3,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final value = double.tryParse(valueController.text);
-                if (value == null || value <= 0) return;
-
-                final mutations = ref.read(valuationMutationsProvider.notifier);
-
-                if (isEditing) {
-                  await mutations.updateValuation(
-                    id: valuation.id,
-                    date: selectedDate,
-                    preMoneyValue: value,
-                    method: selectedMethod,
-                    notes: notesController.text.trim().isEmpty
-                        ? null
-                        : notesController.text.trim(),
-                  );
-                } else {
-                  await mutations.create(
-                    companyId: companyId!,
-                    date: selectedDate,
-                    preMoneyValue: value,
-                    method: selectedMethod,
-                    notes: notesController.text.trim().isEmpty
-                        ? null
-                        : notesController.text.trim(),
-                  );
-                }
-
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: Text(isEditing ? 'Save' : 'Add'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmDelete(
-    BuildContext context,
-    WidgetRef ref,
-    Valuation valuation,
-  ) async {
-    final confirmed = await ConfirmDialog.showDelete(
-      context: context,
-      itemName: 'this valuation',
-    );
-
-    if (confirmed && context.mounted) {
-      await ref.read(valuationMutationsProvider.notifier).delete(valuation.id);
-    }
-  }
+  _HoldingInfo({
+    required this.holding,
+    required this.shareClassName,
+    this.roundName,
+    this.isDraft = false,
+  });
 }

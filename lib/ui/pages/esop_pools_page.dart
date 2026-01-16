@@ -135,21 +135,107 @@ class EsopPoolsPage extends ConsumerWidget {
     List<VestingSchedule> vestingSchedules,
   ) {
     final shareClassMap = {for (final sc in shareClasses) sc.id: sc};
+    final expansionNeededAsync = ref.watch(poolsNeedingExpansionProvider);
 
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 80),
-      itemCount: pools.length,
-      itemBuilder: (context, index) {
-        final pool = pools[index];
-        return _buildPoolCard(
-          context,
-          ref,
-          pool,
-          shareClassMap,
-          shareClasses,
-          vestingSchedules,
-        );
-      },
+    return Column(
+      children: [
+        // Expansion needed banner
+        expansionNeededAsync.when(
+          data: (expansionsNeeded) {
+            if (expansionsNeeded.isEmpty) return const SizedBox.shrink();
+            return _buildExpansionBanner(context, ref, expansionsNeeded);
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+        // Pools list
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 80),
+            itemCount: pools.length,
+            itemBuilder: (context, index) {
+              final pool = pools[index];
+              return _buildPoolCard(
+                context,
+                ref,
+                pool,
+                shareClassMap,
+                shareClasses,
+                vestingSchedules,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExpansionBanner(
+    BuildContext context,
+    WidgetRef ref,
+    List<PoolExpansionNeeded> expansionsNeeded,
+  ) {
+    final theme = Theme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.trending_up, color: Colors.orange, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${expansionsNeeded.length} Pool${expansionsNeeded.length > 1 ? 's' : ''} Below Target',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade800,
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () =>
+                    _showExpansionDialog(context, ref, expansionsNeeded),
+                icon: const Icon(Icons.add_circle_outline, size: 18),
+                label: const Text('Review'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'These pools are below their target percentage of the company and may need to be expanded.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showExpansionDialog(
+    BuildContext context,
+    WidgetRef ref,
+    List<PoolExpansionNeeded> expansionsNeeded,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => _PoolExpansionDialog(expansionsNeeded: expansionsNeeded),
     );
   }
 
@@ -919,9 +1005,11 @@ class EsopPoolsPage extends ConsumerWidget {
               }
 
               try {
-                await ref.read(expandEsopPoolProvider.notifier).call(
+                // Use the new history-tracking expansion mutations
+                await ref.read(poolExpansionMutationsProvider.notifier).expandPool(
                       poolId: pool.id,
                       additionalShares: additional,
+                      reason: 'manual',
                       resolutionReference: resolutionController.text.isNotEmpty
                           ? resolutionController.text
                           : null,
@@ -1003,5 +1091,217 @@ class EsopPoolsPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// Dialog for reviewing and applying pool expansions.
+class _PoolExpansionDialog extends ConsumerStatefulWidget {
+  final List<PoolExpansionNeeded> expansionsNeeded;
+
+  const _PoolExpansionDialog({required this.expansionsNeeded});
+
+  @override
+  ConsumerState<_PoolExpansionDialog> createState() =>
+      _PoolExpansionDialogState();
+}
+
+class _PoolExpansionDialogState extends ConsumerState<_PoolExpansionDialog> {
+  final Set<int> _selectedIndices = {};
+  bool _isApplying = false;
+  final _resolutionController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Select all by default
+    _selectedIndices.addAll(List.generate(widget.expansionsNeeded.length, (i) => i));
+  }
+
+  @override
+  void dispose() {
+    _resolutionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.trending_up, color: Colors.orange),
+          const SizedBox(width: 8),
+          const Text('Pool Expansions'),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'The following pools are below their target percentage and can be expanded to meet the target:',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 250),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.expansionsNeeded.length,
+                itemBuilder: (context, index) {
+                  final expansion = widget.expansionsNeeded[index];
+                  final isSelected = _selectedIndices.contains(index);
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: CheckboxListTile(
+                      value: isSelected,
+                      onChanged: _isApplying
+                          ? null
+                          : (value) {
+                              setState(() {
+                                if (value == true) {
+                                  _selectedIndices.add(index);
+                                } else {
+                                  _selectedIndices.remove(index);
+                                }
+                              });
+                            },
+                      title: Text(
+                        expansion.pool.name,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${Formatters.number(expansion.currentSize)} shares',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '+${Formatters.number(expansion.sharesToAdd)} shares to reach ${expansion.targetPercent.toStringAsFixed(1)}%',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: Colors.orange.shade800,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Currently ${expansion.currentPercent.toStringAsFixed(1)}% of company',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.outline,
+                            ),
+                          ),
+                        ],
+                      ),
+                      isThreeLine: true,
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _resolutionController,
+              decoration: const InputDecoration(
+                labelText: 'Board Resolution Reference',
+                hintText: 'Optional - e.g., BR-2024-001',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isApplying ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _isApplying || _selectedIndices.isEmpty
+              ? null
+              : () => _applySelected(),
+          icon: _isApplying
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.add_circle_outline, size: 18),
+          label: Text(
+            _isApplying
+                ? 'Applying...'
+                : 'Expand ${_selectedIndices.length} Pool${_selectedIndices.length > 1 ? 's' : ''}',
+          ),
+          style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _applySelected() async {
+    setState(() => _isApplying = true);
+
+    try {
+      final mutations = ref.read(poolExpansionMutationsProvider.notifier);
+      int appliedCount = 0;
+
+      for (final index in _selectedIndices.toList()..sort()) {
+        final expansion = widget.expansionsNeeded[index];
+        await mutations.expandPool(
+          poolId: expansion.pool.id,
+          additionalShares: expansion.sharesToAdd,
+          reason: 'target_percentage',
+          resolutionReference: _resolutionController.text.isNotEmpty
+              ? _resolutionController.text
+              : null,
+          notes: 'Expanded to meet target of ${expansion.targetPercent.toStringAsFixed(1)}%',
+        );
+        appliedCount++;
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Expanded $appliedCount pool${appliedCount > 1 ? 's' : ''}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error expanding pools: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isApplying = false);
+      }
+    }
   }
 }

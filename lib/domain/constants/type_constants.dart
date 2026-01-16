@@ -3,30 +3,36 @@
 /// Use these instead of raw strings for type safety.
 abstract class StakeholderType {
   static const String founder = 'founder';
-  static const String angel = 'angel';
-  static const String vcFund = 'vcFund';
   static const String employee = 'employee';
   static const String advisor = 'advisor';
+  static const String investor = 'investor';
+  static const String angel = 'angel';
+  static const String vcFund = 'vcFund';
   static const String institution = 'institution';
+  static const String company = 'company';
   static const String other = 'other';
 
   static const List<String> all = [
     founder,
-    angel,
-    vcFund,
     employee,
     advisor,
+    investor,
+    angel,
+    vcFund,
     institution,
+    company,
     other,
   ];
 
   static String displayName(String type) => switch (type) {
     founder => 'Founder',
-    angel => 'Angel Investor',
-    vcFund => 'VC Fund',
     employee => 'Employee',
     advisor => 'Advisor',
+    investor => 'Investor',
+    angel => 'Angel Investor',
+    vcFund => 'VC Fund',
     institution => 'Institution',
+    company => 'Company',
     _ => 'Other',
   };
 }
@@ -40,7 +46,6 @@ abstract class ShareClassType {
   static const String esop = 'esop';
   static const String options = 'options';
   static const String performanceRights = 'performanceRights';
-  static const String custom = 'custom';
 
   static const List<String> all = [
     ordinary,
@@ -50,7 +55,6 @@ abstract class ShareClassType {
     esop,
     options,
     performanceRights,
-    custom,
   ];
 
   static String displayName(String type) => switch (type) {
@@ -61,7 +65,7 @@ abstract class ShareClassType {
     esop => 'ESOP',
     options => 'Options',
     performanceRights => 'Performance Rights',
-    _ => 'Custom',
+    _ => type, // Fallback to raw type string for unknown types
   };
 
   static bool isDerivative(String type) =>

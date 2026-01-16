@@ -319,6 +319,12 @@ class WarrantsPage extends ConsumerWidget {
                 _showExerciseDialog(context, ref, warrant, outstanding),
             tooltip: 'Exercise',
           ),
+        if (warrant.exercisedCount > 0)
+          IconButton(
+            icon: const Icon(Icons.undo_outlined),
+            onPressed: () => _showUnexerciseDialog(context, ref, warrant),
+            tooltip: 'Undo Exercise',
+          ),
         IconButton(
           icon: Icon(
             Icons.delete_outlined,
@@ -570,30 +576,222 @@ class WarrantsPage extends ConsumerWidget {
     int maxShares,
   ) {
     final sharesController = TextEditingController();
+    DateTime exerciseDate = DateTime.now();
+
+    final effectiveValuation = ref.read(effectiveValuationProvider).valueOrNull;
+    final ownership = ref.read(ownershipSummaryProvider).valueOrNull;
+
+    // Calculate current price per share if valuation available
+    double? pricePerShare;
+    if (effectiveValuation != null && ownership != null) {
+      final totalShares = ownership.totalIssuedShares;
+      if (totalShares > 0) {
+        pricePerShare = effectiveValuation.value / totalShares;
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final shares = int.tryParse(sharesController.text) ?? 0;
+          final totalCost = shares * warrant.strikePrice;
+          final currentValue =
+              pricePerShare != null ? shares * pricePerShare : null;
+          final potentialGain =
+              currentValue != null ? currentValue - totalCost : null;
+
+          return AlertDialog(
+            title: const Text('Exercise Warrants'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Up to ${Formatters.number(maxShares)} warrants available',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: sharesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Warrants to Exercise',
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: exerciseDate,
+                        firstDate: warrant.issueDate,
+                        lastDate: warrant.expiryDate,
+                      );
+                      if (date != null) {
+                        setDialogState(() => exerciseDate = date);
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Exercise Date',
+                        suffixIcon: Icon(Icons.calendar_today, size: 18),
+                      ),
+                      child: Text(Formatters.date(exerciseDate)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Exercise Summary',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildSummaryRow(
+                    context,
+                    'Strike Price',
+                    Formatters.currency(warrant.strikePrice),
+                  ),
+                  _buildSummaryRow(
+                    context,
+                    'Total Cost to Exercise',
+                    Formatters.currency(totalCost),
+                    highlight: true,
+                  ),
+                  if (pricePerShare != null) ...[
+                    const SizedBox(height: 8),
+                    _buildSummaryRow(
+                      context,
+                      'Current Price/Share',
+                      Formatters.currency(pricePerShare),
+                    ),
+                    _buildSummaryRow(
+                      context,
+                      'Current Value',
+                      Formatters.currency(currentValue!),
+                    ),
+                    _buildSummaryRow(
+                      context,
+                      'Potential Gain',
+                      Formatters.currency(potentialGain!),
+                      valueColor: potentialGain >= 0 ? Colors.green : Colors.red,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primaryContainer
+                          .withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Exercising converts warrants to actual shares. You pay the strike price to acquire shares.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: shares > 0 && shares <= maxShares
+                    ? () async {
+                        await ref
+                            .read(warrantMutationsProvider.notifier)
+                            .exercise(
+                              id: warrant.id,
+                              sharesToExercise: shares,
+                              exerciseDate: exerciseDate,
+                            );
+
+                        if (context.mounted) Navigator.pop(context);
+                      }
+                    : null,
+                child: const Text('Exercise'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showUnexerciseDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Warrant warrant,
+  ) {
+    final sharesController = TextEditingController();
+    final maxShares = warrant.exercisedCount;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Exercise Warrants'),
+        title: const Text('Undo Exercise'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Up to ${Formatters.number(maxShares)} warrants available',
+              'Revert up to ${Formatters.number(maxShares)} exercised warrants',
               style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Strike price: ${Formatters.currency(warrant.strikePrice)}',
-              style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
             TextField(
               controller: sharesController,
               decoration: const InputDecoration(
-                labelText: 'Warrants to Exercise',
+                labelText: 'Warrants to Unexercise',
               ),
               keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_outlined,
+                    size: 18,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This will revert exercised warrants back to outstanding. Use this to correct mistakes.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -603,17 +801,52 @@ class WarrantsPage extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.orange,
+            ),
             onPressed: () async {
               final shares = int.tryParse(sharesController.text);
               if (shares == null || shares <= 0 || shares > maxShares) return;
 
               await ref
                   .read(warrantMutationsProvider.notifier)
-                  .exercise(id: warrant.id, sharesToExercise: shares);
+                  .unexercise(id: warrant.id, sharesToUnexercise: shares);
 
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('Exercise'),
+            child: const Text('Undo Exercise'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(
+    BuildContext context,
+    String label,
+    String value, {
+    bool highlight = false,
+    Color? valueColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: highlight
+                ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    )
+                : Theme.of(context).textTheme.bodyMedium,
+          ),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: highlight ? FontWeight.bold : FontWeight.w500,
+                  color: valueColor,
+                ),
           ),
         ],
       ),

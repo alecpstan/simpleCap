@@ -264,7 +264,6 @@ class ShareClassesPage extends ConsumerWidget {
                       value: 'performanceRights',
                       child: Text('Performance Rights'),
                     ),
-                    DropdownMenuItem(value: 'custom', child: Text('Custom')),
                   ],
                   onChanged: (v) {
                     setDialogState(() => selectedType = v ?? 'ordinary');
@@ -562,8 +561,6 @@ class ShareClassesPage extends ConsumerWidget {
         return 'Options';
       case 'performanceRights':
         return 'Performance Rights';
-      case 'custom':
-        return 'Custom';
       default:
         return type;
     }

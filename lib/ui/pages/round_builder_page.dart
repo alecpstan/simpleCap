@@ -39,6 +39,7 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
   // Step 2: Valuation
   final _preMoneyController = TextEditingController();
   final _pricePerShareController = TextEditingController();
+  String? _valuationSourceNote; // e.g. "409A Valuation on 15 Jan 2025"
 
   // Step 3: Investments
   final List<_PendingInvestment> _pendingInvestments = [];
@@ -111,6 +112,57 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
 
   void _initializeDefaults() {
     _nameController.text = _getRoundTypeName(_roundType);
+    _loadDefaultValuation();
+  }
+
+  Future<void> _loadDefaultValuation() async {
+    final db = ref.read(databaseProvider);
+    final companyId = ref.read(currentCompanyIdProvider);
+    if (companyId == null) return;
+
+    final valuations = await db.getValuations(companyId);
+    if (valuations.isEmpty) return;
+
+    // Find the most recent valuation that is on or before the round date
+    final relevantValuations = valuations
+        .where((v) => !v.date.isAfter(_roundDate))
+        .toList();
+
+    if (relevantValuations.isEmpty) return;
+
+    // Valuations are already sorted by date descending, so first is most recent
+    final latestValuation = relevantValuations.first;
+
+    setState(() {
+      _preMoneyController.text = latestValuation.preMoneyValue.toStringAsFixed(0);
+      _valuationSourceNote =
+          '${_formatValuationMethod(latestValuation.method)} on ${Formatters.shortDate(latestValuation.date)}';
+    });
+  }
+
+  String _formatValuationMethod(String method) {
+    switch (method) {
+      case 'vcMethod':
+        return 'VC Method';
+      case 'comparables':
+        return 'Comparables';
+      case 'dcf':
+        return 'DCF';
+      case 'scorecard':
+        return 'Scorecard';
+      case 'berkus':
+        return 'Berkus Method';
+      case 'riskFactor':
+        return 'Risk Factor';
+      case 'lastRound':
+        return 'Last Round';
+      case 'custom':
+        return 'Custom Valuation';
+      case '409a':
+        return '409A Valuation';
+      default:
+        return method;
+    }
   }
 
   @override
@@ -311,6 +363,10 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
               );
               if (date != null) {
                 setState(() => _roundDate = date);
+                // Reload valuation default if not editing and not manually changed
+                if (!isEditing) {
+                  _loadDefaultValuation();
+                }
               }
             },
             child: InputDecorator(
@@ -384,8 +440,33 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
               prefixText: '\$ ',
               border: OutlineInputBorder(),
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() {
+              // Clear the source note when user manually changes the value
+              _valuationSourceNote = null;
+            }),
           ),
+          if (_valuationSourceNote != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 14,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Populated from $_valuationSourceNote (can be changed)',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
 
           // Implied Price Info
@@ -1792,6 +1873,21 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
                   contentPadding: EdgeInsets.zero,
                 ),
                 const SizedBox(height: 16),
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Issue Date',
+                    suffixIcon: Icon(Icons.lock_outline, size: 18),
+                  ),
+                  child: Text(Formatters.date(issueDate)),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Date is set to match the round date',
+                  style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(dialogContext).colorScheme.outline,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: notesController,
                   decoration: const InputDecoration(labelText: 'Notes'),
@@ -1927,6 +2023,42 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
                     prefixText: '\$',
                   ),
                   keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Issue Date',
+                    suffixIcon: Icon(Icons.lock_outline, size: 18),
+                  ),
+                  child: Text(Formatters.date(issueDate)),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Date is set to match the round date',
+                  style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(dialogContext).colorScheme.outline,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: dialogContext,
+                      initialDate: expiryDate,
+                      firstDate: issueDate,
+                      lastDate: DateTime(2100),
+                    );
+                    if (date != null) {
+                      setDialogState(() => expiryDate = date);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Expiry Date',
+                      suffixIcon: Icon(Icons.calendar_today, size: 18),
+                    ),
+                    child: Text(Formatters.date(expiryDate)),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(

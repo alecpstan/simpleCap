@@ -69,7 +69,7 @@ final optionsSummaryProvider =
 // ignore: unused_element
 typedef OptionsSummaryRef = AutoDisposeFutureProviderRef<OptionsSummary>;
 String _$optionGrantMutationsHash() =>
-    r'617188d3aaa2bad46004f2c01ebdddc13400a8bb';
+    r'c33010b0d433dc703d2d6d1f0e8b73d6c875679d';
 
 /// Notifier for option grant mutations.
 ///

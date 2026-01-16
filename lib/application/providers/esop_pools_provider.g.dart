@@ -641,6 +641,193 @@ class _CanGrantFromPoolProviderElement
   int get quantity => (origin as CanGrantFromPoolProvider).quantity;
 }
 
+String _$poolsNeedingExpansionHash() =>
+    r'0ba4b791333bf6de4162252af48b13fd90a84d4d';
+
+/// Detects pools that need expansion to meet their target percentage.
+///
+/// Copied from [poolsNeedingExpansion].
+@ProviderFor(poolsNeedingExpansion)
+final poolsNeedingExpansionProvider =
+    AutoDisposeFutureProvider<List<PoolExpansionNeeded>>.internal(
+      poolsNeedingExpansion,
+      name: r'poolsNeedingExpansionProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$poolsNeedingExpansionHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef PoolsNeedingExpansionRef =
+    AutoDisposeFutureProviderRef<List<PoolExpansionNeeded>>;
+String _$poolExpansionsStreamHash() =>
+    r'585ac2df677a6d81f232c978a2ca5cd4a8679143';
+
+/// Watches all pool expansions for the current company.
+///
+/// Copied from [poolExpansionsStream].
+@ProviderFor(poolExpansionsStream)
+final poolExpansionsStreamProvider =
+    AutoDisposeStreamProvider<List<EsopPoolExpansion>>.internal(
+      poolExpansionsStream,
+      name: r'poolExpansionsStreamProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$poolExpansionsStreamHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef PoolExpansionsStreamRef =
+    AutoDisposeStreamProviderRef<List<EsopPoolExpansion>>;
+String _$poolExpansionHistoryStreamHash() =>
+    r'4cb86eef805a92cc505f197858932fb0d3f47702';
+
+/// Watches expansions for a specific pool.
+///
+/// Copied from [poolExpansionHistoryStream].
+@ProviderFor(poolExpansionHistoryStream)
+const poolExpansionHistoryStreamProvider = PoolExpansionHistoryStreamFamily();
+
+/// Watches expansions for a specific pool.
+///
+/// Copied from [poolExpansionHistoryStream].
+class PoolExpansionHistoryStreamFamily
+    extends Family<AsyncValue<List<EsopPoolExpansion>>> {
+  /// Watches expansions for a specific pool.
+  ///
+  /// Copied from [poolExpansionHistoryStream].
+  const PoolExpansionHistoryStreamFamily();
+
+  /// Watches expansions for a specific pool.
+  ///
+  /// Copied from [poolExpansionHistoryStream].
+  PoolExpansionHistoryStreamProvider call(String poolId) {
+    return PoolExpansionHistoryStreamProvider(poolId);
+  }
+
+  @override
+  PoolExpansionHistoryStreamProvider getProviderOverride(
+    covariant PoolExpansionHistoryStreamProvider provider,
+  ) {
+    return call(provider.poolId);
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'poolExpansionHistoryStreamProvider';
+}
+
+/// Watches expansions for a specific pool.
+///
+/// Copied from [poolExpansionHistoryStream].
+class PoolExpansionHistoryStreamProvider
+    extends AutoDisposeStreamProvider<List<EsopPoolExpansion>> {
+  /// Watches expansions for a specific pool.
+  ///
+  /// Copied from [poolExpansionHistoryStream].
+  PoolExpansionHistoryStreamProvider(String poolId)
+    : this._internal(
+        (ref) => poolExpansionHistoryStream(
+          ref as PoolExpansionHistoryStreamRef,
+          poolId,
+        ),
+        from: poolExpansionHistoryStreamProvider,
+        name: r'poolExpansionHistoryStreamProvider',
+        debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+            ? null
+            : _$poolExpansionHistoryStreamHash,
+        dependencies: PoolExpansionHistoryStreamFamily._dependencies,
+        allTransitiveDependencies:
+            PoolExpansionHistoryStreamFamily._allTransitiveDependencies,
+        poolId: poolId,
+      );
+
+  PoolExpansionHistoryStreamProvider._internal(
+    super._createNotifier, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.poolId,
+  }) : super.internal();
+
+  final String poolId;
+
+  @override
+  Override overrideWith(
+    Stream<List<EsopPoolExpansion>> Function(
+      PoolExpansionHistoryStreamRef provider,
+    )
+    create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: PoolExpansionHistoryStreamProvider._internal(
+        (ref) => create(ref as PoolExpansionHistoryStreamRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        poolId: poolId,
+      ),
+    );
+  }
+
+  @override
+  AutoDisposeStreamProviderElement<List<EsopPoolExpansion>> createElement() {
+    return _PoolExpansionHistoryStreamProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is PoolExpansionHistoryStreamProvider &&
+        other.poolId == poolId;
+  }
+
+  @override
+  int get hashCode {
+    var hash = _SystemHash.combine(0, runtimeType.hashCode);
+    hash = _SystemHash.combine(hash, poolId.hashCode);
+
+    return _SystemHash.finish(hash);
+  }
+}
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+mixin PoolExpansionHistoryStreamRef
+    on AutoDisposeStreamProviderRef<List<EsopPoolExpansion>> {
+  /// The parameter `poolId` of this provider.
+  String get poolId;
+}
+
+class _PoolExpansionHistoryStreamProviderElement
+    extends AutoDisposeStreamProviderElement<List<EsopPoolExpansion>>
+    with PoolExpansionHistoryStreamRef {
+  _PoolExpansionHistoryStreamProviderElement(super.provider);
+
+  @override
+  String get poolId => (origin as PoolExpansionHistoryStreamProvider).poolId;
+}
+
 String _$createEsopPoolHash() => r'1dcca5c3830c8682aa2fc149ed0623ce2220dda1';
 
 /// Creates a new ESOP pool.
@@ -713,5 +900,24 @@ final deleteEsopPoolProvider =
     );
 
 typedef _$DeleteEsopPool = AutoDisposeAsyncNotifier<void>;
+String _$poolExpansionMutationsHash() =>
+    r'1d401264ed3b0f36ba01f33164ef41fff23a7d33';
+
+/// Mutations for pool expansions (record, revert).
+///
+/// Copied from [PoolExpansionMutations].
+@ProviderFor(PoolExpansionMutations)
+final poolExpansionMutationsProvider =
+    AutoDisposeAsyncNotifierProvider<PoolExpansionMutations, void>.internal(
+      PoolExpansionMutations.new,
+      name: r'poolExpansionMutationsProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$poolExpansionMutationsHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+typedef _$PoolExpansionMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

@@ -47,5 +47,4 @@ const _$ShareClassTypeEnumMap = {
   ShareClassType.esop: 'esop',
   ShareClassType.options: 'options',
   ShareClassType.performanceRights: 'performanceRights',
-  ShareClassType.custom: 'custom',
 };

@@ -72,7 +72,7 @@ final convertiblesSummaryProvider =
 typedef ConvertiblesSummaryRef =
     AutoDisposeFutureProviderRef<ConvertiblesSummary>;
 String _$convertibleMutationsHash() =>
-    r'60d9f02ee3fb9e349a3137e0a583d1129c4403e3';
+    r'015bd6d78dc4c759a27e6440f180ac7e937ac585';
 
 /// Notifier for convertible mutations.
 ///

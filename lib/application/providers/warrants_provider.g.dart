@@ -64,7 +64,7 @@ final warrantsSummaryProvider = AutoDisposeProvider<WarrantsSummary>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef WarrantsSummaryRef = AutoDisposeProviderRef<WarrantsSummary>;
-String _$warrantMutationsHash() => r'3ed2fe72df3f7b9e1506318153a40ed5a098effa';
+String _$warrantMutationsHash() => r'18cd7a6ac7bbb6dfd13f8b055d4bb4e1a4a601d3';
 
 /// Mutations for warrants.
 ///

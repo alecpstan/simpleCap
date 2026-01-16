@@ -11,6 +11,7 @@ import 'options_page.dart';
 import 'scenarios_page.dart';
 import 'transfers_page.dart';
 import 'valuations_page.dart';
+import 'vesting_management_page.dart';
 import 'warrants_page.dart';
 
 /// The main dashboard/overview page.
@@ -293,6 +294,16 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const EsopPoolsPage()),
+              ),
+            ),
+            QuickAccessCard(
+              icon: Icons.schedule,
+              label: 'Vesting',
+              subtitle: 'Manage vesting',
+              color: Colors.indigo,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const VestingManagementPage()),
               ),
             ),
             convertiblesSummaryAsync.when(

@@ -154,6 +154,7 @@ class HoldingItem extends StatelessWidget {
   final DateTime acquiredDate;
   final String? roundName;
   final bool hasVesting;
+  final bool isDraft;
   final VoidCallback? onTap;
 
   const HoldingItem({
@@ -165,6 +166,7 @@ class HoldingItem extends StatelessWidget {
     required this.acquiredDate,
     this.roundName,
     this.hasVesting = false,
+    this.isDraft = false,
     this.onTap,
   });
 
@@ -174,13 +176,24 @@ class HoldingItem extends StatelessWidget {
     final vestingPercent =
         hasVesting ? ((vestedCount / shareCount) * 100).round() : 100;
 
+    // Determine status text: draft takes priority, then vesting
+    String? statusText;
+    Color? statusColor;
+    if (isDraft) {
+      statusText = 'Draft';
+      statusColor = Colors.orange;
+    } else if (hasVesting) {
+      statusText = '$vestingPercent%';
+      statusColor = isFullyVested ? Colors.green : Colors.indigo;
+    }
+
     return InstrumentItem(
       icon: Icons.pie_chart_outline,
       color: isFullyVested ? Colors.blue : Colors.indigo,
       title: _formatNumber(shareCount),
       subtitle: _buildSubtitle(),
-      statusText: hasVesting ? '$vestingPercent%' : null,
-      statusColor: isFullyVested ? Colors.green : Colors.indigo,
+      statusText: statusText,
+      statusColor: statusColor,
       onTap: onTap,
     );
   }
