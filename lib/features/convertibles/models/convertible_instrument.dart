@@ -1,6 +1,89 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
+// ─── MFN Upgrade History ──────────────────────────────────────────────────────
+
+/// Record of a single MFN upgrade event.
+/// Tracks when and why terms were upgraded, enabling proper reversal.
+class MfnUpgradeRecord {
+  final String id;
+  final DateTime upgradeDate;
+
+  /// The convertible that triggered this MFN upgrade
+  final String sourceConvertibleId;
+
+  /// Terms BEFORE this upgrade was applied
+  final double? previousDiscountPercent;
+  final double? previousValuationCap;
+  final bool previousHasProRata;
+
+  /// Terms AFTER this upgrade was applied
+  final double? newDiscountPercent;
+  final double? newValuationCap;
+  final bool newHasProRata;
+
+  const MfnUpgradeRecord({
+    required this.id,
+    required this.upgradeDate,
+    required this.sourceConvertibleId,
+    this.previousDiscountPercent,
+    this.previousValuationCap,
+    this.previousHasProRata = false,
+    this.newDiscountPercent,
+    this.newValuationCap,
+    this.newHasProRata = false,
+  });
+
+  /// Description of what changed in this upgrade
+  String get upgradeDescription {
+    final parts = <String>[];
+    if (newDiscountPercent != null &&
+        newDiscountPercent != previousDiscountPercent) {
+      final oldPct = previousDiscountPercent != null
+          ? '${(previousDiscountPercent! * 100).toStringAsFixed(0)}%'
+          : 'none';
+      final newPct = '${(newDiscountPercent! * 100).toStringAsFixed(0)}%';
+      parts.add('Discount: $oldPct → $newPct');
+    }
+    if (newValuationCap != null && newValuationCap != previousValuationCap) {
+      final oldCap = previousValuationCap != null
+          ? '\$${(previousValuationCap! / 1000000).toStringAsFixed(1)}M'
+          : 'none';
+      final newCap = '\$${(newValuationCap! / 1000000).toStringAsFixed(1)}M';
+      parts.add('Cap: $oldCap → $newCap');
+    }
+    if (newHasProRata && !previousHasProRata) {
+      parts.add('Added pro-rata rights');
+    }
+    return parts.isEmpty ? 'No changes' : parts.join(', ');
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'upgradeDate': upgradeDate.toIso8601String(),
+        'sourceConvertibleId': sourceConvertibleId,
+        'previousDiscountPercent': previousDiscountPercent,
+        'previousValuationCap': previousValuationCap,
+        'previousHasProRata': previousHasProRata,
+        'newDiscountPercent': newDiscountPercent,
+        'newValuationCap': newValuationCap,
+        'newHasProRata': newHasProRata,
+      };
+
+  factory MfnUpgradeRecord.fromJson(Map<String, dynamic> json) =>
+      MfnUpgradeRecord(
+        id: json['id'] ?? const Uuid().v4(),
+        upgradeDate: DateTime.parse(json['upgradeDate']),
+        sourceConvertibleId: json['sourceConvertibleId'],
+        previousDiscountPercent: json['previousDiscountPercent']?.toDouble(),
+        previousValuationCap: json['previousValuationCap']?.toDouble(),
+        previousHasProRata: json['previousHasProRata'] ?? false,
+        newDiscountPercent: json['newDiscountPercent']?.toDouble(),
+        newValuationCap: json['newValuationCap']?.toDouble(),
+        newHasProRata: json['newHasProRata'] ?? false,
+      );
+}
+
 /// Type of convertible instrument
 enum ConvertibleType {
   /// Convertible Note - Australia's default, includes interest
@@ -15,7 +98,11 @@ enum ConvertibleStatus {
   /// Active and not yet converted
   outstanding,
 
-  /// Converted to equity in a round
+  /// Pending conversion - conversion recorded but round is still draft/open
+  /// Will become 'converted' when the round is closed
+  pendingConversion,
+
+  /// Converted to equity in a round (round is closed)
   converted,
 
   /// Repaid (notes only, if not converted at maturity)
@@ -31,6 +118,8 @@ extension ConvertibleStatusColor on ConvertibleStatus {
     switch (this) {
       case ConvertibleStatus.outstanding:
         return Colors.blue;
+      case ConvertibleStatus.pendingConversion:
+        return Colors.orange;
       case ConvertibleStatus.converted:
         return Colors.green;
       case ConvertibleStatus.repaid:
@@ -76,6 +165,33 @@ class ConvertibleInstrument {
   /// Pro-rata rights for future rounds
   final bool hasProRata;
 
+  // ─── MFN Tracking Fields ───────────────────────────────────────────────────
+
+  /// History of all MFN upgrades applied to this instrument.
+  /// Most recent upgrade is last in the list.
+  /// Enables proper reversal when a triggering convertible is deleted.
+  final List<MfnUpgradeRecord> mfnUpgradeHistory;
+
+  /// Whether MFN has been applied to this instrument
+  bool get mfnWasApplied => mfnUpgradeHistory.isNotEmpty;
+
+  /// The most recent MFN upgrade (if any)
+  MfnUpgradeRecord? get latestMfnUpgrade =>
+      mfnUpgradeHistory.isNotEmpty ? mfnUpgradeHistory.last : null;
+
+  /// Get the original terms (before any MFN upgrades)
+  double? get originalDiscountPercent => mfnUpgradeHistory.isNotEmpty
+      ? mfnUpgradeHistory.first.previousDiscountPercent
+      : null;
+
+  double? get originalValuationCap => mfnUpgradeHistory.isNotEmpty
+      ? mfnUpgradeHistory.first.previousValuationCap
+      : null;
+
+  bool get originalHasProRata => mfnUpgradeHistory.isNotEmpty
+      ? mfnUpgradeHistory.first.previousHasProRata
+      : hasProRata;
+
   /// Current status
   ConvertibleStatus status;
 
@@ -109,6 +225,7 @@ class ConvertibleInstrument {
     required this.issueDate,
     this.hasMFN = false,
     this.hasProRata = false,
+    List<MfnUpgradeRecord>? mfnUpgradeHistory,
     this.status = ConvertibleStatus.outstanding,
     this.conversionRoundId,
     this.conversionShares,
@@ -116,7 +233,8 @@ class ConvertibleInstrument {
     this.conversionDate,
     this.includeInFD = true,
     this.notes,
-  }) : id = id ?? const Uuid().v4();
+  })  : id = id ?? const Uuid().v4(),
+        mfnUpgradeHistory = mfnUpgradeHistory ?? [];
 
   /// Calculate accrued interest (for convertible notes)
   double get accruedInterest {
@@ -193,6 +311,8 @@ class ConvertibleInstrument {
     switch (status) {
       case ConvertibleStatus.outstanding:
         return 'Outstanding';
+      case ConvertibleStatus.pendingConversion:
+        return 'Pending Conversion';
       case ConvertibleStatus.converted:
         return 'Converted';
       case ConvertibleStatus.repaid:
@@ -214,6 +334,7 @@ class ConvertibleInstrument {
     'issueDate': issueDate.toIso8601String(),
     'hasMFN': hasMFN,
     'hasProRata': hasProRata,
+    'mfnUpgradeHistory': mfnUpgradeHistory.map((r) => r.toJson()).toList(),
     'status': status.index,
     'conversionRoundId': conversionRoundId,
     'conversionShares': conversionShares,
@@ -223,31 +344,58 @@ class ConvertibleInstrument {
     'notes': notes,
   };
 
-  factory ConvertibleInstrument.fromJson(Map<String, dynamic> json) =>
-      ConvertibleInstrument(
-        id: json['id'],
-        investorId: json['investorId'],
-        type: ConvertibleType.values[json['type']],
-        principalAmount: (json['principalAmount'] ?? 0).toDouble(),
-        interestRate: json['interestRate']?.toDouble(),
-        discountPercent: json['discountPercent']?.toDouble(),
-        valuationCap: json['valuationCap']?.toDouble(),
-        maturityDate: json['maturityDate'] != null
-            ? DateTime.parse(json['maturityDate'])
-            : null,
-        issueDate: DateTime.parse(json['issueDate']),
-        hasMFN: json['hasMFN'] ?? false,
-        hasProRata: json['hasProRata'] ?? false,
-        status: ConvertibleStatus.values[json['status'] ?? 0],
-        conversionRoundId: json['conversionRoundId'],
-        conversionShares: json['conversionShares'],
-        conversionPricePerShare: json['conversionPricePerShare']?.toDouble(),
-        conversionDate: json['conversionDate'] != null
-            ? DateTime.parse(json['conversionDate'])
-            : null,
-        includeInFD: json['includeInFD'] ?? true,
-        notes: json['notes'],
-      );
+  factory ConvertibleInstrument.fromJson(Map<String, dynamic> json) {
+    // Handle MFN upgrade history - new format or migrate from legacy
+    List<MfnUpgradeRecord> mfnHistory = [];
+
+    if (json['mfnUpgradeHistory'] != null) {
+      // New format: list of upgrade records
+      mfnHistory = (json['mfnUpgradeHistory'] as List)
+          .map((r) => MfnUpgradeRecord.fromJson(r as Map<String, dynamic>))
+          .toList();
+    } else if (json['mfnAppliedDate'] != null) {
+      // Legacy format: single MFN application - migrate to history
+      mfnHistory = [
+        MfnUpgradeRecord(
+          id: const Uuid().v4(),
+          upgradeDate: DateTime.parse(json['mfnAppliedDate']),
+          sourceConvertibleId: json['mfnSourceId'] ?? 'unknown',
+          previousDiscountPercent: json['originalDiscountPercent']?.toDouble(),
+          previousValuationCap: json['originalValuationCap']?.toDouble(),
+          previousHasProRata: false, // Legacy didn't track this
+          newDiscountPercent: json['discountPercent']?.toDouble(),
+          newValuationCap: json['valuationCap']?.toDouble(),
+          newHasProRata: json['hasProRata'] ?? false,
+        ),
+      ];
+    }
+
+    return ConvertibleInstrument(
+      id: json['id'],
+      investorId: json['investorId'],
+      type: ConvertibleType.values[json['type']],
+      principalAmount: (json['principalAmount'] ?? 0).toDouble(),
+      interestRate: json['interestRate']?.toDouble(),
+      discountPercent: json['discountPercent']?.toDouble(),
+      valuationCap: json['valuationCap']?.toDouble(),
+      maturityDate: json['maturityDate'] != null
+          ? DateTime.parse(json['maturityDate'])
+          : null,
+      issueDate: DateTime.parse(json['issueDate']),
+      hasMFN: json['hasMFN'] ?? false,
+      hasProRata: json['hasProRata'] ?? false,
+      mfnUpgradeHistory: mfnHistory,
+      status: ConvertibleStatus.values[json['status'] ?? 0],
+      conversionRoundId: json['conversionRoundId'],
+      conversionShares: json['conversionShares'],
+      conversionPricePerShare: json['conversionPricePerShare']?.toDouble(),
+      conversionDate: json['conversionDate'] != null
+          ? DateTime.parse(json['conversionDate'])
+          : null,
+      includeInFD: json['includeInFD'] ?? true,
+      notes: json['notes'],
+    );
+  }
 
   ConvertibleInstrument copyWith({
     String? investorId,
@@ -260,6 +408,7 @@ class ConvertibleInstrument {
     DateTime? issueDate,
     bool? hasMFN,
     bool? hasProRata,
+    List<MfnUpgradeRecord>? mfnUpgradeHistory,
     ConvertibleStatus? status,
     String? conversionRoundId,
     int? conversionShares,
@@ -280,6 +429,7 @@ class ConvertibleInstrument {
       issueDate: issueDate ?? this.issueDate,
       hasMFN: hasMFN ?? this.hasMFN,
       hasProRata: hasProRata ?? this.hasProRata,
+      mfnUpgradeHistory: mfnUpgradeHistory ?? this.mfnUpgradeHistory,
       status: status ?? this.status,
       conversionRoundId: conversionRoundId ?? this.conversionRoundId,
       conversionShares: conversionShares ?? this.conversionShares,

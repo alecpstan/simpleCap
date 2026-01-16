@@ -60,6 +60,10 @@ class ConvertiblesPage extends StatelessWidget {
                     children: [
                       // Summary stats
                       _buildSummaryCards(context, coreProvider, outstanding),
+                      const SizedBox(height: 16),
+
+                      // MFN upgrade banner
+                      _buildMfnBanner(context, convertiblesProvider),
                       const SizedBox(height: 24),
 
                       // Outstanding convertibles
@@ -79,6 +83,13 @@ class ConvertiblesPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 16),
                       ],
+
+                      // Pending conversions (draft rounds)
+                      _buildPendingConversionsSection(
+                        context,
+                        coreProvider,
+                        convertiblesProvider,
+                      ),
 
                       // Converted/closed
                       _buildHistorySection(
@@ -143,6 +154,87 @@ class ConvertiblesPage extends StatelessWidget {
     );
   }
 
+  Widget _buildMfnBanner(
+    BuildContext context,
+    ConvertiblesProvider convertiblesProvider,
+  ) {
+    final upgrades = convertiblesProvider.detectMfnUpgrades();
+    if (upgrades.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.purple.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: Colors.purple, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${upgrades.length} MFN Upgrade${upgrades.length > 1 ? 's' : ''} Available',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.purple,
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () async {
+                  final count =
+                      await convertiblesProvider.applyAllMfnUpgrades();
+                  if (context.mounted) {
+                    showSuccessSnackbar(
+                      context,
+                      'Applied $count MFN upgrade${count > 1 ? 's' : ''}',
+                    );
+                  }
+                },
+                icon: const Icon(Icons.check_circle, size: 18),
+                label: const Text('Apply All'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...upgrades.map((upgrade) => Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 28),
+                    Icon(
+                      Icons.arrow_forward,
+                      size: 14,
+                      color: theme.colorScheme.outline,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        upgrade.upgradeDescription,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+
   Widget _buildConvertiblesList(
     BuildContext context,
     CoreCapTableProvider coreProvider,
@@ -202,9 +294,7 @@ class ConvertiblesPage extends StatelessWidget {
           final investor = coreProvider.getInvestorById(c.investorId);
           return ListTile(
             leading: CircleAvatar(
-              backgroundColor: c.status == ConvertibleStatus.converted
-                  ? Colors.green
-                  : Colors.grey,
+              backgroundColor: c.status.color,
               child: Icon(
                 _getStatusIcon(c.status),
                 color: Colors.white,
@@ -216,7 +306,8 @@ class ConvertiblesPage extends StatelessWidget {
             trailing: c.conversionShares != null
                 ? Text('${Formatters.number(c.conversionShares!)} shares')
                 : null,
-            onTap: c.status == ConvertibleStatus.converted
+            onTap: (c.status == ConvertibleStatus.converted ||
+                    c.status == ConvertibleStatus.pendingConversion)
                 ? () => _showConversionSummaryDialog(
                     context,
                     coreProvider,
@@ -230,10 +321,88 @@ class ConvertiblesPage extends StatelessWidget {
     );
   }
 
+  Widget _buildPendingConversionsSection(
+    BuildContext context,
+    CoreCapTableProvider coreProvider,
+    ConvertiblesProvider convertiblesProvider,
+  ) {
+    final pending = convertiblesProvider.pendingConversions;
+
+    if (pending.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        SectionCard(
+          title: 'Pending Conversions',
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'Draft',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+          ),
+          child: Column(
+            children: [
+              ...pending.map((c) {
+                final investor = coreProvider.getInvestorById(c.investorId);
+                final round = c.conversionRoundId != null
+                    ? coreProvider.getRoundById(c.conversionRoundId!)
+                    : null;
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.orange,
+                    child: Icon(
+                      Icons.pending,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(investor?.name ?? 'Unknown'),
+                  subtitle: Text(
+                    '${c.typeDisplayName} → ${round?.name ?? "Unknown round"}',
+                  ),
+                  trailing: c.conversionShares != null
+                      ? Text('${Formatters.number(c.conversionShares!)} shares')
+                      : null,
+                  onTap: () => _showConversionSummaryDialog(
+                    context,
+                    coreProvider,
+                    convertiblesProvider,
+                    c,
+                  ),
+                );
+              }),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'These conversions will be finalized when their round is closed.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                        fontStyle: FontStyle.italic,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
   IconData _getStatusIcon(ConvertibleStatus status) {
     switch (status) {
       case ConvertibleStatus.outstanding:
         return Icons.hourglass_empty;
+      case ConvertibleStatus.pendingConversion:
+        return Icons.pending;
       case ConvertibleStatus.converted:
         return Icons.check_circle;
       case ConvertibleStatus.repaid:
@@ -978,6 +1147,7 @@ class _ConversionDialogState extends State<ConversionDialog> {
         conversionDate: round?.date ?? DateTime.now(),
         roundPreMoney: round?.preMoneyValuation ?? 0,
         issuedSharesBeforeRound: issuedBefore,
+        isRoundClosed: round?.isClosed ?? true,
       );
     } else {
       final valuation = double.parse(_valuationController.text);
@@ -1091,7 +1261,13 @@ class _ConvertibleTile extends StatelessWidget {
                     color: Colors.teal,
                   ),
                 if (convertible.hasMFN)
-                  _TermChip(label: 'MFN', value: '', color: Colors.purple),
+                  _TermChip(
+                    label: convertible.mfnWasApplied ? 'MFN Applied' : 'MFN',
+                    value: '',
+                    color: convertible.mfnWasApplied
+                        ? Colors.green
+                        : Colors.purple,
+                  ),
                 if (convertible.hasProRata)
                   _TermChip(label: 'Pro-rata', value: '', color: Colors.green),
               ],
@@ -1295,9 +1471,62 @@ class ConvertibleDetailsDialog extends StatelessWidget {
                     if (convertible.hasMFN || convertible.hasProRata) ...[
                       const Divider(height: 16),
                       if (convertible.hasMFN)
-                        DetailRow(label: 'MFN', value: 'Yes'),
+                        DetailRow(
+                          label: 'MFN',
+                          value: convertible.mfnWasApplied
+                              ? 'Applied ${Formatters.date(convertible.latestMfnUpgrade!.upgradeDate)}'
+                              : 'Yes',
+                        ),
                       if (convertible.hasProRata)
                         DetailRow(label: 'Pro-rata Rights', value: 'Yes'),
+                    ],
+                    // MFN upgrade history
+                    if (convertible.mfnWasApplied) ...[
+                      const Divider(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.auto_awesome,
+                                  color: Colors.green,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'MFN Upgrade Applied',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            if (convertible.originalDiscountPercent != null &&
+                                convertible.discountPercent !=
+                                    convertible.originalDiscountPercent)
+                              Text(
+                                'Discount: ${(convertible.originalDiscountPercent! * 100).toStringAsFixed(0)}% → ${(convertible.discountPercent! * 100).toStringAsFixed(0)}%',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            if (convertible.originalValuationCap != null &&
+                                convertible.valuationCap !=
+                                    convertible.originalValuationCap)
+                              Text(
+                                'Cap: ${Formatters.compactCurrency(convertible.originalValuationCap!)} → ${Formatters.compactCurrency(convertible.valuationCap!)}',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                          ],
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -1420,13 +1649,120 @@ class ConvertibleDetailsDialog extends StatelessWidget {
         DialogDeleteButton(
           onPressed: () async {
             final navigator = Navigator.of(context);
-            final confirmed = await showConfirmDialog(
-              context: context,
-              title: 'Delete Convertible?',
-              message:
-                  'This will permanently remove this convertible instrument.',
-            );
+
+            // Check for MFN cascade effects
+            final affectedConvertibles = convertiblesProvider
+                .getConvertiblesUpgradedBySource(convertible.id);
+
+            bool confirmed = false;
+
+            if (affectedConvertibles.isEmpty) {
+              // Simple deletion - no cascade
+              confirmed = await showConfirmDialog(
+                context: context,
+                title: 'Delete Convertible?',
+                message:
+                    'This will permanently remove this convertible instrument.',
+              );
+            } else {
+              // Has MFN cascade - show detailed warning
+              final converted = affectedConvertibles
+                  .where((c) => c.status == ConvertibleStatus.converted)
+                  .toList();
+              final pending = affectedConvertibles
+                  .where((c) => c.status == ConvertibleStatus.pendingConversion)
+                  .toList();
+              final outstanding = affectedConvertibles
+                  .where((c) => c.status == ConvertibleStatus.outstanding)
+                  .toList();
+
+              final warnings = <String>[];
+
+              if (converted.isNotEmpty) {
+                warnings.add(
+                  '${converted.length} convertible${converted.length > 1 ? 's have' : ' has'} '
+                  'already been converted with MFN-upgraded terms. The conversion shares '
+                  'were calculated using these better terms.',
+                );
+              }
+              if (pending.isNotEmpty) {
+                warnings.add(
+                  '${pending.length} convertible${pending.length > 1 ? 's are' : ' is'} '
+                  'committed to convert in a draft round with MFN-upgraded terms.',
+                );
+              }
+              if (outstanding.isNotEmpty) {
+                warnings.add(
+                  '${outstanding.length} outstanding convertible${outstanding.length > 1 ? 's will' : ' will'} '
+                  'have their terms reverted to original values.',
+                );
+              }
+
+              if (context.mounted) {
+                confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Delete Convertible?'),
+                        content: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'This convertible triggered MFN upgrades for other instruments:',
+                              ),
+                              const SizedBox(height: 12),
+                              ...warnings.map(
+                                (w) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(
+                                        Icons.warning_amber,
+                                        color: Colors.orange,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: Text(w)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Deleting this will revert MFN upgrades where possible.',
+                                style: TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.red,
+                            ),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Delete Anyway'),
+                          ),
+                        ],
+                      ),
+                    ) ??
+                    false;
+              }
+            }
+
             if (confirmed && context.mounted) {
+              // Cascade MFN reversions before deletion
+              if (affectedConvertibles.isNotEmpty) {
+                await convertiblesProvider
+                    .revertMfnUpgradesBySource(convertible.id);
+              }
               await convertiblesProvider.deleteConvertible(convertible.id);
               navigator.pop();
               if (context.mounted) {

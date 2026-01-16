@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/option_grant.dart';
 import '../models/esop_pool_change.dart';
+import '../models/warrant.dart';
 import '../../core/models/vesting_schedule.dart';
 import '../../core/models/transaction.dart';
 import '../esop_helpers.dart' as esop;
@@ -27,6 +28,7 @@ class EsopProvider extends ChangeNotifier {
   double _esopPoolPercent = 10.0;
   List<EsopPoolChange> _esopPoolChanges = [];
   List<OptionGrant> _optionGrants = [];
+  List<Warrant> _warrants = [];
 
   // Track if we've been initialized with data from core
   bool _initialized = false;
@@ -55,6 +57,7 @@ class EsopProvider extends ChangeNotifier {
   /// Called by ChangeNotifierProxyProvider when core provider updates.
   void updateFromCore({
     required List<OptionGrant> optionGrants,
+    required List<Warrant> warrants,
     required List<EsopPoolChange> esopPoolChanges,
     required EsopDilutionMethod esopDilutionMethod,
     required double esopPoolPercent,
@@ -76,6 +79,7 @@ class EsopProvider extends ChangeNotifier {
     // Only load data on first initialization to avoid overwriting local changes
     if (!_initialized) {
       _optionGrants = List.from(optionGrants);
+      _warrants = List.from(warrants);
       _esopPoolChanges = List.from(esopPoolChanges);
       _esopDilutionMethod = esopDilutionMethod;
       _esopPoolPercent = esopPoolPercent;
@@ -98,6 +102,20 @@ class EsopProvider extends ChangeNotifier {
 
   List<OptionGrant> get optionGrants => List.unmodifiable(_optionGrants);
 
+  List<Warrant> get warrants => List.unmodifiable(_warrants);
+
+  List<Warrant> get activeWarrants => _warrants
+      .where(
+        (w) =>
+            w.status == WarrantStatus.active ||
+            w.status == WarrantStatus.partiallyExercised,
+      )
+      .toList();
+
+  /// Pending warrants (issued in draft rounds, not yet active)
+  List<Warrant> get pendingWarrants =>
+      _warrants.where((w) => w.status == WarrantStatus.pending).toList();
+
   List<OptionGrant> get activeOptionGrants => _optionGrants
       .where(
         (g) =>
@@ -113,6 +131,14 @@ class EsopProvider extends ChangeNotifier {
   /// Total options exercised
   int get totalOptionsExercised =>
       _optionGrants.fold(0, (sum, g) => sum + g.exercisedCount);
+
+  /// Total warrants outstanding (not yet exercised)
+  int get totalWarrantsOutstanding =>
+      _warrants.fold(0, (sum, w) => sum + w.remainingWarrants);
+
+  /// Total warrants exercised
+  int get totalWarrantsExercised =>
+      _warrants.fold(0, (sum, w) => sum + w.exercisedCount);
 
   /// Total ESOP pool shares (sum of all pool changes)
   int get esopPoolShares {
@@ -252,6 +278,49 @@ class EsopProvider extends ChangeNotifier {
     return _optionGrants.where((g) => g.investorId == investorId).toList();
   }
 
+  // === Warrant CRUD ===
+
+  Future<void> addWarrant(Warrant warrant) async {
+    _warrants.add(warrant);
+    await _onSave?.call();
+    notifyListeners();
+  }
+
+  Future<void> updateWarrant(Warrant warrant) async {
+    final index = _warrants.indexWhere((w) => w.id == warrant.id);
+    if (index != -1) {
+      _warrants[index] = warrant;
+      await _onSave?.call();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteWarrant(String id) async {
+    _warrants.removeWhere((w) => w.id == id);
+    await _onSave?.call();
+    notifyListeners();
+  }
+
+  Warrant? getWarrantById(String id) {
+    try {
+      return _warrants.firstWhere((w) => w.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<Warrant> getWarrantsByInvestor(String investorId) {
+    return _warrants.where((w) => w.investorId == investorId).toList();
+  }
+
+  /// Get total intrinsic value for an investor's warrants
+  double getWarrantValueByInvestor(String investorId) {
+    final sharePrice = _getLatestSharePrice?.call() ?? 0;
+    return getWarrantsByInvestor(investorId)
+        .where((w) => w.canExercise)
+        .fold(0.0, (sum, w) => sum + w.intrinsicValue(sharePrice));
+  }
+
   // === Vesting calculations ===
 
   double getOptionVestingPercent(OptionGrant grant) {
@@ -335,10 +404,15 @@ class EsopProvider extends ChangeNotifier {
 
   // === Exercise and Cancel options ===
 
+  /// Exercise options, optionally tied to a round.
+  /// If roundId is provided and the round is draft (not closed), the option grant
+  /// will be in pendingExercise status until the round is closed.
   Future<bool> exerciseOptions({
     required String grantId,
     required int numberOfOptions,
     required DateTime exerciseDate,
+    String? roundId,
+    bool isRoundClosed = true,
     String? notes,
   }) async {
     final index = _optionGrants.indexWhere((g) => g.id == grantId);
@@ -360,6 +434,7 @@ class EsopProvider extends ChangeNotifier {
       pricePerShare: grant.strikePrice,
       totalAmount: numberOfOptions * grant.strikePrice,
       date: exerciseDate,
+      roundId: roundId,
       exercisePrice: grant.strikePrice,
       notes: notes ?? 'Option exercise from grant ${grant.id.substring(0, 8)}',
     );
@@ -368,9 +443,18 @@ class EsopProvider extends ChangeNotifier {
 
     // Update the grant
     final newExercisedCount = grant.exercisedCount + numberOfOptions;
-    final newStatus = newExercisedCount >= grant.numberOfOptions
-        ? OptionGrantStatus.fullyExercised
-        : OptionGrantStatus.partiallyExercised;
+
+    // Determine status based on round state
+    OptionGrantStatus newStatus;
+    if (roundId != null && !isRoundClosed) {
+      // Exercise is tied to a draft round - pending until round closes
+      newStatus = OptionGrantStatus.pendingExercise;
+    } else {
+      // Exercise is finalized
+      newStatus = newExercisedCount >= grant.numberOfOptions
+          ? OptionGrantStatus.fullyExercised
+          : OptionGrantStatus.partiallyExercised;
+    }
 
     _optionGrants[index] = grant.copyWith(
       exercisedCount: newExercisedCount,
@@ -464,15 +548,158 @@ class EsopProvider extends ChangeNotifier {
     }
   }
 
+  // === Warrant Exercise and Cancel ===
+
+  /// Exercise warrants, optionally tied to a round.
+  /// If roundId is provided and the round is draft (not closed), the warrant
+  /// will be in pendingExercise status until the round is closed.
+  Future<bool> exerciseWarrants({
+    required String warrantId,
+    required int numberOfWarrants,
+    required DateTime exerciseDate,
+    String? roundId,
+    bool isRoundClosed = true,
+    String? notes,
+  }) async {
+    final index = _warrants.indexWhere((w) => w.id == warrantId);
+    if (index == -1) return false;
+
+    final warrant = _warrants[index];
+
+    if (numberOfWarrants <= 0 || numberOfWarrants > warrant.remainingWarrants) {
+      return false;
+    }
+    if (warrant.isExpired) return false;
+
+    // Create the exercise transaction
+    final transaction = Transaction(
+      investorId: warrant.investorId,
+      shareClassId: warrant.shareClassId ?? '',
+      type: TransactionType.warrantExercise,
+      numberOfShares: numberOfWarrants,
+      pricePerShare: warrant.strikePrice,
+      totalAmount: numberOfWarrants * warrant.strikePrice,
+      date: exerciseDate,
+      roundId: roundId,
+      exercisePrice: warrant.strikePrice,
+      notes: notes ?? 'Warrant exercise from ${warrant.id.substring(0, 8)}',
+    );
+
+    await _onAddTransaction?.call(transaction);
+
+    // Update the warrant
+    final newExercisedCount = warrant.exercisedCount + numberOfWarrants;
+
+    // Determine status based on round state
+    WarrantStatus newStatus;
+    if (roundId != null && !isRoundClosed) {
+      // Exercise is tied to a draft round - pending until round closes
+      newStatus = WarrantStatus.pendingExercise;
+    } else {
+      // Exercise is finalized
+      newStatus = newExercisedCount >= warrant.numberOfWarrants
+          ? WarrantStatus.fullyExercised
+          : WarrantStatus.partiallyExercised;
+    }
+
+    _warrants[index] = warrant.copyWith(
+      exercisedCount: newExercisedCount,
+      status: newStatus,
+      exerciseTransactionId: transaction.id,
+    );
+
+    await _onSave?.call();
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> cancelWarrants({
+    required String warrantId,
+    required int numberOfWarrants,
+    String? notes,
+  }) async {
+    final index = _warrants.indexWhere((w) => w.id == warrantId);
+    if (index == -1) return false;
+
+    final warrant = _warrants[index];
+
+    if (numberOfWarrants <= 0 || numberOfWarrants > warrant.remainingWarrants) {
+      return false;
+    }
+
+    final newCancelledCount = warrant.cancelledCount + numberOfWarrants;
+    final newStatus = (warrant.remainingWarrants - numberOfWarrants) <= 0
+        ? WarrantStatus.cancelled
+        : warrant.status;
+
+    _warrants[index] = warrant.copyWith(
+      cancelledCount: newCancelledCount,
+      status: newStatus,
+      notes: notes ?? warrant.notes,
+    );
+
+    await _onSave?.call();
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> undoWarrantExercise({required String warrantId}) async {
+    final index = _warrants.indexWhere((w) => w.id == warrantId);
+    if (index == -1) return false;
+
+    final warrant = _warrants[index];
+
+    if (warrant.exercisedCount == 0) return false;
+
+    // Remove the exercise transaction if we have the ID
+    if (warrant.exerciseTransactionId != null) {
+      _onDeleteTransaction?.call(warrant.exerciseTransactionId!);
+    }
+
+    // Reset the warrant to active status
+    _warrants[index] = warrant.copyWith(
+      exercisedCount: 0,
+      status: WarrantStatus.active,
+      exerciseTransactionId: null,
+    );
+
+    await _onSave?.call();
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> updateExpiredWarrants() async {
+    bool changed = false;
+    final now = DateTime.now();
+
+    for (int i = 0; i < _warrants.length; i++) {
+      final warrant = _warrants[i];
+      if (warrant.status == WarrantStatus.active ||
+          warrant.status == WarrantStatus.partiallyExercised) {
+        if (now.isAfter(warrant.expiryDate)) {
+          _warrants[i] = warrant.copyWith(status: WarrantStatus.expired);
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      await _onSave?.call();
+      notifyListeners();
+    }
+  }
+
   // === Data loading/saving ===
 
   void loadData({
     required List<OptionGrant> optionGrants,
+    required List<Warrant> warrants,
     required List<EsopPoolChange> esopPoolChanges,
     required EsopDilutionMethod esopDilutionMethod,
     required double esopPoolPercent,
   }) {
     _optionGrants = optionGrants;
+    _warrants = warrants;
     _esopPoolChanges = esopPoolChanges;
     _esopDilutionMethod = esopDilutionMethod;
     _esopPoolPercent = esopPoolPercent;
@@ -482,6 +709,7 @@ class EsopProvider extends ChangeNotifier {
   Map<String, dynamic> exportData() {
     return {
       'optionGrants': _optionGrants.map((e) => e.toJson()).toList(),
+      'warrants': _warrants.map((e) => e.toJson()).toList(),
       'esopPoolChanges': _esopPoolChanges.map((e) => e.toJson()).toList(),
       'esopDilutionMethod': _esopDilutionMethod.index,
       'esopPoolPercent': _esopPoolPercent,
@@ -491,6 +719,9 @@ class EsopProvider extends ChangeNotifier {
   void importData(Map<String, dynamic> data) {
     _optionGrants = (data['optionGrants'] as List? ?? [])
         .map((e) => OptionGrant.fromJson(e as Map<String, dynamic>))
+        .toList();
+    _warrants = (data['warrants'] as List? ?? [])
+        .map((e) => Warrant.fromJson(e as Map<String, dynamic>))
         .toList();
     _esopPoolChanges = (data['esopPoolChanges'] as List? ?? [])
         .map((e) => EsopPoolChange.fromJson(e as Map<String, dynamic>))
@@ -503,6 +734,7 @@ class EsopProvider extends ChangeNotifier {
 
   void clear() {
     _optionGrants = [];
+    _warrants = [];
     _esopPoolChanges = [];
     _esopDilutionMethod = EsopDilutionMethod.preRoundCap;
     _esopPoolPercent = 10.0;

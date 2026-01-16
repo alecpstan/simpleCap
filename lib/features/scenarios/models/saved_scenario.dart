@@ -1,3 +1,5 @@
+import '../../../shared/utils/helpers.dart';
+
 /// Types of scenarios that can be saved
 enum ScenarioType {
   dilution,
@@ -99,16 +101,16 @@ class SavedScenario {
         final investment = parameters['investment'];
         final preMoney = parameters['preMoney'];
         if (preMoney != null && investment != null) {
-          return 'Pre-money: \$${_formatNumber(preMoney)}, Investment: \$${_formatNumber(investment)}';
+          return 'Pre-money: ${Formatters.compactCurrencyString(_toDouble(preMoney))}, Investment: ${Formatters.compactCurrencyString(_toDouble(investment))}';
         } else if (newShares != null) {
-          return 'New shares: ${_formatNumber(newShares)}';
+          return 'New shares: ${Formatters.compactNumberString(_toDouble(newShares))}';
         }
         return 'Dilution scenario';
 
       case ScenarioType.exitWaterfall:
         final exitValuation = parameters['exitValuation'];
         if (exitValuation != null) {
-          return 'Exit: \$${_formatNumber(exitValuation)}';
+          return 'Exit: ${Formatters.compactCurrencyString(_toDouble(exitValuation))}';
         }
         return 'Exit waterfall scenario';
 
@@ -121,22 +123,17 @@ class SavedScenario {
           parts.add(roundName);
         }
         if (raiseAmount != null) {
-          parts.add('Raise: \$${_formatNumber(raiseAmount)}');
+          parts.add('Raise: ${Formatters.compactCurrencyString(_toDouble(raiseAmount))}');
         }
         if (preMoney != null) {
-          parts.add('Pre: \$${_formatNumber(preMoney)}');
+          parts.add('Pre: ${Formatters.compactCurrencyString(_toDouble(preMoney))}');
         }
         return parts.isEmpty ? 'New round scenario' : parts.join(', ');
     }
   }
 
-  String _formatNumber(dynamic value) {
-    final num number = value is num ? value : double.tryParse(value.toString()) ?? 0;
-    if (number >= 1000000) {
-      return '${(number / 1000000).toStringAsFixed(1)}M';
-    } else if (number >= 1000) {
-      return '${(number / 1000).toStringAsFixed(0)}K';
-    }
-    return number.toStringAsFixed(0);
+  double _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
   }
 }

@@ -3,8 +3,15 @@ import 'package:uuid/uuid.dart';
 
 /// Status of an option grant
 enum OptionGrantStatus {
+  /// Options granted but round is still draft - not yet active
+  pending,
+
   /// Options granted but not yet exercised
   active,
+
+  /// Pending exercise - exercise recorded but round is still draft/open
+  /// Will become exercised when the round is closed
+  pendingExercise,
 
   /// Some options have been exercised
   partiallyExercised,
@@ -26,9 +33,14 @@ enum OptionGrantStatus {
 extension OptionGrantStatusColor on OptionGrantStatus {
   Color get color {
     switch (this) {
+      case OptionGrantStatus.pending:
+        return Colors.amber;
       case OptionGrantStatus.active:
-      case OptionGrantStatus.partiallyExercised:
         return Colors.blue;
+      case OptionGrantStatus.pendingExercise:
+        return Colors.orange;
+      case OptionGrantStatus.partiallyExercised:
+        return Colors.teal;
       case OptionGrantStatus.fullyExercised:
         return Colors.green;
       case OptionGrantStatus.expired:
@@ -50,6 +62,9 @@ class OptionGrant {
 
   /// The share class these options convert to (typically ESOP class)
   final String shareClassId;
+
+  /// Round this grant was issued in (if any) - for pending/active state management
+  final String? roundId;
 
   /// Total number of options granted
   final int numberOfOptions;
@@ -91,6 +106,7 @@ class OptionGrant {
     String? id,
     required this.investorId,
     required this.shareClassId,
+    this.roundId,
     required this.numberOfOptions,
     required this.strikePrice,
     required this.grantDate,
@@ -153,8 +169,12 @@ class OptionGrant {
   /// Display name for status
   String get statusDisplayName {
     switch (status) {
+      case OptionGrantStatus.pending:
+        return 'Pending (Draft)';
       case OptionGrantStatus.active:
         return 'Active';
+      case OptionGrantStatus.pendingExercise:
+        return 'Pending Exercise';
       case OptionGrantStatus.partiallyExercised:
         return 'Partially Exercised';
       case OptionGrantStatus.fullyExercised:
@@ -171,6 +191,7 @@ class OptionGrant {
   OptionGrant copyWith({
     String? investorId,
     String? shareClassId,
+    String? roundId,
     int? numberOfOptions,
     double? strikePrice,
     DateTime? grantDate,
@@ -188,6 +209,7 @@ class OptionGrant {
       id: id,
       investorId: investorId ?? this.investorId,
       shareClassId: shareClassId ?? this.shareClassId,
+      roundId: roundId ?? this.roundId,
       numberOfOptions: numberOfOptions ?? this.numberOfOptions,
       strikePrice: strikePrice ?? this.strikePrice,
       grantDate: grantDate ?? this.grantDate,
@@ -208,6 +230,7 @@ class OptionGrant {
     'id': id,
     'investorId': investorId,
     'shareClassId': shareClassId,
+    'roundId': roundId,
     'numberOfOptions': numberOfOptions,
     'strikePrice': strikePrice,
     'grantDate': grantDate.toIso8601String(),
@@ -226,6 +249,7 @@ class OptionGrant {
     id: json['id'],
     investorId: json['investorId'],
     shareClassId: json['shareClassId'],
+    roundId: json['roundId'],
     numberOfOptions: json['numberOfOptions'],
     strikePrice: (json['strikePrice'] as num).toDouble(),
     grantDate: DateTime.parse(json['grantDate']),

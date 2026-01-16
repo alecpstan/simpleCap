@@ -18,7 +18,6 @@ import '../../esop/pages/options_page.dart';
 import '../../convertibles/pages/convertibles_page.dart';
 import 'vesting_page.dart';
 
-import '../../../shared/widgets/stat_pill.dart';
 import '../../../shared/widgets/info_widgets.dart';
 import '../../../shared/utils/helpers.dart';
 
@@ -84,28 +83,30 @@ class InvestorsPage extends StatelessWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
               children: [
-                StatPill(
+                SummaryCard(
                   label: 'Active',
                   value: active.length.toString(),
+                  icon: Icons.people,
                   color: Colors.green,
                 ),
-                const SizedBox(width: 8),
                 if (exited.isNotEmpty)
-                  StatPill(
+                  SummaryCard(
                     label: 'Exited',
                     value: exited.length.toString(),
+                    icon: Icons.exit_to_app,
                     color: Colors.grey,
                   ),
-                if (noShares.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  StatPill(
+                if (noShares.isNotEmpty)
+                  SummaryCard(
                     label: 'No Shares',
                     value: noShares.length.toString(),
+                    icon: Icons.person_outline,
                     color: Colors.orange,
                   ),
-                ],
               ],
             ),
           ),

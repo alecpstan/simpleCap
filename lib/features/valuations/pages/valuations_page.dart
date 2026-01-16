@@ -6,6 +6,8 @@ import '../providers/valuations_provider.dart';
 import '../models/valuation.dart';
 import '../widgets/valuation_wizard_screen.dart';
 import '../../../shared/utils/helpers.dart';
+import '../../../shared/widgets/expandable_card.dart';
+import '../../../shared/widgets/info_widgets.dart';
 
 /// Page displaying chronological list of valuations and investment rounds.
 /// Allows adding new valuations via manual entry or wizard.
@@ -184,7 +186,7 @@ class _ValuationsBody extends StatelessWidget {
       spacing: 12,
       runSpacing: 12,
       children: [
-        _SummaryCard(
+        SummaryCard(
           label: 'Latest Valuation',
           value: latestValuation != null
               ? Formatters.compactCurrency(latestValuation.preMoneyValue)
@@ -192,13 +194,13 @@ class _ValuationsBody extends StatelessWidget {
           icon: Icons.trending_up,
           color: theme.colorScheme.primary,
         ),
-        _SummaryCard(
+        SummaryCard(
           label: 'Valuations',
           value: valuationCount.toString(),
           icon: Icons.assessment,
           color: Colors.blue,
         ),
-        _SummaryCard(
+        SummaryCard(
           label: 'Rounds',
           value: roundCount.toString(),
           icon: Icons.rocket_launch,
@@ -251,56 +253,6 @@ class _ValuationsBody extends StatelessWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _SummaryCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
-              ),
-              Text(
-                value,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 enum _TimelineItemType { valuation, round }
 
 class _TimelineItem {
@@ -333,111 +285,70 @@ class _ValuationCard extends StatelessWidget {
     final theme = Theme.of(context);
     final dateFormat = DateFormat.yMMMd();
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            left: BorderSide(
-              color: theme.colorScheme.primary,
-              width: 4,
-            ),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today,
-                    size: 14,
-                    color: theme.colorScheme.outline,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    dateFormat.format(valuation.date),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'PRE-MONEY',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                Formatters.currency(valuation.preMoneyValue),
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Text(
-                    'Method: ${valuation.method.displayName}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                  if (valuation.isWizardCreated) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.auto_awesome,
-                      size: 14,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ],
-                ],
-              ),
-              if (valuation.notes != null && valuation.notes!.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  valuation.notes!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton.icon(
-                    onPressed: () => _editValuation(context),
-                    icon: const Icon(Icons.edit, size: 16),
-                    label: const Text('Edit'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _deleteValuation(context),
-                    icon: Icon(Icons.delete, size: 16, color: theme.colorScheme.error),
-                    label: Text('Delete', style: TextStyle(color: theme.colorScheme.error)),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return ExpandableCard(
+      leading: CircleAvatar(
+        backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+        child: Icon(
+          Icons.assessment,
+          color: theme.colorScheme.primary,
+          size: 20,
         ),
       ),
+      title: Formatters.currency(valuation.preMoneyValue),
+      subtitle: dateFormat.format(valuation.date),
+      accentColor: theme.colorScheme.primary,
+      chips: [
+        InfoTag(
+          label: 'PRE-MONEY',
+          color: theme.colorScheme.primary,
+        ),
+        InfoTag(
+          label: valuation.method.displayName,
+          icon: valuation.isWizardCreated ? Icons.auto_awesome : null,
+          color: Colors.grey,
+        ),
+      ],
+      expandedContent: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DetailRow(
+            label: 'Valuation Method',
+            value: valuation.method.displayName,
+          ),
+          DetailRow(
+            label: 'Date',
+            value: dateFormat.format(valuation.date),
+          ),
+          if (valuation.notes != null && valuation.notes!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Notes',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              valuation.notes!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton.icon(
+          onPressed: () => _editValuation(context),
+          icon: const Icon(Icons.edit, size: 16),
+          label: const Text('Edit'),
+        ),
+        TextButton.icon(
+          onPressed: () => _deleteValuation(context),
+          icon: Icon(Icons.delete, size: 16, color: theme.colorScheme.error),
+          label: Text('Delete', style: TextStyle(color: theme.colorScheme.error)),
+        ),
+      ],
     );
   }
 
@@ -502,132 +413,52 @@ class _RoundCard extends StatelessWidget {
     final theme = Theme.of(context);
     final dateFormat = DateFormat.yMMMd();
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            left: BorderSide(
-              color: Colors.green,
-              width: 4,
-            ),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today,
-                    size: 14,
-                    color: theme.colorScheme.outline,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    dateFormat.format(round.date),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'ROUND',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: Colors.green.shade700,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                round.name,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Pre-Money',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
-                        Text(
-                          Formatters.compactCurrency(round.preMoneyValuation),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Raised',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
-                        Text(
-                          Formatters.compactCurrency(amountRaised),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Post-Money',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
-                        Text(
-                          Formatters.compactCurrency(
-                            round.preMoneyValuation + amountRaised,
-                          ),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return ExpandableCard(
+      leading: CircleAvatar(
+        backgroundColor: Colors.green.withValues(alpha: 0.1),
+        child: const Icon(
+          Icons.rocket_launch,
+          color: Colors.green,
+          size: 20,
         ),
       ),
+      title: round.name,
+      subtitle: dateFormat.format(round.date),
+      trailing: Text(
+        Formatters.compactCurrency(amountRaised),
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: Colors.green,
+        ),
+      ),
+      accentColor: Colors.green,
+      chips: [
+        InfoTag(
+          label: 'ROUND',
+          color: Colors.green,
+        ),
+      ],
+      expandedContent: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DetailRow(
+            label: 'Pre-Money Valuation',
+            value: Formatters.compactCurrency(round.preMoneyValuation),
+          ),
+          DetailRow(
+            label: 'Amount Raised',
+            value: Formatters.compactCurrency(amountRaised),
+            highlight: true,
+          ),
+          DetailRow(
+            label: 'Post-Money Valuation',
+            value: Formatters.compactCurrency(
+              round.preMoneyValuation + amountRaised,
+            ),
+          ),
+        ],
+      ),
+      showExpandIcon: true,
     );
   }
 }

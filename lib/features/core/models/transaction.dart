@@ -22,6 +22,9 @@ enum TransactionType {
   /// ESOP/option exercise
   optionExercise,
 
+  /// Investor warrant exercise
+  warrantExercise,
+
   /// Conversion from convertible instrument (SAFE/Note)
   conversion,
 
@@ -103,6 +106,7 @@ class Transaction {
         type == TransactionType.secondaryPurchase ||
         type == TransactionType.grant ||
         type == TransactionType.optionExercise ||
+        type == TransactionType.warrantExercise ||
         type == TransactionType.conversion;
   }
 
@@ -302,6 +306,8 @@ class Transaction {
         return 'Share Grant';
       case TransactionType.optionExercise:
         return 'Option Exercise';
+      case TransactionType.warrantExercise:
+        return 'Warrant Exercise';
       case TransactionType.conversion:
         return 'Convertible Conversion';
       case TransactionType.reequitization:

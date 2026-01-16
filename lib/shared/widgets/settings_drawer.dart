@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../features/core/models/share_class.dart';
-import '../../features/scenarios/pages/scenarios_page.dart';
-import '../../features/events/pages/events_timeline_page.dart';
-import '../../features/convertibles/pages/convertibles_page.dart';
-import '../../features/esop/pages/options_page.dart';
-import '../../features/valuations/pages/valuations_page.dart';
 import '../../features/core/providers/core_cap_table_provider.dart';
 import '../services/export_import_service.dart';
 import 'dialogs.dart';
@@ -61,123 +56,6 @@ class SettingsDrawer extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 8),
-
-                // Tools Section
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Text(
-                    'TOOLS',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ),
-
-                ListTile(
-                  leading: const Icon(Icons.assessment),
-                  title: const Text('Valuations'),
-                  subtitle: const Text('Track company valuations over time'),
-                  onTap: () {
-                    Navigator.pop(context); // Close drawer
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ValuationsPage(),
-                      ),
-                    );
-                  },
-                ),
-
-                ListTile(
-                  leading: const Icon(Icons.calculate),
-                  title: const Text('Scenarios'),
-                  subtitle: const Text('Model exits and dilution'),
-                  onTap: () {
-                    Navigator.pop(context); // Close drawer
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ScenariosPage(),
-                      ),
-                    );
-                  },
-                ),
-
-                ListTile(
-                  leading: const Icon(Icons.timeline),
-                  title: const Text('Events Timeline'),
-                  subtitle: const Text('Chronological view of all events'),
-                  onTap: () {
-                    Navigator.pop(context); // Close drawer
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const EventsTimelinePage(),
-                      ),
-                    );
-                  },
-                ),
-
-                ListTile(
-                  leading: const Icon(Icons.receipt_long),
-                  title: const Text('Convertibles'),
-                  subtitle: const Text('SAFEs and convertible notes'),
-                  onTap: () {
-                    Navigator.pop(context); // Close drawer
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ConvertiblesPage(),
-                      ),
-                    );
-                  },
-                ),
-
-                ListTile(
-                  leading: const Icon(Icons.card_giftcard),
-                  title: const Text('Options & ESOP'),
-                  subtitle: const Text('Employee stock option grants'),
-                  onTap: () {
-                    Navigator.pop(context); // Close drawer
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const OptionsPage(),
-                      ),
-                    );
-                  },
-                ),
-
-                ListTile(
-                  leading: const Icon(Icons.science_outlined),
-                  title: const Text('Scenario Simulator'),
-                  subtitle: const Text('Model raises, ESOP, dilution'),
-                  enabled: false,
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'COMING SOON',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const Divider(height: 32),
 
                 // Settings Section
                 Padding(

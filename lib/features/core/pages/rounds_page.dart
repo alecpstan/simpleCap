@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/investment_round.dart';
 import '../../convertibles/models/convertible_instrument.dart';
@@ -8,16 +6,13 @@ import '../models/share_class.dart';
 import '../models/transaction.dart';
 import '../providers/core_cap_table_provider.dart';
 import '../../convertibles/providers/convertibles_provider.dart';
-import '../../valuations/providers/valuations_provider.dart';
-import '../../valuations/widgets/valuation_wizard_screen.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/avatars.dart';
 import '../../../shared/widgets/expandable_card.dart';
 import '../../../shared/widgets/dialogs.dart';
 import 'investment_dialog.dart';
-import '../../../shared/widgets/help_icon.dart';
+import 'round_builder_wizard.dart';
 import 'transaction_editor.dart';
-import '../../../shared/widgets/stat_pill.dart';
 import '../../../shared/widgets/info_widgets.dart';
 import '../../../shared/utils/helpers.dart';
 
@@ -41,7 +36,7 @@ class RoundsPage extends StatelessWidget {
                 )
               : _buildRoundsList(context, provider),
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _showRoundDialog(context, provider),
+            onPressed: () => RoundBuilderWizard.show(context),
             icon: const Icon(Icons.add),
             label: const Text('Add Round'),
           ),
@@ -62,25 +57,28 @@ class RoundsPage extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 12,
+              runSpacing: 12,
               children: [
-                StatPill(
-                  label: 'rounds',
+                SummaryCard(
+                  label: 'Rounds',
                   value: provider.rounds.length.toString(),
+                  icon: Icons.rocket_launch,
                   color: Colors.indigo,
                 ),
-                StatPill(
-                  label: 'raised',
+                SummaryCard(
+                  label: 'Total Raised',
                   value: Formatters.compactCurrency(provider.totalInvested),
+                  icon: Icons.attach_money,
                   color: Colors.green,
                 ),
                 if (provider.outstandingConvertibles.isNotEmpty)
-                  StatPill(
-                    label: 'convertibles',
+                  SummaryCard(
+                    label: 'Convertibles',
                     value: Formatters.compactCurrency(
                       provider.totalConvertiblePrincipal,
                     ),
+                    icon: Icons.swap_horiz,
                     color: Colors.teal,
                   ),
               ],
@@ -96,10 +94,11 @@ class RoundsPage extends StatelessWidget {
               round: round,
               roundOrder: index + 1,
               provider: provider,
-              onEdit: () => _showRoundDialog(context, provider, round: round),
+              onEdit: () => RoundBuilderWizard.show(context, existingRound: round),
               onDelete: () => _confirmDeleteRound(context, provider, round),
               onAddInvestor: () =>
                   _showAddInvestorToRoundDialog(context, provider, round),
+              onToggleStatus: () => _toggleRoundStatus(context, provider, round),
               onConvertNotes: provider.outstandingConvertibles.isNotEmpty
                   ? () => _showConvertNotesDialog(context, provider, round)
                   : null,
@@ -111,402 +110,6 @@ class RoundsPage extends StatelessWidget {
         const SliverToBoxAdapter(child: SizedBox(height: 80)),
       ],
     );
-  }
-
-  Future<void> _showRoundDialog(
-    BuildContext context,
-    CoreCapTableProvider provider, {
-    InvestmentRound? round,
-  }) async {
-    final isEditing = round != null;
-    final nameController = TextEditingController(text: round?.name ?? '');
-    final priceController = TextEditingController(
-      text: round?.pricePerShare?.toString() ?? '',
-    );
-    final leadController = TextEditingController(
-      text: round?.leadInvestor ?? '',
-    );
-    final notesController = TextEditingController(text: round?.notes ?? '');
-    var selectedType = round?.type ?? RoundType.seed;
-    var selectedDate = round?.date ?? DateTime.now();
-    var isClosed = round?.isClosed ?? false;
-
-    // Auto-populate pre-money from latest valuation if creating new round
-    final valuationsProvider = context.read<ValuationsProvider>();
-    String? preMoneySourceText;
-    final preMoneyController = TextEditingController();
-
-    if (isEditing) {
-      preMoneyController.text = round.preMoneyValuation.toString();
-    } else {
-      // Try to get latest valuation before the selected date
-      final latestValuation = valuationsProvider.getLatestValuationBeforeDate(selectedDate);
-      if (latestValuation != null) {
-        preMoneyController.text = latestValuation.preMoneyValue.round().toString();
-        preMoneySourceText = 'Pre-money pre-filled from ${DateFormat.yMMMd().format(latestValuation.date)} valuation';
-      }
-    }
-
-    // Show snackbar after dialog opens if we pre-filled
-    if (preMoneySourceText != null && context.mounted) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(preMoneySourceText!),
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
-      });
-    }
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(isEditing ? 'Edit Round' : 'Add Investment Round'),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: MediaQuery.of(context).size.width > 600
-                  ? 500
-                  : double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<RoundType>(
-                    initialValue: selectedType,
-                    decoration: InputDecoration(
-                      labelText: 'Round Type',
-                      prefixIcon: const Icon(Icons.layers),
-                      suffixIcon: const HelpIcon(helpKey: 'rounds.roundType'),
-                    ),
-                    items: RoundType.values.map((type) {
-                      return DropdownMenuItem(
-                        value: type,
-                        child: Text(_getRoundTypeName(type)),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedType = value!;
-                        if (nameController.text.isEmpty ||
-                            RoundType.values.any(
-                              (t) =>
-                                  nameController.text == _getRoundTypeName(t),
-                            )) {
-                          nameController.text = _getRoundTypeName(value);
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Round Name *',
-                      hintText: 'e.g., Seed Round',
-                      prefixIcon: Icon(Icons.label),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  InkWell(
-                    onTap: () async {
-                      final date = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
-                      );
-                      if (date != null) {
-                        setState(() => selectedDate = date);
-                      }
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Date',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                        suffixIcon: Icon(Icons.calendar_today, size: 18),
-                      ),
-                      child: Text(Formatters.date(selectedDate)),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: preMoneyController,
-                    decoration: InputDecoration(
-                      labelText: 'Pre-Money Valuation (AUD)',
-                      hintText: '1000000',
-                      prefixIcon: const Icon(Icons.attach_money),
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const HelpIcon(helpKey: 'rounds.preMoneyValuation'),
-                          ValuationWizardButton(
-                            currentValuation: double.tryParse(
-                              preMoneyController.text,
-                            ),
-                            onValuationSelected: (value) {
-                              preMoneyController.text = value
-                                  .round()
-                                  .toString();
-                              setState(
-                                () {},
-                              ); // Rebuild to update implied price
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (_) =>
-                        setState(() {}), // Rebuild to update implied price
-                  ),
-                  if (isEditing) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.payments),
-                            title: const Text('Amount Raised'),
-                            subtitle: Text(
-                              Formatters.currency(
-                                provider.getAmountRaisedByRound(round.id),
-                              ),
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.pie_chart),
-                            title: const Text('Issued Shares Pre-Round'),
-                            subtitle: Text(
-                              Formatters.number(
-                                provider.getIssuedSharesBeforeRound(round.id),
-                              ),
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Builder(
-                    builder: (context) {
-                      // Calculate implied price from pre-money valuation
-                      String? helperText;
-                      if (isEditing) {
-                        final preMoneyVal =
-                            double.tryParse(preMoneyController.text) ?? 0;
-                        if (preMoneyVal > 0) {
-                          final sharesBeforeRound = provider
-                              .getIssuedSharesBeforeRound(round.id);
-                          if (sharesBeforeRound > 0) {
-                            final impliedPrice =
-                                preMoneyVal / sharesBeforeRound;
-                            helperText =
-                                'Implied from valuation: ${Formatters.currency(impliedPrice)}';
-                          }
-                        }
-                      }
-
-                      return TextField(
-                        controller: priceController,
-                        decoration: InputDecoration(
-                          labelText: 'Price Per Share (optional)',
-                          hintText: '1.00',
-                          prefixIcon: const Icon(Icons.monetization_on),
-                          helperText: helperText,
-                          helperMaxLines: 2,
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        onChanged: (_) =>
-                            setState(() {}), // Rebuild to update helper text
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: leadController,
-                    decoration: const InputDecoration(
-                      labelText: 'Lead Investor (optional)',
-                      hintText: 'Acme Ventures',
-                      prefixIcon: Icon(Icons.star),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SwitchListTile(
-                    title: const Text('Round Closed'),
-                    value: isClosed,
-                    onChanged: (value) {
-                      setState(() => isClosed = value);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: notesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes',
-                      hintText: 'Additional details...',
-                      prefixIcon: Icon(Icons.notes),
-                    ),
-                    maxLines: 2,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            DialogCancelButton(
-              onPressed: () => Navigator.pop(context, false),
-            ),
-            DialogPrimaryButton(
-              onPressed: () => Navigator.pop(context, true),
-              label: isEditing ? 'Save' : 'Add',
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result == true && nameController.text.isNotEmpty) {
-      // Amount raised is calculated from shareholdings, not manually entered
-      final calculatedAmount = isEditing
-          ? provider.getAmountRaisedByRound(round.id)
-          : 0.0;
-
-      final newPreMoney = double.tryParse(preMoneyController.text) ?? 0;
-      final newPricePerShare = double.tryParse(priceController.text);
-
-      final newRound = InvestmentRound(
-        id: round?.id,
-        name: nameController.text,
-        type: selectedType,
-        date: selectedDate,
-        preMoneyValuation: newPreMoney,
-        amountRaised: calculatedAmount,
-        pricePerShare: newPricePerShare,
-        leadInvestor: leadController.text.isEmpty ? null : leadController.text,
-        notes: notesController.text.isEmpty ? null : notesController.text,
-        isClosed: isClosed,
-        order: round?.order ?? provider.rounds.length,
-      );
-
-      if (isEditing) {
-        // Check if pre-money valuation changed and there are investments in this round
-        final preMoneyChanged = round.preMoneyValuation != newPreMoney;
-        final hasInvestments = provider
-            .getInvestmentsByRound(round.id)
-            .isNotEmpty;
-
-        if (preMoneyChanged &&
-            hasInvestments &&
-            newPreMoney > 0 &&
-            context.mounted) {
-          // Calculate new implied price
-          final sharesBeforeRound = provider.getIssuedSharesBeforeRound(
-            round.id,
-          );
-          if (sharesBeforeRound > 0) {
-            final impliedPrice = newPreMoney / sharesBeforeRound;
-
-            final updatePrices = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Update Investor Prices?'),
-                content: Text(
-                  'The pre-money valuation has changed.\n\n'
-                  'Based on ${Formatters.number(sharesBeforeRound)} issued shares, '
-                  'the implied price per share is ${Formatters.currency(impliedPrice)}.\n\n'
-                  'Would you like to update all investor prices in this round?',
-                ),
-                actions: [
-                  DialogCancelButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    label: 'No, Keep Prices',
-                  ),
-                  DialogPrimaryButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    label: 'Yes, Update Prices',
-                  ),
-                ],
-              ),
-            );
-
-            if (updatePrices == true) {
-              // Update the round's price per share
-              final updatedRound = InvestmentRound(
-                id: newRound.id,
-                name: newRound.name,
-                type: newRound.type,
-                date: newRound.date,
-                preMoneyValuation: newRound.preMoneyValuation,
-                amountRaised: newRound.amountRaised,
-                pricePerShare: impliedPrice,
-                leadInvestor: newRound.leadInvestor,
-                notes: newRound.notes,
-                isClosed: newRound.isClosed,
-                order: newRound.order,
-              );
-              await provider.updateRound(updatedRound);
-              await provider.updateRoundTransactionPrices(
-                round.id,
-                impliedPrice,
-              );
-              return;
-            }
-          }
-        }
-
-        await provider.updateRound(newRound);
-      } else {
-        await provider.addRound(newRound);
-      }
-    }
-  }
-
-  String _getRoundTypeName(RoundType type) {
-    switch (type) {
-      case RoundType.incorporation:
-        return 'Incorporation';
-      case RoundType.seed:
-        return 'Seed';
-      case RoundType.seriesA:
-        return 'Series A';
-      case RoundType.seriesB:
-        return 'Series B';
-      case RoundType.seriesC:
-        return 'Series C';
-      case RoundType.seriesD:
-        return 'Series D';
-      case RoundType.bridge:
-        return 'Bridge';
-      case RoundType.convertible:
-        return 'Convertible Note';
-      case RoundType.esopPool:
-        return 'ESOP Pool';
-      case RoundType.secondary:
-        return 'Secondary';
-      case RoundType.custom:
-        return 'Custom';
-    }
   }
 
   Future<void> _showAddInvestorToRoundDialog(
@@ -566,6 +169,25 @@ class RoundsPage extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _toggleRoundStatus(
+    BuildContext context,
+    CoreCapTableProvider provider,
+    InvestmentRound round,
+  ) async {
+    final newStatus = !round.isClosed;
+
+    // Use the provider's toggleRoundStatus which handles convertible reversion
+    await provider.toggleRoundStatus(round.id);
+
+    if (context.mounted) {
+      if (newStatus) {
+        showSuccessSnackbar(context, 'Round closed - transactions now count in cap table');
+      } else {
+        showInfoSnackbar(context, 'Round reopened - transactions moved to draft (any conversions reverted)');
+      }
+    }
+  }
 }
 
 /// Dialog for batch converting SAFEs and Notes at a round
@@ -615,6 +237,7 @@ class _ConvertNotesDialogState extends State<_ConvertNotesDialog> {
     );
 
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: Row(
         children: [
           Icon(Icons.swap_horiz, color: Theme.of(context).colorScheme.primary),
@@ -836,6 +459,7 @@ class _ConvertNotesDialogState extends State<_ConvertNotesDialog> {
           conversionDate: widget.round.date,
           roundPreMoney: widget.round.preMoneyValuation,
           issuedSharesBeforeRound: issuedBefore,
+          isRoundClosed: widget.round.isClosed,
         );
         successCount++;
       } catch (e) {
@@ -862,6 +486,7 @@ class _RoundCard extends StatefulWidget {
   final VoidCallback onDelete;
   final VoidCallback onAddInvestor;
   final VoidCallback? onConvertNotes;
+  final VoidCallback onToggleStatus;
 
   const _RoundCard({
     required this.round,
@@ -870,6 +495,7 @@ class _RoundCard extends StatefulWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onAddInvestor,
+    required this.onToggleStatus,
     this.onConvertNotes,
   });
 
@@ -1026,12 +652,12 @@ class _RoundCardState extends State<_RoundCard> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Row 1: Add Investor and Convert buttons
+              // Row 1: Add Investor and Convert buttons (disabled for closed rounds)
               Row(
                 children: [
                   Expanded(
                     child: FilledButton.tonalIcon(
-                      onPressed: widget.onAddInvestor,
+                      onPressed: round.isClosed ? null : widget.onAddInvestor,
                       icon: const Icon(Icons.person_add, size: 18),
                       label: const Text('Add Investor'),
                     ),
@@ -1040,7 +666,7 @@ class _RoundCardState extends State<_RoundCard> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextButton.icon(
-                        onPressed: widget.onConvertNotes,
+                        onPressed: round.isClosed ? null : widget.onConvertNotes,
                         icon: const Icon(Icons.swap_horiz, size: 18),
                         label: const Text('Convert'),
                       ),
@@ -1048,10 +674,37 @@ class _RoundCardState extends State<_RoundCard> {
                   ],
                 ],
               ),
+              if (round.isClosed) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Reopen round to add investments',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
-              // Row 2: Edit and Delete buttons
+              // Row 2: Status toggle and Edit buttons
               Row(
                 children: [
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: widget.onToggleStatus,
+                      icon: Icon(
+                        round.isClosed ? Icons.lock_open : Icons.lock,
+                        size: 18,
+                        color: round.isClosed ? Colors.green : Colors.orange,
+                      ),
+                      label: Text(
+                        round.isClosed ? 'Reopen' : 'Close',
+                        style: TextStyle(
+                          color: round.isClosed ? Colors.green : Colors.orange,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: TextButton.icon(
                       onPressed: widget.onEdit,
@@ -1294,6 +947,7 @@ class _RoundCardState extends State<_RoundCard> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         title: const Text('Undo Conversion'),
         content: SizedBox(
           width: 400,

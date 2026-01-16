@@ -13,6 +13,7 @@ import '../models/hours_vesting.dart';
 import '../models/tax_rule.dart';
 import '../../esop/models/option_grant.dart';
 import '../../esop/models/esop_pool_change.dart';
+import '../../esop/models/warrant.dart';
 import '../../valuations/models/valuation.dart';
 import '../../scenarios/models/saved_scenario.dart';
 
@@ -55,6 +56,7 @@ class StorageService {
       'hoursVestingSchedules': [],
       'taxRules': [],
       'optionGrants': [],
+      'warrants': [],
       'valuations': [],
       'savedScenarios': [],
       'esopPoolChanges': [],
@@ -77,6 +79,7 @@ class StorageService {
     required List<HoursVestingSchedule> hoursVestingSchedules,
     required List<TaxRule> taxRules,
     required List<OptionGrant> optionGrants,
+    required List<Warrant> warrants,
     required List<Valuation> valuations,
     required List<SavedScenario> savedScenarios,
     required List<EsopPoolChange> esopPoolChanges,
@@ -101,6 +104,7 @@ class StorageService {
           .toList(),
       'taxRules': taxRules.map((e) => e.toJson()).toList(),
       'optionGrants': optionGrants.map((e) => e.toJson()).toList(),
+      'warrants': warrants.map((e) => e.toJson()).toList(),
       'valuations': valuations.map((e) => e.toJson()).toList(),
       'savedScenarios': savedScenarios.map((e) => e.toJson()).toList(),
       'esopPoolChanges': esopPoolChanges.map((e) => e.toJson()).toList(),

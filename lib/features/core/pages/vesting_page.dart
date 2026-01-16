@@ -8,7 +8,6 @@ import '../models/milestone.dart';
 import '../models/hours_vesting.dart';
 import '../../esop/models/option_grant.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/info_widgets.dart';
 import '../../../shared/widgets/help_icon.dart';
 import '../../../shared/widgets/dialogs.dart';
@@ -582,101 +581,51 @@ class _UnifiedSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      title: 'Vesting Overview',
-      icon: Icons.pie_chart,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: MiniStat(label: 'Active', value: activeCount.toString()),
-              ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Completed',
-                  value: completedCount.toString(),
-                ),
-              ),
-              Expanded(
-                child: MiniStat(
-                  label: 'Terminated',
-                  value: terminatedCount.toString(),
-                ),
-              ),
-            ],
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        SummaryCard(
+          label: 'Active',
+          value: activeCount.toString(),
+          icon: Icons.trending_up,
+          color: Colors.blue,
+        ),
+        SummaryCard(
+          label: 'Completed',
+          value: completedCount.toString(),
+          icon: Icons.check_circle,
+          color: Colors.green,
+        ),
+        if (terminatedCount > 0)
+          SummaryCard(
+            label: 'Terminated',
+            value: terminatedCount.toString(),
+            icon: Icons.cancel,
+            color: Colors.grey,
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _TypeIndicator(
-                Icons.schedule,
-                'Time',
-                Colors.indigo,
-                provider.vestingSchedules.length,
-              ),
-              const SizedBox(width: 12),
-              _TypeIndicator(
-                Icons.flag,
-                'Milestone',
-                Colors.orange,
-                provider.milestones.length,
-              ),
-              const SizedBox(width: 12),
-              _TypeIndicator(
-                Icons.access_time,
-                'Hours',
-                Colors.teal,
-                provider.hoursVestingSchedules.length,
-              ),
-              const SizedBox(width: 12),
-              _TypeIndicator(
-                Icons.workspace_premium,
-                'Options',
-                Colors.purple,
-                provider.optionGrants
-                    .where((g) => g.vestingScheduleId != null)
-                    .length,
-              ),
-            ],
+        if (provider.vestingSchedules.isNotEmpty)
+          SummaryCard(
+            label: 'Time-Based',
+            value: provider.vestingSchedules.length.toString(),
+            icon: Icons.schedule,
+            color: Colors.indigo,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TypeIndicator extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final int count;
-
-  const _TypeIndicator(this.icon, this.label, this.color, this.count);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            '$count',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+        if (provider.milestones.isNotEmpty)
+          SummaryCard(
+            label: 'Milestone',
+            value: provider.milestones.length.toString(),
+            icon: Icons.flag,
+            color: Colors.orange,
           ),
-        ],
-      ),
+        if (provider.hoursVestingSchedules.isNotEmpty)
+          SummaryCard(
+            label: 'Hours-Based',
+            value: provider.hoursVestingSchedules.length.toString(),
+            icon: Icons.access_time,
+            color: Colors.teal,
+          ),
+      ],
     );
   }
 }

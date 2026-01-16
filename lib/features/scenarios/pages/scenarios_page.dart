@@ -936,11 +936,11 @@ class _ScenariosPageState extends State<ScenariosPage>
     if (totalShares == 0) return;
 
     // Build investor holdings with share class info
+    // Use active transactions only (exclude draft round transactions)
     final investorHoldings = <_InvestorHolding>[];
     for (final investor in provider.activeInvestors) {
       final transactions = provider
-          .getTransactionsByInvestor(investor.id)
-          .where((t) => t.isAcquisition);
+          .getActiveAcquisitionsByInvestor(investor.id);
 
       // Group shares by share class
       final sharesByClass = <String, int>{};
@@ -952,11 +952,8 @@ class _ScenariosPageState extends State<ScenariosPage>
             (investmentByClass[t.shareClassId] ?? 0) + t.totalAmount;
       }
 
-      // Handle sold shares (reduce proportionally)
-      final soldShares = provider
-          .getTransactionsByInvestor(investor.id)
-          .where((t) => t.isDisposal)
-          .fold(0, (sum, t) => sum + t.numberOfShares);
+      // Handle sold shares (reduce proportionally) - use provider method
+      final soldShares = provider.getSharesSoldByInvestor(investor.id);
 
       final originalTotal = sharesByClass.values.fold(0, (a, b) => a + b);
       final ratio = originalTotal > 0

@@ -116,6 +116,7 @@ Future<InvestmentDialogResult> showInvestmentDialog({
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         title: Text(
           isEditing
               ? 'Edit ${existingInvestor?.name ?? "Investment"}'

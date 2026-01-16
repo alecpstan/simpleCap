@@ -10,7 +10,7 @@ import 'features/core/pages/dashboard_page.dart';
 import 'features/core/pages/investors_page.dart';
 import 'features/core/pages/rounds_page.dart';
 import 'features/core/pages/share_value_page.dart';
-import 'features/core/pages/vesting_page.dart';
+import 'features/core/pages/cap_table_page.dart';
 import 'shared/widgets/settings_drawer.dart';
 import 'shared/widgets/help_icon.dart';
 
@@ -49,11 +49,13 @@ class MainApp extends StatelessWidget {
             final provider = esop ?? EsopProvider();
             provider.updateFromCore(
               optionGrants: core.optionGrants,
+              warrants: core.warrants,
               esopPoolChanges: core.esopPoolChanges,
               esopDilutionMethod: core.esopDilutionMethod,
               esopPoolPercent: core.esopPoolPercent,
               onSave: () => core.syncEsopData(
                 optionGrants: provider.optionGrants,
+                warrants: provider.warrants,
                 esopPoolChanges: provider.esopPoolChanges,
                 esopDilutionMethod: provider.esopDilutionMethod,
                 esopPoolPercent: provider.esopPoolPercent,
@@ -87,9 +89,8 @@ class MainApp extends StatelessWidget {
             final provider = valuations ?? ValuationsProvider();
             provider.updateFromCore(
               valuations: core.valuations,
-              onSave: () => core.syncValuationsData(
-                valuations: provider.valuations,
-              ),
+              onSave: () =>
+                  core.syncValuationsData(valuations: provider.valuations),
             );
             return provider;
           },
@@ -171,7 +172,7 @@ class _HomePageState extends State<HomePage> {
     InvestorsPage(),
     RoundsPage(),
     ShareValuePage(),
-    VestingPage(),
+    CapTablePage(),
   ];
 
   final List<NavigationDestination> _destinations = const [
@@ -196,9 +197,9 @@ class _HomePageState extends State<HomePage> {
       label: 'Value',
     ),
     NavigationDestination(
-      icon: Icon(Icons.schedule_outlined),
-      selectedIcon: Icon(Icons.schedule),
-      label: 'Vesting',
+      icon: Icon(Icons.table_chart_outlined),
+      selectedIcon: Icon(Icons.table_chart),
+      label: 'Cap Table',
     ),
   ];
 

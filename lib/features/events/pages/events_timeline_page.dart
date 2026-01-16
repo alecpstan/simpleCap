@@ -736,11 +736,11 @@ class _EventsTimelinePageState extends State<EventsTimelinePage> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    _formatMetadataKey(e.key),
+                                    StringHelpers.camelToTitle(e.key),
                                     style: TextStyle(color: Colors.grey[600]),
                                   ),
                                   Text(
-                                    _formatMetadataValue(e.value),
+                                    StringHelpers.formatValue(e.value),
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -790,6 +790,8 @@ class _EventsTimelinePageState extends State<EventsTimelinePage> {
         return Icons.card_giftcard;
       case TransactionType.optionExercise:
         return Icons.fitness_center;
+      case TransactionType.warrantExercise:
+        return Icons.receipt_long;
       case TransactionType.conversion:
         return Icons.transform;
       case TransactionType.reequitization:
@@ -811,6 +813,8 @@ class _EventsTimelinePageState extends State<EventsTimelinePage> {
         return Colors.purple;
       case TransactionType.optionExercise:
         return Colors.teal;
+      case TransactionType.warrantExercise:
+        return Colors.cyan;
       case TransactionType.conversion:
         return Colors.indigo;
       case TransactionType.reequitization:
@@ -864,25 +868,5 @@ class _EventsTimelinePageState extends State<EventsTimelinePage> {
       'December',
     ];
     return '${months[date.month - 1]} ${date.year}';
-  }
-
-  String _formatMetadataKey(String key) {
-    // Convert camelCase to Title Case
-    return key
-        .replaceAllMapped(RegExp(r'([A-Z])'), (match) => ' ${match.group(1)}')
-        .trim()
-        .split(' ')
-        .map((word) => word[0].toUpperCase() + word.substring(1))
-        .join(' ');
-  }
-
-  String _formatMetadataValue(dynamic value) {
-    if (value is double) {
-      if (value > 1000) return Formatters.currency(value);
-      return value.toStringAsFixed(2);
-    }
-    if (value is bool) return value ? 'Yes' : 'No';
-    if (value is int) return Formatters.number(value);
-    return value.toString();
   }
 }

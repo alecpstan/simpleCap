@@ -4,10 +4,12 @@ import 'package:provider/provider.dart';
 import '../models/esop_pool_change.dart';
 import '../../core/models/investor.dart';
 import '../models/option_grant.dart';
+import '../models/warrant.dart';
 import '../../core/models/share_class.dart';
 import '../../core/models/transaction.dart';
 import '../../core/models/vesting_schedule.dart';
-import '../../core/providers/core_cap_table_provider.dart' hide EsopDilutionMethod;
+import '../../core/providers/core_cap_table_provider.dart'
+    hide EsopDilutionMethod;
 import '../../valuations/providers/valuations_provider.dart';
 import '../../valuations/widgets/valuation_wizard_screen.dart';
 import '../providers/esop_provider.dart';
@@ -20,87 +22,2116 @@ import '../../../shared/widgets/avatars.dart';
 import '../../../shared/widgets/dialogs.dart';
 import '../../../shared/widgets/expandable_card.dart';
 
-class OptionsPage extends StatelessWidget {
+class OptionsPage extends StatefulWidget {
   const OptionsPage({super.key});
+
+  @override
+  State<OptionsPage> createState() => _OptionsPageState();
+}
+
+class _OptionsPageState extends State<OptionsPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer3<CoreCapTableProvider, EsopProvider, ValuationsProvider>(
-      builder: (context, coreProvider, esopProvider, valuationsProvider, child) {
-        if (coreProvider.isLoading || !esopProvider.isInitialized) {
-          return const Center(child: CircularProgressIndicator());
-        }
+      builder:
+          (context, coreProvider, esopProvider, valuationsProvider, child) {
+            if (coreProvider.isLoading || !esopProvider.isInitialized) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        // Check for expired grants
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          esopProvider.updateExpiredOptionGrants();
-        });
+            // Check for expired grants and warrants
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              esopProvider.updateExpiredOptionGrants();
+              esopProvider.updateExpiredWarrants();
+            });
 
-        final grants = esopProvider.optionGrants;
-        final activeGrants = esopProvider.activeOptionGrants;
-
-        return Scaffold(
-          appBar: AppBar(title: const Text('Options & ESOP')),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ESOP Pool Management - always visible
-                _buildPoolManagement(context, coreProvider, esopProvider),
-                const SizedBox(height: 16),
-
-                // Summary stats - always visible
-                _buildSummaryCards(context, esopProvider),
-                const SizedBox(height: 24),
-
-                // Show empty state or grants list
-                if (grants.isEmpty)
-                  const EmptyState(
-                    icon: Icons.card_giftcard,
-                    title: 'No Option Grants',
-                    subtitle:
-                        'Grant stock options to employees, advisors, or contractors.',
-                  )
-                else ...[
-                  // Active grants
-                  if (activeGrants.isNotEmpty) ...[
-                    SectionCard(
-                      title: 'Active Grants',
-                      trailing: Text(
-                        '${activeGrants.length} active',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      child: _buildGrantsList(
-                        context,
-                        coreProvider,
-                        esopProvider,
-                        activeGrants,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
+            return Scaffold(
+              appBar: AppBar(
+                title: const Text('Equity Plans'),
+                bottom: TabBar(
+                  controller: _tabController,
+                  tabs: const [
+                    Tab(text: 'Options', icon: Icon(Icons.card_giftcard)),
+                    Tab(text: 'Warrants', icon: Icon(Icons.receipt_long)),
+                    Tab(text: 'Shares', icon: Icon(Icons.inventory_2)),
+                    Tab(text: 'Vesting', icon: Icon(Icons.schedule)),
                   ],
-
-                  // Exercised/cancelled/expired
-                  _buildHistorySection(context, coreProvider, esopProvider, grants),
+                ),
+              ),
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  // Options Tab
+                  _buildOptionsTab(
+                    context,
+                    coreProvider,
+                    esopProvider,
+                    valuationsProvider,
+                  ),
+                  // Warrants Tab
+                  _buildWarrantsTab(context, coreProvider, esopProvider),
+                  // Shares Tab
+                  _buildSharesTab(context, coreProvider),
+                  // Vesting Tab
+                  _buildVestingTab(context, coreProvider),
                 ],
-              ],
-            ),
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _showGrantDialog(context, coreProvider, esopProvider, valuationsProvider),
-            icon: const Icon(Icons.add),
-            label: const Text('Grant Options'),
-          ),
-        );
+              ),
+              floatingActionButton: _buildFAB(
+                context,
+                coreProvider,
+                esopProvider,
+                valuationsProvider,
+              ),
+            );
+          },
+    );
+  }
+
+  Widget _buildFAB(
+    BuildContext context,
+    CoreCapTableProvider coreProvider,
+    EsopProvider esopProvider,
+    ValuationsProvider valuationsProvider,
+  ) {
+    // Show different FAB based on current tab
+    return AnimatedBuilder(
+      animation: _tabController,
+      builder: (context, child) {
+        switch (_tabController.index) {
+          case 0:
+            return FloatingActionButton.extended(
+              onPressed: () => _showGrantDialog(
+                context,
+                coreProvider,
+                esopProvider,
+                valuationsProvider,
+              ),
+              icon: const Icon(Icons.add),
+              label: const Text('Grant Options'),
+            );
+          case 1:
+            return FloatingActionButton.extended(
+              onPressed: () =>
+                  _showWarrantDialog(context, coreProvider, esopProvider),
+              icon: const Icon(Icons.add),
+              label: const Text('Issue Warrant'),
+            );
+          case 2:
+            return FloatingActionButton.extended(
+              onPressed: () => _showVestingSharesDialog(context, coreProvider),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Shares'),
+            );
+          case 3:
+          default:
+            // No FAB for vesting tab - vesting is tied to grants/transactions
+            return const SizedBox.shrink();
+        }
       },
     );
   }
 
-  Widget _buildSummaryCards(
+  Widget _buildOptionsTab(
     BuildContext context,
+    CoreCapTableProvider coreProvider,
+    EsopProvider esopProvider,
+    ValuationsProvider valuationsProvider,
+  ) {
+    final grants = esopProvider.optionGrants;
+    final activeGrants = esopProvider.activeOptionGrants;
+    final inactiveGrants = grants.where((g) {
+      return g.status == OptionGrantStatus.fullyExercised ||
+          g.status == OptionGrantStatus.expired ||
+          g.status == OptionGrantStatus.cancelled ||
+          g.status == OptionGrantStatus.forfeited;
+    }).toList();
+
+    if (grants.isEmpty) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildPoolManagement(context, coreProvider, esopProvider),
+            const SizedBox(height: 16),
+            _buildSummaryCards(context, esopProvider),
+            const SizedBox(height: 24),
+            const EmptyState(
+              icon: Icons.card_giftcard,
+              title: 'No Option Grants',
+              subtitle:
+                  'Grant stock options to employees, advisors, or contractors.',
+            ),
+          ],
+        ),
+      );
+    }
+
+    return CustomScrollView(
+      slivers: [
+        // ESOP Pool Management - always visible
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: _buildPoolManagement(context, coreProvider, esopProvider),
+          ),
+        ),
+
+        // Summary stats - always visible
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildSummaryCards(context, esopProvider),
+          ),
+        ),
+
+        // Active grants
+        if (activeGrants.isNotEmpty) ...[
+          _buildSectionHeader(context, 'Active Grants', activeGrants.length),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildGrantCard(
+                context,
+                coreProvider,
+                esopProvider,
+                activeGrants[index],
+              ),
+              childCount: activeGrants.length,
+            ),
+          ),
+        ],
+
+        // History (exercised/cancelled/expired)
+        if (inactiveGrants.isNotEmpty) ...[
+          _buildSectionHeader(context, 'History', inactiveGrants.length),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildGrantCard(
+                context,
+                coreProvider,
+                esopProvider,
+                inactiveGrants[index],
+                isHistory: true,
+              ),
+              childCount: inactiveGrants.length,
+            ),
+          ),
+        ],
+
+        // Bottom padding
+        const SliverToBoxAdapter(child: SizedBox(height: 80)),
+      ],
+    );
+  }
+
+  Widget _buildWarrantsTab(
+    BuildContext context,
+    CoreCapTableProvider coreProvider,
     EsopProvider esopProvider,
   ) {
+    final warrants = esopProvider.warrants;
+    final activeWarrants = esopProvider.activeWarrants;
+    final pendingWarrants = esopProvider.pendingWarrants;
+    final sharePrice = coreProvider.latestSharePrice;
+    final inactiveWarrants = warrants.where((w) {
+      return w.status == WarrantStatus.fullyExercised ||
+          w.status == WarrantStatus.expired ||
+          w.status == WarrantStatus.cancelled;
+    }).toList();
+
+    if (warrants.isEmpty) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildWarrantsSummary(context, esopProvider, sharePrice),
+            const SizedBox(height: 24),
+            const EmptyState(
+              icon: Icons.receipt_long,
+              title: 'No Warrants',
+              subtitle:
+                  'Issue warrants to investors as part of funding rounds or deals.',
+            ),
+          ],
+        ),
+      );
+    }
+
+    return CustomScrollView(
+      slivers: [
+        // Warrants Summary
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: _buildWarrantsSummary(context, esopProvider, sharePrice),
+          ),
+        ),
+
+        // Pending warrants (issued in draft rounds)
+        if (pendingWarrants.isNotEmpty) ...[
+          _buildSectionHeaderWithBadge(
+            context,
+            'Pending Warrants',
+            pendingWarrants.length,
+            badgeText: 'Draft Round',
+            badgeColor: Colors.amber,
+          ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildWarrantCard(
+                context,
+                coreProvider,
+                esopProvider,
+                pendingWarrants[index],
+              ),
+              childCount: pendingWarrants.length,
+            ),
+          ),
+        ],
+
+        // Active warrants
+        if (activeWarrants.isNotEmpty) ...[
+          _buildSectionHeader(
+            context,
+            'Active Warrants',
+            activeWarrants.length,
+          ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildWarrantCard(
+                context,
+                coreProvider,
+                esopProvider,
+                activeWarrants[index],
+              ),
+              childCount: activeWarrants.length,
+            ),
+          ),
+        ],
+
+        // History (exercised/cancelled/expired warrants)
+        if (inactiveWarrants.isNotEmpty) ...[
+          _buildSectionHeader(context, 'History', inactiveWarrants.length),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildWarrantCard(
+                context,
+                coreProvider,
+                esopProvider,
+                inactiveWarrants[index],
+              ),
+              childCount: inactiveWarrants.length,
+            ),
+          ),
+        ],
+
+        // Bottom padding
+        const SliverToBoxAdapter(child: SizedBox(height: 80)),
+      ],
+    );
+  }
+
+  Widget _buildWarrantsSummary(
+    BuildContext context,
+    EsopProvider esopProvider,
+    double sharePrice,
+  ) {
+    final totalOutstanding = esopProvider.totalWarrantsOutstanding;
+    final totalExercised = esopProvider.totalWarrantsExercised;
+    final activeWarrants = esopProvider.activeWarrants;
+
+    // Calculate total intrinsic value
+    final totalIntrinsicValue = activeWarrants.fold(
+      0.0,
+      (sum, w) => sum + w.intrinsicValue(sharePrice),
+    );
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        SummaryCard(
+          label: 'Outstanding',
+          value: Formatters.compactNumber(totalOutstanding),
+          icon: Icons.receipt_long,
+          color: Colors.blue,
+        ),
+        SummaryCard(
+          label: 'Exercised',
+          value: Formatters.compactNumber(totalExercised),
+          icon: Icons.check_circle,
+          color: Colors.green,
+        ),
+        SummaryCard(
+          label: 'Intrinsic Value',
+          value: Formatters.compactCurrency(totalIntrinsicValue),
+          icon: Icons.trending_up,
+          color: Colors.amber,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWarrantsList(
+    BuildContext context,
+    CoreCapTableProvider coreProvider,
+    EsopProvider esopProvider,
+    List<Warrant> warrants,
+  ) {
+    return Column(
+      children: warrants.map((warrant) {
+        final investor = coreProvider.getInvestorById(warrant.investorId);
+        final shareClass = warrant.shareClassId != null
+            ? coreProvider.getShareClassById(warrant.shareClassId!)
+            : null;
+        final sharePrice = coreProvider.latestSharePrice;
+        final isInTheMoney = warrant.isInTheMoney(sharePrice);
+        final intrinsicValue = warrant.intrinsicValue(sharePrice);
+
+        return ExpandableCard(
+          leading: CircleAvatar(
+            backgroundColor: warrant.status.color.withValues(alpha: 0.2),
+            child: Icon(
+              Icons.receipt_long,
+              color: warrant.status.color,
+              size: 20,
+            ),
+          ),
+          title: investor?.name ?? 'Unknown',
+          subtitle:
+              '${Formatters.number(warrant.remainingWarrants)} warrants @ ${Formatters.currency(warrant.strikePrice)}',
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: warrant.status.color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              warrant.status.displayName,
+              style: TextStyle(
+                color: warrant.status.color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          chips: [
+            InfoTag(
+              label: 'Exercised',
+              value: Formatters.compactNumber(warrant.exercisedCount),
+              color: Colors.blue,
+            ),
+            if (isInTheMoney)
+              InfoTag(
+                label: 'In the Money',
+                icon: Icons.trending_up,
+                color: Colors.green,
+              ),
+            InfoTag(
+              label: 'Value',
+              value: Formatters.compactCurrency(intrinsicValue),
+              color: isInTheMoney ? Colors.green : Colors.grey,
+            ),
+          ],
+          expandedContent: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DetailRow(
+                label: 'Number of Warrants',
+                value: Formatters.number(warrant.numberOfWarrants),
+              ),
+              DetailRow(
+                label: 'Strike Price',
+                value: Formatters.currency(warrant.strikePrice),
+              ),
+              DetailRow(
+                label: 'Share Class',
+                value: shareClass?.name ?? 'Not specified',
+              ),
+              DetailRow(
+                label: 'Issue Date',
+                value: Formatters.date(warrant.issueDate),
+              ),
+              DetailRow(
+                label: 'Expiry Date',
+                value: Formatters.date(warrant.expiryDate),
+              ),
+              const Divider(height: 16),
+              DetailRow(
+                label: 'Exercised',
+                value: Formatters.number(warrant.exercisedCount),
+              ),
+              DetailRow(
+                label: 'Remaining',
+                value: Formatters.number(warrant.remainingWarrants),
+              ),
+              DetailRow(
+                label: 'Current Share Price',
+                value: Formatters.currency(sharePrice),
+              ),
+              const Divider(height: 16),
+              // Value section
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isInTheMoney
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isInTheMoney ? Icons.trending_up : Icons.trending_flat,
+                      color: isInTheMoney ? Colors.green : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isInTheMoney ? 'In The Money' : 'Out of Money',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: isInTheMoney ? Colors.green : Colors.grey,
+                            ),
+                          ),
+                          Text(
+                            'Intrinsic value: ${Formatters.currency(intrinsicValue)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (warrant.sourceConvertibleId != null) ...[
+                const SizedBox(height: 8),
+                DetailRow(
+                  label: 'Source',
+                  value:
+                      'From Convertible (${((warrant.coveragePercent ?? 0) * 100).toStringAsFixed(0)}% coverage)',
+                ),
+              ],
+              if (warrant.notes != null && warrant.notes!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                DetailRow(label: 'Notes', value: warrant.notes!),
+              ],
+            ],
+          ),
+          actions: [
+            if (warrant.canExercise)
+              FilledButton.icon(
+                onPressed: () => _showExerciseWarrantDialog(
+                  context,
+                  coreProvider,
+                  esopProvider,
+                  warrant,
+                ),
+                icon: const Icon(Icons.fitness_center, size: 18),
+                label: const Text('Exercise'),
+              ),
+            TextButton.icon(
+              onPressed: () => _showWarrantDialog(
+                context,
+                coreProvider,
+                esopProvider,
+                existingWarrant: warrant,
+              ),
+              icon: const Icon(Icons.edit, size: 18),
+              label: const Text('Edit'),
+            ),
+            TextButton.icon(
+              onPressed: () =>
+                  _confirmDeleteWarrant(context, esopProvider, warrant),
+              icon: const Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: Colors.red,
+              ),
+              label: const Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+          accentColor: warrant.status.color,
+        );
+      }).toList(),
+    );
+  }
+
+  /// Build a single warrant card for use in SliverList
+  Widget _buildWarrantCard(
+    BuildContext context,
+    CoreCapTableProvider coreProvider,
+    EsopProvider esopProvider,
+    Warrant warrant,
+  ) {
+    final investor = coreProvider.getInvestorById(warrant.investorId);
+    final shareClass = warrant.shareClassId != null
+        ? coreProvider.getShareClassById(warrant.shareClassId!)
+        : null;
+    final sharePrice = coreProvider.latestSharePrice;
+    final isInTheMoney = warrant.isInTheMoney(sharePrice);
+    final intrinsicValue = warrant.intrinsicValue(sharePrice);
+
+    return ExpandableCard(
+      leading: CircleAvatar(
+        backgroundColor: warrant.status.color.withValues(alpha: 0.2),
+        child: Icon(Icons.receipt_long, color: warrant.status.color, size: 20),
+      ),
+      title: investor?.name ?? 'Unknown',
+      subtitle:
+          '${Formatters.number(warrant.remainingWarrants)} warrants @ ${Formatters.currency(warrant.strikePrice)}',
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: warrant.status.color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          warrant.status.displayName,
+          style: TextStyle(
+            color: warrant.status.color,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      chips: [
+        InfoTag(
+          label: 'Exercised',
+          value: Formatters.compactNumber(warrant.exercisedCount),
+          color: Colors.blue,
+        ),
+        if (isInTheMoney)
+          InfoTag(
+            label: 'In the Money',
+            icon: Icons.trending_up,
+            color: Colors.green,
+          ),
+        InfoTag(
+          label: 'Value',
+          value: Formatters.compactCurrency(intrinsicValue),
+          color: isInTheMoney ? Colors.green : Colors.grey,
+        ),
+      ],
+      expandedContent: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DetailRow(
+            label: 'Number of Warrants',
+            value: Formatters.number(warrant.numberOfWarrants),
+          ),
+          DetailRow(
+            label: 'Strike Price',
+            value: Formatters.currency(warrant.strikePrice),
+          ),
+          DetailRow(
+            label: 'Share Class',
+            value: shareClass?.name ?? 'Not specified',
+          ),
+          DetailRow(
+            label: 'Issue Date',
+            value: Formatters.date(warrant.issueDate),
+          ),
+          DetailRow(
+            label: 'Expiry Date',
+            value: Formatters.date(warrant.expiryDate),
+          ),
+          const Divider(height: 16),
+          DetailRow(
+            label: 'Exercised',
+            value: Formatters.number(warrant.exercisedCount),
+          ),
+          DetailRow(
+            label: 'Remaining',
+            value: Formatters.number(warrant.remainingWarrants),
+          ),
+          DetailRow(
+            label: 'Current Share Price',
+            value: Formatters.currency(sharePrice),
+          ),
+          const Divider(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isInTheMoney
+                  ? Colors.green.withValues(alpha: 0.1)
+                  : Colors.grey.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isInTheMoney ? Icons.trending_up : Icons.trending_flat,
+                  color: isInTheMoney ? Colors.green : Colors.grey,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isInTheMoney ? 'In The Money' : 'Out of Money',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isInTheMoney ? Colors.green : Colors.grey,
+                        ),
+                      ),
+                      Text(
+                        'Intrinsic value: ${Formatters.currency(intrinsicValue)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (warrant.sourceConvertibleId != null) ...[
+            const SizedBox(height: 8),
+            DetailRow(
+              label: 'Source',
+              value:
+                  'From Convertible (${((warrant.coveragePercent ?? 0) * 100).toStringAsFixed(0)}% coverage)',
+            ),
+          ],
+          if (warrant.notes != null && warrant.notes!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            DetailRow(label: 'Notes', value: warrant.notes!),
+          ],
+        ],
+      ),
+      actions: [
+        if (warrant.canExercise)
+          FilledButton.icon(
+            onPressed: () => _showExerciseWarrantDialog(
+              context,
+              coreProvider,
+              esopProvider,
+              warrant,
+            ),
+            icon: const Icon(Icons.fitness_center, size: 18),
+            label: const Text('Exercise'),
+          ),
+        TextButton.icon(
+          onPressed: () => _showWarrantDialog(
+            context,
+            coreProvider,
+            esopProvider,
+            existingWarrant: warrant,
+          ),
+          icon: const Icon(Icons.edit, size: 18),
+          label: const Text('Edit'),
+        ),
+        TextButton.icon(
+          onPressed: () =>
+              _confirmDeleteWarrant(context, esopProvider, warrant),
+          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+          label: const Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+      accentColor: warrant.status.color,
+    );
+  }
+
+  Widget _buildSharesTab(BuildContext context, CoreCapTableProvider provider) {
+    // Get transactions of type 'grant' that have vesting schedules
+    final grantTransactions = provider.transactions
+        .where((t) => t.type == TransactionType.grant)
+        .toList();
+
+    // Get vesting shares (grants with vesting schedules)
+    final vestingShares = grantTransactions.where((t) {
+      return provider.vestingSchedules.any((vs) => vs.transactionId == t.id);
+    }).toList();
+
+    // Get non-vesting shares (grants without vesting schedules)
+    final immediateShares = grantTransactions.where((t) {
+      return !provider.vestingSchedules.any((vs) => vs.transactionId == t.id);
+    }).toList();
+
+    if (grantTransactions.isEmpty) {
+      return const EmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'No Share Grants',
+        subtitle: 'Add founder or employee shares with vesting schedules.',
+      );
+    }
+
+    return CustomScrollView(
+      slivers: [
+        // Summary stats
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: _buildSharesSummary(context, provider, grantTransactions),
+          ),
+        ),
+
+        // Vesting shares section
+        if (vestingShares.isNotEmpty) ...[
+          _buildSectionHeader(context, 'Vesting Shares', vestingShares.length),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildShareCard(
+                context,
+                provider,
+                vestingShares[index],
+                showVesting: true,
+              ),
+              childCount: vestingShares.length,
+            ),
+          ),
+        ],
+
+        // Immediate (non-vesting) shares section
+        if (immediateShares.isNotEmpty) ...[
+          _buildSectionHeader(
+            context,
+            'Immediate Shares',
+            immediateShares.length,
+          ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildShareCard(
+                context,
+                provider,
+                immediateShares[index],
+                showVesting: false,
+              ),
+              childCount: immediateShares.length,
+            ),
+          ),
+        ],
+
+        // Bottom padding
+        const SliverToBoxAdapter(child: SizedBox(height: 80)),
+      ],
+    );
+  }
+
+  Widget _buildSharesSummary(
+    BuildContext context,
+    CoreCapTableProvider provider,
+    List<Transaction> grantTransactions,
+  ) {
+    final totalShares = grantTransactions.fold<int>(
+      0,
+      (sum, t) => sum + t.numberOfShares,
+    );
+
+    final vestingCount = grantTransactions.where((t) {
+      return provider.vestingSchedules.any((vs) => vs.transactionId == t.id);
+    }).length;
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        SummaryCard(
+          label: 'Total Shares',
+          value: Formatters.compactNumber(totalShares),
+          icon: Icons.pie_chart,
+          color: Colors.green,
+        ),
+        SummaryCard(
+          label: 'With Vesting',
+          value: vestingCount.toString(),
+          icon: Icons.schedule,
+          color: Colors.blue,
+        ),
+        SummaryCard(
+          label: 'Immediate',
+          value: (grantTransactions.length - vestingCount).toString(),
+          icon: Icons.flash_on,
+          color: Colors.grey,
+        ),
+      ],
+    );
+  }
+
+  /// Build a single share card for use in SliverList
+  Widget _buildShareCard(
+    BuildContext context,
+    CoreCapTableProvider provider,
+    Transaction transaction, {
+    required bool showVesting,
+  }) {
+    final investor = provider.getInvestorById(transaction.investorId);
+    final shareClass = provider.getShareClassById(transaction.shareClassId);
+    final round = transaction.roundId != null
+        ? provider.getRoundById(transaction.roundId!)
+        : null;
+    final vestingSchedule = provider.vestingSchedules
+        .cast<VestingSchedule?>()
+        .firstWhere(
+          (vs) => vs?.transactionId == transaction.id,
+          orElse: () => null,
+        );
+    final vestedPercent = vestingSchedule?.vestingPercentage ?? 100;
+    final totalValue = transaction.numberOfShares * transaction.pricePerShare;
+
+    return ExpandableCard(
+      leading: InvestorAvatar(
+        name: investor?.name ?? '?',
+        type: investor?.type,
+        radius: 18,
+      ),
+      title: investor?.name ?? 'Unknown',
+      subtitle:
+          '${Formatters.number(transaction.numberOfShares)} ${shareClass?.name ?? 'shares'}',
+      trailing: showVesting && vestingSchedule != null
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${vestedPercent.toStringAsFixed(0)}%',
+                style: const TextStyle(
+                  color: Colors.blue,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          : null,
+      chips: [
+        if (round != null) InfoTag(label: round.name, color: Colors.indigo),
+        InfoTag(
+          label: 'Value',
+          value: Formatters.compactCurrency(totalValue),
+          color: Colors.green,
+        ),
+        if (showVesting && vestingSchedule != null)
+          InfoTag(
+            label: 'Vesting',
+            value: '${vestingSchedule.vestingPeriodMonths}mo',
+            color: Colors.blue,
+          ),
+      ],
+      expandedContent: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DetailRow(
+            label: 'Shares',
+            value: Formatters.number(transaction.numberOfShares),
+          ),
+          DetailRow(label: 'Share Class', value: shareClass?.name ?? 'Unknown'),
+          DetailRow(
+            label: 'Grant Date',
+            value: Formatters.date(transaction.date),
+          ),
+          if (round != null) DetailRow(label: 'Round', value: round.name),
+          DetailRow(
+            label: 'Price/Share',
+            value: Formatters.currency(transaction.pricePerShare),
+          ),
+          DetailRow(
+            label: 'Total Value',
+            value: Formatters.currency(totalValue),
+            highlight: true,
+          ),
+          if (vestingSchedule != null) ...[
+            const Divider(height: 16),
+            DetailRow(
+              label: 'Start Date',
+              value: Formatters.date(vestingSchedule.startDate),
+            ),
+            DetailRow(
+              label: 'Vesting Schedule',
+              value:
+                  '${vestingSchedule.vestingPeriodMonths}mo with ${vestingSchedule.cliffMonths}mo cliff',
+            ),
+            ProgressRow(
+              label: 'Vesting Progress',
+              progress: vestedPercent / 100,
+              color: vestedPercent >= 100 ? Colors.green : Colors.blue,
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton.icon(
+          onPressed: () => _showVestingSharesDialog(
+            context,
+            provider,
+            existingTransaction: transaction,
+          ),
+          icon: const Icon(Icons.edit, size: 18),
+          label: const Text('Edit'),
+        ),
+        TextButton.icon(
+          onPressed: () => _confirmDeleteShare(context, provider, transaction),
+          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+          label: const Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+      accentColor: showVesting ? Colors.blue : Colors.green,
+    );
+  }
+
+  Future<void> _confirmDeleteShare(
+    BuildContext context,
+    CoreCapTableProvider provider,
+    Transaction transaction,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Share Grant?'),
+        content: const Text(
+          'This will permanently delete this share grant and any associated vesting schedule. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      // Delete associated vesting schedule if exists
+      final vestingSchedule = provider.vestingSchedules
+          .cast<VestingSchedule?>()
+          .firstWhere(
+            (vs) => vs?.transactionId == transaction.id,
+            orElse: () => null,
+          );
+      if (vestingSchedule != null) {
+        provider.deleteVestingSchedule(vestingSchedule.id);
+      }
+
+      // Delete the transaction
+      provider.deleteTransactionById(transaction.id);
+
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Share grant deleted')));
+    }
+  }
+
+  Future<void> _showVestingSharesDialog(
+    BuildContext context,
+    CoreCapTableProvider provider, {
+    Transaction? existingTransaction,
+  }) async {
+    final investors = provider.investors;
+    final shareClasses = provider.shareClasses;
+    final rounds = provider.rounds;
+
+    if (investors.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add investors first before granting shares'),
+        ),
+      );
+      return;
+    }
+
+    if (shareClasses.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add share classes first in Settings')),
+      );
+      return;
+    }
+
+    // Form state
+    String? selectedInvestorId = existingTransaction?.investorId;
+    String? selectedShareClassId =
+        existingTransaction?.shareClassId ?? shareClasses.first.id;
+    String? selectedRoundId = existingTransaction?.roundId;
+    final sharesController = TextEditingController(
+      text: existingTransaction?.numberOfShares.toString() ?? '',
+    );
+    final priceController = TextEditingController(
+      text:
+          existingTransaction?.pricePerShare.toString() ??
+          provider.latestSharePrice.toString(),
+    );
+    DateTime grantDate = existingTransaction?.date ?? DateTime.now();
+
+    // Vesting state
+    bool hasVesting = false;
+    int vestingMonths = 48;
+    int cliffMonths = 12;
+    VestingFrequency vestingFrequency = VestingFrequency.monthly;
+
+    // Load existing vesting schedule if editing
+    VestingSchedule? existingVesting;
+    if (existingTransaction != null) {
+      existingVesting = provider.vestingSchedules
+          .cast<VestingSchedule?>()
+          .firstWhere(
+            (vs) => vs?.transactionId == existingTransaction.id,
+            orElse: () => null,
+          );
+      if (existingVesting != null) {
+        hasVesting = true;
+        vestingMonths = existingVesting.vestingPeriodMonths;
+        cliffMonths = existingVesting.cliffMonths;
+        vestingFrequency = existingVesting.frequency;
+      }
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 12,
+          ),
+          title: Text(
+            existingTransaction == null
+                ? 'Add Vesting Shares'
+                : 'Edit Vesting Shares',
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Investor dropdown
+                AppDropdownField<String>(
+                  labelText: 'Shareholder',
+                  value: selectedInvestorId,
+                  items: investors
+                      .map(
+                        (i) =>
+                            DropdownMenuItem(value: i.id, child: Text(i.name)),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => selectedInvestorId = value),
+                ),
+                const SizedBox(height: 16),
+
+                // Share class dropdown
+                AppDropdownField<String>(
+                  labelText: 'Share Class',
+                  value: selectedShareClassId,
+                  items: shareClasses
+                      .map(
+                        (sc) => DropdownMenuItem(
+                          value: sc.id,
+                          child: Text(sc.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => selectedShareClassId = value),
+                ),
+                const SizedBox(height: 16),
+
+                // Round dropdown (optional)
+                AppDropdownField<String>(
+                  labelText: 'Round (Optional)',
+                  value: selectedRoundId,
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('None')),
+                    ...rounds.map(
+                      (r) => DropdownMenuItem(value: r.id, child: Text(r.name)),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => selectedRoundId = value),
+                ),
+                const SizedBox(height: 16),
+
+                // Number of shares
+                AppTextField(
+                  labelText: 'Number of Shares',
+                  controller: sharesController,
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+
+                // Price per share
+                AppTextField(
+                  labelText: 'Price per Share',
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  prefixText: '\$',
+                ),
+                const SizedBox(height: 16),
+
+                // Grant date
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Grant Date'),
+                  subtitle: Text(Formatters.date(grantDate)),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: grantDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (date != null) {
+                      setState(() => grantDate = date);
+                    }
+                  },
+                ),
+                const Divider(height: 24),
+
+                // Vesting toggle
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Add Vesting Schedule'),
+                  value: hasVesting,
+                  onChanged: (value) => setState(() => hasVesting = value),
+                ),
+
+                if (hasVesting) ...[
+                  const SizedBox(height: 8),
+
+                  // Vesting period
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppDropdownField<int>(
+                          labelText: 'Vesting Period',
+                          value: vestingMonths,
+                          items: const [
+                            DropdownMenuItem(value: 12, child: Text('1 year')),
+                            DropdownMenuItem(value: 24, child: Text('2 years')),
+                            DropdownMenuItem(value: 36, child: Text('3 years')),
+                            DropdownMenuItem(value: 48, child: Text('4 years')),
+                            DropdownMenuItem(value: 60, child: Text('5 years')),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => vestingMonths = value ?? 48),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: AppDropdownField<int>(
+                          labelText: 'Cliff',
+                          value: cliffMonths,
+                          items: const [
+                            DropdownMenuItem(value: 0, child: Text('No cliff')),
+                            DropdownMenuItem(value: 6, child: Text('6 months')),
+                            DropdownMenuItem(value: 12, child: Text('1 year')),
+                            DropdownMenuItem(
+                              value: 18,
+                              child: Text('18 months'),
+                            ),
+                            DropdownMenuItem(value: 24, child: Text('2 years')),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => cliffMonths = value ?? 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Vesting frequency
+                  AppDropdownField<VestingFrequency>(
+                    labelText: 'Vesting Frequency',
+                    value: vestingFrequency,
+                    items: const [
+                      DropdownMenuItem(
+                        value: VestingFrequency.monthly,
+                        child: Text('Monthly'),
+                      ),
+                      DropdownMenuItem(
+                        value: VestingFrequency.quarterly,
+                        child: Text('Quarterly'),
+                      ),
+                      DropdownMenuItem(
+                        value: VestingFrequency.annually,
+                        child: Text('Annually'),
+                      ),
+                    ],
+                    onChanged: (value) => setState(
+                      () =>
+                          vestingFrequency = value ?? VestingFrequency.monthly,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (selectedInvestorId == null ||
+                    selectedShareClassId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please select investor and share class'),
+                    ),
+                  );
+                  return;
+                }
+                final shares = int.tryParse(sharesController.text);
+                if (shares == null || shares <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid number of shares'),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: Text(existingTransaction == null ? 'Add' : 'Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true) {
+      final shares = int.parse(sharesController.text);
+      final price = double.tryParse(priceController.text) ?? 0.0;
+
+      if (existingTransaction != null) {
+        // Update existing transaction
+        final updatedTransaction = existingTransaction.copyWith(
+          investorId: selectedInvestorId,
+          shareClassId: selectedShareClassId,
+          roundId: selectedRoundId,
+          numberOfShares: shares,
+          pricePerShare: price,
+          date: grantDate,
+        );
+
+        // Find and remove old transaction, add updated one
+        provider.deleteTransactionById(existingTransaction.id);
+        provider.addTransaction(updatedTransaction);
+
+        // Handle vesting schedule
+        if (existingVesting != null) {
+          provider.deleteVestingSchedule(existingVesting.id);
+        }
+        if (hasVesting) {
+          final newVesting = VestingSchedule(
+            transactionId: updatedTransaction.id,
+            startDate: grantDate,
+            vestingPeriodMonths: vestingMonths,
+            cliffMonths: cliffMonths,
+            frequency: vestingFrequency,
+          );
+          provider.addVestingSchedule(newVesting);
+        }
+      } else {
+        // Create new transaction
+        final transaction = Transaction(
+          investorId: selectedInvestorId!,
+          shareClassId: selectedShareClassId!,
+          roundId: selectedRoundId,
+          type: TransactionType.grant,
+          numberOfShares: shares,
+          pricePerShare: price,
+          date: grantDate,
+        );
+
+        provider.addTransaction(transaction);
+
+        // Create vesting schedule if enabled
+        if (hasVesting) {
+          final vestingSchedule = VestingSchedule(
+            transactionId: transaction.id,
+            startDate: grantDate,
+            vestingPeriodMonths: vestingMonths,
+            cliffMonths: cliffMonths,
+            frequency: vestingFrequency,
+          );
+          provider.addVestingSchedule(vestingSchedule);
+        }
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              existingTransaction == null
+                  ? 'Share grant added'
+                  : 'Share grant updated',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildVestingTab(BuildContext context, CoreCapTableProvider provider) {
+    // Gather all vesting items
+    final vestingSchedules = provider.vestingSchedules;
+    final milestones = provider.milestones;
+    final hoursSchedules = provider.hoursVestingSchedules;
+    final grantsWithVesting = provider.optionGrants
+        .where((g) => g.vestingScheduleId != null)
+        .toList();
+
+    final totalItems =
+        vestingSchedules.length +
+        milestones.length +
+        hoursSchedules.length +
+        grantsWithVesting.length;
+
+    if (totalItems == 0) {
+      return const EmptyState(
+        icon: Icons.schedule_outlined,
+        title: 'No vesting schedules',
+        subtitle:
+            'Vesting schedules are created when granting options or allocating shares with vesting terms.',
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary stats
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SummaryCard(
+                label: 'Time-Based',
+                value: vestingSchedules.length.toString(),
+                icon: Icons.schedule,
+                color: Colors.blue,
+              ),
+              if (grantsWithVesting.isNotEmpty)
+                SummaryCard(
+                  label: 'Option Grants',
+                  value: grantsWithVesting.length.toString(),
+                  icon: Icons.card_giftcard,
+                  color: Colors.orange,
+                ),
+              if (milestones.isNotEmpty)
+                SummaryCard(
+                  label: 'Milestone',
+                  value: milestones.length.toString(),
+                  icon: Icons.flag,
+                  color: Colors.purple,
+                ),
+              if (hoursSchedules.isNotEmpty)
+                SummaryCard(
+                  label: 'Hours-Based',
+                  value: hoursSchedules.length.toString(),
+                  icon: Icons.access_time,
+                  color: Colors.teal,
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Time-based vesting schedules
+          if (vestingSchedules.isNotEmpty) ...[
+            _buildVestingSectionHeader(
+              context,
+              'Time-Based Vesting',
+              Icons.access_time,
+              Colors.blue,
+            ),
+            const SizedBox(height: 8),
+            ...vestingSchedules.map((schedule) {
+              final transaction = provider.transactions
+                  .cast<Transaction?>()
+                  .firstWhere(
+                    (t) => t?.id == schedule.transactionId,
+                    orElse: () => null,
+                  );
+              final investor = transaction != null
+                  ? provider.getInvestorById(transaction.investorId)
+                  : null;
+
+              return _VestingListTile(
+                title: investor?.name ?? 'Unknown',
+                subtitle:
+                    '${schedule.vestingPeriodMonths}mo with ${schedule.cliffMonths}mo cliff',
+                progress: schedule.vestingPercentage / 100,
+                color: Colors.blue,
+                isTerminated: schedule.leaverStatus != LeaverStatus.active,
+              );
+            }),
+            const SizedBox(height: 16),
+          ],
+
+          // Option grants with vesting
+          if (grantsWithVesting.isNotEmpty) ...[
+            _buildVestingSectionHeader(
+              context,
+              'Option Grant Vesting',
+              Icons.card_giftcard,
+              Colors.orange,
+            ),
+            const SizedBox(height: 8),
+            ...grantsWithVesting.map((grant) {
+              final investor = provider.getInvestorById(grant.investorId);
+              final vestingPercent = provider.getOptionVestingPercent(grant);
+
+              return _VestingListTile(
+                title: investor?.name ?? 'Unknown',
+                subtitle:
+                    '${Formatters.compactNumber(grant.numberOfOptions)} options @ ${Formatters.currency(grant.strikePrice)}',
+                progress: vestingPercent / 100,
+                color: Colors.orange,
+                isTerminated:
+                    grant.status == OptionGrantStatus.cancelled ||
+                    grant.status == OptionGrantStatus.forfeited,
+              );
+            }),
+            const SizedBox(height: 16),
+          ],
+
+          // Milestone vesting
+          if (milestones.isNotEmpty) ...[
+            _buildVestingSectionHeader(
+              context,
+              'Milestone Vesting',
+              Icons.flag,
+              Colors.purple,
+            ),
+            const SizedBox(height: 8),
+            ...milestones.map((milestone) {
+              final investor = provider.getInvestorById(
+                milestone.investorId ?? '',
+              );
+
+              return _VestingListTile(
+                title: milestone.name,
+                subtitle: investor?.name ?? 'Unknown investor',
+                progress: milestone.progress,
+                color: Colors.purple,
+                isTerminated: milestone.isLapsed,
+              );
+            }),
+            const SizedBox(height: 16),
+          ],
+
+          // Hours-based vesting
+          if (hoursSchedules.isNotEmpty) ...[
+            _buildVestingSectionHeader(
+              context,
+              'Hours-Based Vesting',
+              Icons.timer,
+              Colors.teal,
+            ),
+            const SizedBox(height: 8),
+            ...hoursSchedules.map((hours) {
+              final investor = provider.getInvestorById(hours.investorId);
+
+              return _VestingListTile(
+                title: investor?.name ?? 'Unknown',
+                subtitle:
+                    '${hours.hoursLogged.toStringAsFixed(0)}/${hours.totalHoursCommitment}h logged',
+                progress: hours.progress,
+                color: Colors.teal,
+                isTerminated: false,
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVestingSectionHeader(
+    BuildContext context,
+    String title,
+    IconData icon,
+    Color color,
+  ) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Section header matching main pages (investors, rounds, etc.)
+  SliverToBoxAdapter _buildSectionHeader(
+    BuildContext context,
+    String title,
+    int count,
+  ) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: Row(
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                count.toString(),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Section header with additional badge (e.g., "Draft Round")
+  SliverToBoxAdapter _buildSectionHeaderWithBadge(
+    BuildContext context,
+    String title,
+    int count, {
+    required String badgeText,
+    required Color badgeColor,
+  }) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: Row(
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                count.toString(),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: badgeColor.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                badgeText,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: HSLColor.fromColor(
+                    badgeColor,
+                  ).withLightness(0.35).toColor(),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showWarrantDialog(
+    BuildContext context,
+    CoreCapTableProvider coreProvider,
+    EsopProvider esopProvider, {
+    Warrant? existingWarrant,
+  }) async {
+    final investors = coreProvider.investors;
+    final shareClasses = coreProvider.shareClasses;
+    final rounds = coreProvider.rounds;
+
+    if (investors.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add investors first before issuing warrants'),
+        ),
+      );
+      return;
+    }
+
+    String? selectedInvestorId = existingWarrant?.investorId;
+    String? selectedShareClassId = existingWarrant?.shareClassId;
+    String? selectedRoundId = existingWarrant?.roundId;
+    final numberOfWarrantsController = TextEditingController(
+      text: existingWarrant?.numberOfWarrants.toString() ?? '',
+    );
+    final strikePriceController = TextEditingController(
+      text:
+          existingWarrant?.strikePrice.toString() ??
+          coreProvider.latestSharePrice.toString(),
+    );
+    DateTime issueDate = existingWarrant?.issueDate ?? DateTime.now();
+    DateTime expiryDate =
+        existingWarrant?.expiryDate ??
+        DateTime.now().add(const Duration(days: 365 * 5));
+    final notesController = TextEditingController(
+      text: existingWarrant?.notes ?? '',
+    );
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 12,
+          ),
+          title: Text(
+            existingWarrant == null ? 'Issue Warrant' : 'Edit Warrant',
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: selectedInvestorId,
+                  decoration: const InputDecoration(labelText: 'Investor'),
+                  items: investors
+                      .map(
+                        (inv) => DropdownMenuItem(
+                          value: inv.id,
+                          child: Text(inv.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: existingWarrant == null
+                      ? (value) => setState(() => selectedInvestorId = value)
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedShareClassId,
+                  decoration: const InputDecoration(labelText: 'Share Class'),
+                  items: shareClasses
+                      .map(
+                        (sc) => DropdownMenuItem(
+                          value: sc.id,
+                          child: Text(sc.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => selectedShareClassId = value),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedRoundId,
+                  decoration: const InputDecoration(
+                    labelText: 'Issued in Round (Optional)',
+                    helperText:
+                        'Select if this warrant is part of a funding round',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('No round (standalone warrant)'),
+                    ),
+                    ...rounds.map(
+                      (r) => DropdownMenuItem(
+                        value: r.id,
+                        child: Row(
+                          children: [
+                            Text(r.name),
+                            if (!r.isClosed) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'Draft',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.amber,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: existingWarrant == null
+                      ? (value) => setState(() => selectedRoundId = value)
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: numberOfWarrantsController,
+                  decoration: const InputDecoration(
+                    labelText: 'Number of Warrants',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: strikePriceController,
+                  decoration: const InputDecoration(
+                    labelText: 'Strike Price',
+                    prefixText: '\$',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Issue Date'),
+                  subtitle: Text(DateFormat.yMMMd().format(issueDate)),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: issueDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) {
+                      setState(() => issueDate = picked);
+                    }
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Expiry Date'),
+                  subtitle: Text(DateFormat.yMMMd().format(expiryDate)),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: expiryDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) {
+                      setState(() => expiryDate = picked);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: notesController,
+                  decoration: const InputDecoration(labelText: 'Notes'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (selectedInvestorId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please select an investor')),
+                  );
+                  return;
+                }
+                final numWarrants =
+                    int.tryParse(numberOfWarrantsController.text) ?? 0;
+                final strikePrice =
+                    double.tryParse(strikePriceController.text) ?? 0;
+                if (numWarrants <= 0 || strikePrice <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter valid values')),
+                  );
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: Text(existingWarrant == null ? 'Issue' : 'Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true) {
+      final numWarrants = int.tryParse(numberOfWarrantsController.text) ?? 0;
+      final strikePrice = double.tryParse(strikePriceController.text) ?? 0;
+
+      if (existingWarrant == null) {
+        // Determine status based on round state
+        // If warrant is issued in a draft round, it should be pending
+        WarrantStatus status = WarrantStatus.active;
+        if (selectedRoundId != null) {
+          final round = coreProvider.getRoundById(selectedRoundId!);
+          if (round != null && !round.isClosed) {
+            status = WarrantStatus.pending;
+          }
+        }
+
+        // Create new warrant
+        final warrant = Warrant(
+          investorId: selectedInvestorId!,
+          numberOfWarrants: numWarrants,
+          strikePrice: strikePrice,
+          issueDate: issueDate,
+          expiryDate: expiryDate,
+          shareClassId: selectedShareClassId,
+          roundId: selectedRoundId,
+          status: status,
+          notes: notesController.text.isEmpty ? null : notesController.text,
+        );
+        await esopProvider.addWarrant(warrant);
+      } else {
+        // Update existing warrant
+        final updated = existingWarrant.copyWith(
+          numberOfWarrants: numWarrants,
+          strikePrice: strikePrice,
+          issueDate: issueDate,
+          expiryDate: expiryDate,
+          shareClassId: selectedShareClassId,
+          notes: notesController.text.isEmpty ? null : notesController.text,
+        );
+        await esopProvider.updateWarrant(updated);
+      }
+    }
+  }
+
+  Future<void> _showExerciseWarrantDialog(
+    BuildContext context,
+    CoreCapTableProvider coreProvider,
+    EsopProvider esopProvider,
+    Warrant warrant,
+  ) async {
+    final exerciseCountController = TextEditingController(
+      text: warrant.remainingWarrants.toString(),
+    );
+    DateTime exerciseDate = DateTime.now();
+    final notesController = TextEditingController();
+
+    final sharePrice = coreProvider.latestSharePrice;
+    final isInTheMoney = warrant.isInTheMoney(sharePrice);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final numToExercise = int.tryParse(exerciseCountController.text) ?? 0;
+          final exerciseCost = numToExercise * warrant.strikePrice;
+          final exerciseValue = numToExercise * sharePrice;
+          final exerciseGain = exerciseValue - exerciseCost;
+
+          Widget infoRow(String label, String value, {Color? valueColor}) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(label),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: valueColor,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 12,
+            ),
+            title: const Text('Exercise Warrants'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  infoRow(
+                    'Available',
+                    Formatters.number(warrant.remainingWarrants),
+                  ),
+                  infoRow(
+                    'Strike Price',
+                    Formatters.currency(warrant.strikePrice),
+                  ),
+                  infoRow('Current Price', Formatters.currency(sharePrice)),
+                  infoRow(
+                    'Status',
+                    isInTheMoney ? 'In the Money' : 'Out of the Money',
+                    valueColor: isInTheMoney ? Colors.green : Colors.red,
+                  ),
+                  const Divider(height: 24),
+                  TextFormField(
+                    controller: exerciseCountController,
+                    decoration: InputDecoration(
+                      labelText: 'Number to Exercise',
+                      helperText: 'Max: ${warrant.remainingWarrants}',
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Exercise Date'),
+                    subtitle: Text(DateFormat.yMMMd().format(exerciseDate)),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: exerciseDate,
+                        firstDate: warrant.issueDate,
+                        lastDate: warrant.expiryDate,
+                      );
+                      if (picked != null) {
+                        setState(() => exerciseDate = picked);
+                      }
+                    },
+                  ),
+                  const Divider(height: 24),
+                  Text(
+                    'Exercise Summary',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  infoRow('Exercise Cost', Formatters.currency(exerciseCost)),
+                  infoRow('Market Value', Formatters.currency(exerciseValue)),
+                  infoRow(
+                    'Gain/Loss',
+                    Formatters.currency(exerciseGain),
+                    valueColor: exerciseGain >= 0 ? Colors.green : Colors.red,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes (optional)',
+                    ),
+                    maxLines: 2,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final num = int.tryParse(exerciseCountController.text) ?? 0;
+                  if (num <= 0 || num > warrant.remainingWarrants) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Invalid number of warrants'),
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.pop(context, true);
+                },
+                child: const Text('Exercise'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (result == true) {
+      final numToExercise = int.tryParse(exerciseCountController.text) ?? 0;
+      await esopProvider.exerciseWarrants(
+        warrantId: warrant.id,
+        numberOfWarrants: numToExercise,
+        exerciseDate: exerciseDate,
+        notes: notesController.text.isEmpty ? null : notesController.text,
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteWarrant(
+    BuildContext context,
+    EsopProvider esopProvider,
+    Warrant warrant,
+  ) async {
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: 'Delete Warrant',
+      message: 'Are you sure you want to delete this warrant?',
+      confirmText: 'Delete',
+      isDestructive: true,
+    );
+
+    if (confirmed == true) {
+      await esopProvider.deleteWarrant(warrant.id);
+    }
+  }
+
+  Widget _buildSummaryCards(BuildContext context, EsopProvider esopProvider) {
     final totalGranted = esopProvider.optionGrants.fold(
       0,
       (sum, g) => sum + g.numberOfOptions,
@@ -116,29 +2147,34 @@ class OptionsPage extends StatelessWidget {
       spacing: 12,
       runSpacing: 12,
       children: [
-        ResultChip(
+        SummaryCard(
           label: 'Total Granted',
           value: Formatters.compactNumber(totalGranted),
+          icon: Icons.card_giftcard,
           color: Colors.blue,
         ),
-        ResultChip(
+        SummaryCard(
           label: 'Vested',
           value: Formatters.compactNumber(totalVested),
+          icon: Icons.lock_open,
           color: Colors.indigo,
         ),
-        ResultChip(
+        SummaryCard(
           label: 'Exercised',
           value: Formatters.compactNumber(totalExercised),
+          icon: Icons.check_circle,
           color: Colors.green,
         ),
-        ResultChip(
+        SummaryCard(
           label: 'Outstanding',
           value: Formatters.compactNumber(totalRemaining),
+          icon: Icons.pending,
           color: Colors.orange,
         ),
-        ResultChip(
+        SummaryCard(
           label: 'Vested Value',
           value: Formatters.compactCurrency(vestedIntrinsicValue),
+          icon: Icons.trending_up,
           color: Colors.purple,
         ),
       ],
@@ -184,7 +2220,8 @@ class OptionsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () => _showTopUpDialog(context, coreProvider, esopProvider),
+                onPressed: () =>
+                    _showTopUpDialog(context, coreProvider, esopProvider),
                 icon: const Icon(Icons.add),
                 label: const Text('Create ESOP Pool'),
               ),
@@ -229,12 +2266,14 @@ class OptionsPage extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: 20),
             tooltip: 'Pool Settings',
-            onPressed: () => _showPoolSettingsDialog(context, coreProvider, esopProvider),
+            onPressed: () =>
+                _showPoolSettingsDialog(context, coreProvider, esopProvider),
           ),
           IconButton(
             icon: const Icon(Icons.add_circle_outline, size: 20),
             tooltip: 'Add to Pool',
-            onPressed: () => _showTopUpDialog(context, coreProvider, esopProvider),
+            onPressed: () =>
+                _showTopUpDialog(context, coreProvider, esopProvider),
           ),
         ],
       ),
@@ -428,87 +2467,219 @@ class OptionsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildGrantsList(
+  /// Build a single grant card for use in SliverList
+  Widget _buildGrantCard(
     BuildContext context,
     CoreCapTableProvider coreProvider,
     EsopProvider esopProvider,
-    List<OptionGrant> grants,
-  ) {
-    return Column(
-      children: grants.map((g) {
-        final investor = coreProvider.getInvestorById(g.investorId);
-        final shareClass = coreProvider.getShareClassById(g.shareClassId);
+    OptionGrant grant, {
+    bool isHistory = false,
+  }) {
+    final investor = coreProvider.getInvestorById(grant.investorId);
+    final shareClass = coreProvider.getShareClassById(grant.shareClassId);
+    final vesting = grant.vestingScheduleId != null
+        ? coreProvider.getVestingScheduleById(grant.vestingScheduleId!)
+        : null;
+    final currentPrice = coreProvider.latestSharePrice;
+    final inTheMoney = currentPrice > grant.strikePrice;
 
-        // Use esopProvider methods for consistent vesting calculations
-        final vestedPercent = esopProvider.getOptionVestingPercent(g);
-        final vestedOptions = esopProvider.getVestedOptionsForGrant(g);
-
-        return _OptionGrantTile(
-          grant: g,
-          investorName: investor?.name ?? 'Unknown',
-          investorType: investor?.type,
-          shareClassName: shareClass?.name ?? 'Unknown',
-          vestedOptions: vestedOptions,
-          vestedPercent: vestedPercent,
-          currentPrice: coreProvider.latestSharePrice,
-          onTap: () => _showGrantDetails(context, coreProvider, esopProvider, g),
-        );
-      }).toList(),
+    // Use provider methods for consistent vesting calculations
+    final vestedPercent = coreProvider.getOptionVestingPercent(grant);
+    final vestedOptions = coreProvider.getVestedOptionsForGrant(grant);
+    final exercisableOptions = coreProvider.getExercisableOptionsForGrant(
+      grant,
     );
-  }
+    final vestedIntrinsicValue = coreProvider.getVestedIntrinsicValueForGrant(
+      grant,
+    );
+    final canExercise = grant.canExercise && exercisableOptions > 0;
 
-  Widget _buildHistorySection(
-    BuildContext context,
-    CoreCapTableProvider coreProvider,
-    EsopProvider esopProvider,
-    List<OptionGrant> allGrants,
-  ) {
-    final inactiveGrants = allGrants.where((g) {
-      return g.status == OptionGrantStatus.fullyExercised ||
-          g.status == OptionGrantStatus.expired ||
-          g.status == OptionGrantStatus.cancelled ||
-          g.status == OptionGrantStatus.forfeited;
-    }).toList();
-
-    if (inactiveGrants.isEmpty) return const SizedBox.shrink();
-
-    return SectionCard(
-      title: 'History',
-      trailing: Text(
-        '${inactiveGrants.length} closed',
-        style: Theme.of(context).textTheme.bodySmall,
+    return ExpandableCard(
+      leading: InvestorAvatar(
+        name: investor?.name ?? '?',
+        type: investor?.type,
+        radius: 18,
       ),
-      child: Column(
-        children: inactiveGrants.map((g) {
-          final investor = coreProvider.getInvestorById(g.investorId);
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: g.status.color.withValues(alpha: 0.2),
-              child: Icon(
-                _getStatusIcon(g.status),
-                color: g.status.color,
-                size: 20,
-              ),
-            ),
-            title: Text(investor?.name ?? 'Unknown'),
-            subtitle: Text(
-              '${Formatters.number(g.numberOfOptions)} options • ${g.statusDisplayName}',
-            ),
-            trailing: Text(
-              Formatters.date(g.grantDate),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            onTap: () => _showGrantDetails(context, coreProvider, esopProvider, g),
-          );
-        }).toList(),
+      title: investor?.name ?? 'Unknown',
+      subtitle:
+          '${Formatters.number(grant.numberOfOptions)} options @ ${Formatters.currency(grant.strikePrice)}',
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: grant.status.color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          grant.statusDisplayName,
+          style: TextStyle(
+            color: grant.status.color,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
+      chips: [
+        InfoTag(
+          label: 'Vested',
+          value: '${vestedPercent.toStringAsFixed(0)}%',
+          color: vestedPercent >= 100 ? Colors.green : Colors.orange,
+        ),
+        InfoTag(
+          label: 'Exercised',
+          value: Formatters.compactNumber(grant.exercisedCount),
+          color: Colors.blue,
+        ),
+        InfoTag(
+          label: 'Value',
+          value: Formatters.compactCurrency(grant.intrinsicValue(currentPrice)),
+          color: inTheMoney ? Colors.green : Colors.grey,
+        ),
+      ],
+      expandedContent: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DetailRow(label: 'Share Class', value: shareClass?.name ?? 'Unknown'),
+          DetailRow(
+            label: 'Grant Date',
+            value: Formatters.date(grant.grantDate),
+          ),
+          DetailRow(
+            label: 'Expiry Date',
+            value: Formatters.date(grant.expiryDate),
+          ),
+          const Divider(height: 16),
+          DetailRow(
+            label: 'Vested Options',
+            value: Formatters.number(vestedOptions),
+          ),
+          DetailRow(
+            label: 'Exercisable',
+            value: Formatters.number(exercisableOptions),
+          ),
+          DetailRow(
+            label: 'Exercised',
+            value: Formatters.number(grant.exercisedCount),
+          ),
+          DetailRow(
+            label: 'Remaining',
+            value: Formatters.number(grant.remainingOptions),
+          ),
+          if (vesting != null) ...[
+            const Divider(height: 16),
+            DetailRow(
+              label: 'Vesting Schedule',
+              value:
+                  '${vesting.vestingPeriodMonths ~/ 12}yr / ${vesting.cliffMonths}mo cliff',
+            ),
+            ProgressRow(
+              label: 'Vesting Progress',
+              progress: vestedPercent / 100,
+              color: vestedPercent >= 100 ? Colors.green : Colors.orange,
+            ),
+          ],
+          const Divider(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: inTheMoney
+                  ? Colors.green.withValues(alpha: 0.1)
+                  : Colors.grey.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  inTheMoney ? Icons.trending_up : Icons.trending_flat,
+                  color: inTheMoney ? Colors.green : Colors.grey,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        inTheMoney ? 'In The Money' : 'Out of Money',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: inTheMoney ? Colors.green : Colors.grey,
+                        ),
+                      ),
+                      Text(
+                        'Vested intrinsic value: ${Formatters.currency(vestedIntrinsicValue)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        if (canExercise)
+          FilledButton.icon(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => ExerciseOptionsDialog(
+                  grant: grant,
+                  coreProvider: coreProvider,
+                  esopProvider: esopProvider,
+                  maxExercisable: exercisableOptions,
+                ),
+              );
+            },
+            icon: const Icon(Icons.check_circle, size: 18),
+            label: const Text('Exercise'),
+          ),
+        TextButton.icon(
+          onPressed: grant.exercisedCount == 0
+              ? () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => GrantOptionsDialog(
+                      coreProvider: coreProvider,
+                      esopProvider: esopProvider,
+                      valuationsProvider: context.read<ValuationsProvider>(),
+                      grant: grant,
+                    ),
+                  );
+                }
+              : null,
+          icon: const Icon(Icons.edit, size: 18),
+          label: const Text('Edit'),
+        ),
+        TextButton.icon(
+          onPressed: () async {
+            final confirmed = await showConfirmDialog(
+              context: context,
+              title: 'Delete Grant',
+              message: 'Are you sure you want to delete this option grant?',
+            );
+            if (confirmed && context.mounted) {
+              await esopProvider.deleteOptionGrant(grant.id);
+              if (context.mounted) {
+                showSuccessSnackbar(context, 'Option grant deleted');
+              }
+            }
+          },
+          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+          label: const Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
+      ],
+      accentColor: grant.status.color,
     );
   }
 
   IconData _getStatusIcon(OptionGrantStatus status) {
     switch (status) {
+      case OptionGrantStatus.pending:
+        return Icons.pending_outlined;
       case OptionGrantStatus.active:
         return Icons.card_giftcard;
+      case OptionGrantStatus.pendingExercise:
+        return Icons.hourglass_empty;
       case OptionGrantStatus.partiallyExercised:
         return Icons.timelapse;
       case OptionGrantStatus.fullyExercised:
@@ -549,157 +2720,6 @@ class OptionsPage extends StatelessWidget {
         grant: grant,
         coreProvider: coreProvider,
         esopProvider: esopProvider,
-      ),
-    );
-  }
-}
-
-/// Compact tile for displaying an option grant
-class _OptionGrantTile extends StatelessWidget {
-  final OptionGrant grant;
-  final String investorName;
-  final InvestorType? investorType;
-  final String shareClassName;
-  final int vestedOptions;
-  final double vestedPercent;
-  final double currentPrice;
-  final VoidCallback onTap;
-
-  const _OptionGrantTile({
-    required this.grant,
-    required this.investorName,
-    required this.investorType,
-    required this.shareClassName,
-    required this.vestedOptions,
-    required this.vestedPercent,
-    required this.currentPrice,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final intrinsicValue = grant.intrinsicValue(currentPrice);
-    final inTheMoney = currentPrice > grant.strikePrice;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(
-            alpha: 0.3,
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header row
-            Row(
-              children: [
-                InvestorAvatar(
-                  name: investorName,
-                  type: investorType,
-                  radius: 16,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        investorName,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        '${Formatters.number(grant.numberOfOptions)} options @ ${Formatters.currency(grant.strikePrice)}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right, color: theme.colorScheme.outline),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Stats row
-            Row(
-              children: [
-                _StatChip(
-                  label: 'Vested',
-                  value: '${vestedPercent.toStringAsFixed(0)}%',
-                  color: vestedPercent >= 100 ? Colors.green : Colors.orange,
-                ),
-                const SizedBox(width: 8),
-                _StatChip(
-                  label: 'Exercised',
-                  value: Formatters.compactNumber(grant.exercisedCount),
-                  color: Colors.blue,
-                ),
-                const SizedBox(width: 8),
-                _StatChip(
-                  label: 'Value',
-                  value: Formatters.compactCurrency(intrinsicValue),
-                  color: inTheMoney ? Colors.green : Colors.grey,
-                ),
-                const Spacer(),
-                Text(
-                  'Exp: ${Formatters.date(grant.expiryDate)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-
-  const _StatChip({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$label: ',
-            style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8)),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -770,13 +2790,15 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
       }
     } else {
       // Try to calculate strike price from latest valuation
-      final latestValuation = widget.valuationsProvider.getLatestValuationBeforeDate(DateTime.now());
+      final latestValuation = widget.valuationsProvider
+          .getLatestValuationBeforeDate(DateTime.now());
       final totalShares = widget.provider.totalIssuedShares;
 
       if (latestValuation != null && totalShares > 0) {
         final impliedPrice = latestValuation.preMoneyValue / totalShares;
         _strikePriceController.text = impliedPrice.toStringAsFixed(2);
-        _strikePriceSourceText = 'Strike price from ${DateFormat.yMMMd().format(latestValuation.date)} valuation';
+        _strikePriceSourceText =
+            'Strike price from ${DateFormat.yMMMd().format(latestValuation.date)} valuation';
       } else {
         // Fallback to existing share price
         _strikePriceController.text = widget.provider.latestSharePrice
@@ -823,6 +2845,7 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
     final investors = widget.provider.investors.toList();
 
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: Text(isEditing ? 'Edit Option Grant' : 'Grant Options'),
       content: SizedBox(
         width: 400,
@@ -876,13 +2899,17 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
                           decimal: true,
                         ),
                         suffix: ValuationWizardButton(
-                          currentValuation: double.tryParse(_strikePriceController.text),
+                          currentValuation: double.tryParse(
+                            _strikePriceController.text,
+                          ),
                           onValuationSelected: (value) {
-                            final totalShares = widget.provider.totalIssuedShares;
+                            final totalShares =
+                                widget.provider.totalIssuedShares;
                             if (totalShares > 0) {
                               final impliedPrice = value / totalShares;
                               setState(() {
-                                _strikePriceController.text = impliedPrice.toStringAsFixed(2);
+                                _strikePriceController.text = impliedPrice
+                                    .toStringAsFixed(2);
                               });
                             }
                           },
@@ -994,7 +3021,10 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
     if (selectedClass?.type == ShareClassType.esop) {
       final hasEsopPool = widget.provider.esopPoolChanges.isNotEmpty;
       if (!hasEsopPool) {
-        showErrorSnackbar(context, 'Cannot grant options: ESOP pool has not been created');
+        showErrorSnackbar(
+          context,
+          'Cannot grant options: ESOP pool has not been created',
+        );
         return;
       }
     }
@@ -1084,7 +3114,10 @@ class _GrantOptionsDialogState extends State<GrantOptionsDialog> {
 
       if (mounted) {
         Navigator.pop(context);
-        showSuccessSnackbar(context, 'Granted ${Formatters.number(options)} options');
+        showSuccessSnackbar(
+          context,
+          'Granted ${Formatters.number(options)} options',
+        );
       }
     }
   }
@@ -1297,6 +3330,7 @@ class GrantDetailsDialog extends StatelessWidget {
         : null;
 
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: const Text('Option Grant Details'),
       content: SizedBox(
         width: 400,
@@ -1489,10 +3523,7 @@ class GrantDetailsDialog extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      _buildTransactionTile(
-                        context,
-                        exerciseTransaction,
-                      ),
+                      _buildTransactionTile(context, exerciseTransaction),
                     ],
                   ),
                 ),
@@ -1560,10 +3591,7 @@ class GrantDetailsDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildTransactionTile(
-    BuildContext context,
-    Transaction txn,
-  ) {
+  Widget _buildTransactionTile(BuildContext context, Transaction txn) {
     final theme = Theme.of(context);
     return InkWell(
       onTap: () {
@@ -1664,6 +3692,7 @@ class _ExerciseOptionsDialogState extends State<ExerciseOptionsDialog> {
     final gain = currentValue - totalCost;
 
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: const Text('Exercise Options'),
       content: SizedBox(
         width: 400,
@@ -1802,7 +3831,10 @@ class _ExerciseOptionsDialogState extends State<ExerciseOptionsDialog> {
 
     if (success && mounted) {
       Navigator.pop(context);
-      showSuccessSnackbar(context, 'Exercised ${Formatters.number(options)} options');
+      showSuccessSnackbar(
+        context,
+        'Exercised ${Formatters.number(options)} options',
+      );
     }
   }
 }
@@ -1857,6 +3889,7 @@ class _EditExerciseTransactionDialogState
     final totalCost = shares * widget.grant.strikePrice;
 
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: const Text('Edit Exercise Transaction'),
       content: SizedBox(
         width: 400,
@@ -2106,6 +4139,7 @@ class _PoolChangeDialogState extends State<_PoolChangeDialog> {
     }
 
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: Text(dialogTitle),
       content: SizedBox(
         width: 400,
@@ -2328,6 +4362,7 @@ class _PoolSettingsDialogState extends State<_PoolSettingsDialog> {
     final changes = widget.esopProvider.esopPoolChanges;
 
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: const Text('ESOP Pool Settings'),
       content: SizedBox(
         width: 500,
@@ -2362,15 +4397,21 @@ class _PoolSettingsDialogState extends State<_PoolSettingsDialog> {
                     ),
                     _buildInfoRow(
                       'Allocated (via grants)',
-                      Formatters.number(widget.esopProvider.allocatedEsopShares),
+                      Formatters.number(
+                        widget.esopProvider.allocatedEsopShares,
+                      ),
                     ),
                     _buildInfoRow(
                       'Available',
-                      Formatters.number(widget.esopProvider.unallocatedEsopShares),
+                      Formatters.number(
+                        widget.esopProvider.unallocatedEsopShares,
+                      ),
                     ),
                     _buildInfoRow(
                       'Options Exercised',
-                      Formatters.number(widget.esopProvider.totalOptionsExercised),
+                      Formatters.number(
+                        widget.esopProvider.totalOptionsExercised,
+                      ),
                     ),
                   ],
                 ),
@@ -2619,5 +4660,93 @@ class _PoolSettingsDialogState extends State<_PoolSettingsDialog> {
       Navigator.pop(context);
       showSuccessSnackbar(context, 'ESOP settings updated');
     }
+  }
+}
+
+class _VestingListTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final double progress;
+  final Color color;
+  final bool isTerminated;
+
+  const _VestingListTile({
+    required this.title,
+    required this.subtitle,
+    required this.progress,
+    required this.color,
+    this.isTerminated = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final effectiveColor = isTerminated ? Colors.grey : color;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: isTerminated
+                              ? theme.colorScheme.outline
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: effectiveColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${(progress * 100).toStringAsFixed(0)}%',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: effectiveColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress.clamp(0.0, 1.0),
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                valueColor: AlwaysStoppedAnimation(effectiveColor),
+                minHeight: 6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

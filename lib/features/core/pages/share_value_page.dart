@@ -787,6 +787,8 @@ class _ExitedInvestorCard extends StatelessWidget {
         return 'Grant';
       case TransactionType.optionExercise:
         return 'Option Exercise';
+      case TransactionType.warrantExercise:
+        return 'Warrant Exercise';
       case TransactionType.conversion:
         return 'Convertible Conversion';
       case TransactionType.reequitization:
@@ -1036,6 +1038,8 @@ class _PartialSellerCard extends StatelessWidget {
         return 'Grant';
       case TransactionType.optionExercise:
         return 'Option Exercise';
+      case TransactionType.warrantExercise:
+        return 'Warrant Exercise';
       case TransactionType.conversion:
         return 'Convertible Conversion';
       case TransactionType.reequitization:

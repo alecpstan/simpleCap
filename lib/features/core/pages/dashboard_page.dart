@@ -7,6 +7,11 @@ import '../../../shared/widgets/stat_card.dart';
 import '../../../shared/widgets/help_icon.dart';
 import '../../../shared/widgets/info_widgets.dart';
 import '../../../shared/utils/helpers.dart';
+import '../../valuations/pages/valuations_page.dart';
+import '../../scenarios/pages/scenarios_page.dart';
+import '../../esop/pages/options_page.dart';
+import '../../convertibles/pages/convertibles_page.dart';
+import '../../events/pages/events_timeline_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -34,6 +39,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
             // 2x2 Stats grid
             SliverToBoxAdapter(child: _buildStatsGrid(context, provider)),
+
+            // Quick Access tools section
+            SliverToBoxAdapter(child: _buildQuickAccess(context, provider)),
 
             // Ownership chart section
             SliverToBoxAdapter(child: _buildOwnershipChart(context, provider)),
@@ -147,6 +155,112 @@ class _DashboardPageState extends State<DashboardPage> {
               color: Colors.green,
               subtitle: '${provider.activeInvestors.length} investors',
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickAccess(BuildContext context, CoreCapTableProvider provider) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Text(
+              'TOOLS',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.outline,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = (constraints.maxWidth - 16) / 3;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _QuickAccessCard(
+                    icon: Icons.assessment,
+                    label: 'Valuations',
+                    subtitle: provider.valuations.isEmpty
+                        ? 'Track value'
+                        : '${provider.valuations.length} saved',
+                    color: Colors.blue,
+                    width: cardWidth,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ValuationsPage(),
+                      ),
+                    ),
+                  ),
+                  _QuickAccessCard(
+                    icon: Icons.calculate,
+                    label: 'Scenarios',
+                    subtitle: 'Model exits',
+                    color: Colors.purple,
+                    width: cardWidth,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ScenariosPage(),
+                      ),
+                    ),
+                  ),
+                  _QuickAccessCard(
+                    icon: Icons.card_giftcard,
+                    label: 'Equity Plans',
+                    subtitle: provider.optionGrants.isEmpty
+                        ? 'Options & vesting'
+                        : '${provider.optionGrants.length} grants',
+                    color: Colors.orange,
+                    width: cardWidth,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const OptionsPage(),
+                      ),
+                    ),
+                  ),
+                  _QuickAccessCard(
+                    icon: Icons.receipt_long,
+                    label: 'Convertibles',
+                    subtitle: provider.convertibles.isEmpty
+                        ? 'SAFEs & notes'
+                        : '${provider.convertibles.length} instruments',
+                    color: Colors.teal,
+                    width: cardWidth,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ConvertiblesPage(),
+                      ),
+                    ),
+                  ),
+                  _QuickAccessCard(
+                    icon: Icons.timeline,
+                    label: 'Timeline',
+                    subtitle: 'All events',
+                    color: Colors.indigo,
+                    width: cardWidth,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const EventsTimelinePage(),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -491,6 +605,70 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickAccessCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final double width;
+  final VoidCallback onTap;
+
+  const _QuickAccessCard({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.width,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SizedBox(
+      width: width,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  icon,
+                  color: color,
+                  size: 24,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

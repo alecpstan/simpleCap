@@ -237,6 +237,7 @@ class _UndoConversionDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: const Text('Undo Conversion'),
       content: SizedBox(
         width: 400,
@@ -469,6 +470,7 @@ class _SellSharesDialogState extends State<SellSharesDialog> {
         .toList();
 
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: Text(
         isEditing
             ? 'Edit Sale - ${widget.investor.name}'
@@ -855,6 +857,7 @@ class _GenericTransactionEditDialogState
     final theme = Theme.of(context);
 
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       title: Text('Edit ${widget.transaction.typeDisplayName}'),
       content: SizedBox(
         width: 400,

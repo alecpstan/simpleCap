@@ -10,6 +10,7 @@ import '../models/hours_vesting.dart';
 import '../models/tax_rule.dart';
 import '../../esop/models/option_grant.dart';
 import '../../esop/models/esop_pool_change.dart';
+import '../../esop/models/warrant.dart';
 import '../../valuations/models/valuation.dart';
 import '../../scenarios/models/saved_scenario.dart';
 import '../services/storage_service.dart';
@@ -34,6 +35,7 @@ class CoreCapTableProvider extends ChangeNotifier {
   List<HoursVestingSchedule> _hoursVestingSchedules = [];
   List<TaxRule> _taxRules = [];
   List<OptionGrant> _optionGrants = [];
+  List<Warrant> _warrants = [];
   List<Valuation> _valuations = [];
   List<SavedScenario> _savedScenarios = [];
   String _companyName = 'My Company Pty Ltd';
@@ -65,6 +67,7 @@ class CoreCapTableProvider extends ChangeNotifier {
       List.unmodifiable(_hoursVestingSchedules);
   List<TaxRule> get taxRules => List.unmodifiable(_taxRules);
   List<OptionGrant> get optionGrants => List.unmodifiable(_optionGrants);
+  List<Warrant> get warrants => List.unmodifiable(_warrants);
   List<Valuation> get valuations => List.unmodifiable(
     _valuations..sort((a, b) => b.date.compareTo(a.date)), // Newest first
   );
@@ -106,30 +109,54 @@ class CoreCapTableProvider extends ChangeNotifier {
     return sorted;
   }
 
+  // === Draft Behavior Helpers ===
+
+  /// Check if a transaction is "active" (counts in cap table calculations).
+  /// A transaction is active if:
+  /// - It has no round (secondary sales, buybacks, etc.) - always active
+  /// - Its round is closed (isClosed == true)
+  /// Transactions from open/draft rounds do NOT count in the cap table.
+  bool _isTransactionActive(Transaction t) {
+    if (t.roundId == null) return true; // No round = always active
+    final round = getRoundById(t.roundId!);
+    if (round == null) return true; // Round not found = treat as active
+    return round.isClosed;
+  }
+
+  /// Returns transactions that are "active" (from closed rounds or no round).
+  /// Use this for all cap table calculations instead of _transactions directly.
+  List<Transaction> get _activeTransactions {
+    return _transactions.where(_isTransactionActive).toList();
+  }
+
+  /// Returns all transactions (including draft) - use sparingly
+  List<Transaction> get allTransactions => List.unmodifiable(_transactions);
+
   String get companyName => _companyName;
   bool get isLoading => _isLoading;
   Map<String, double> get tableColumnWidths =>
       Map.unmodifiable(_tableColumnWidths);
 
   // Calculated properties - now transaction-based
+  // NOTE: All these use _activeTransactions to exclude draft round transactions
 
-  /// Total shares ever issued (sum of all acquisition transactions)
+  /// Total shares ever issued (sum of all acquisition transactions from closed rounds)
   int get totalIssuedShares {
-    return _transactions
+    return _activeTransactions
         .where((t) => t.isAcquisition)
         .fold(0, (sum, t) => sum + t.numberOfShares);
   }
 
-  /// Total shares disposed of (sum of all disposal transactions)
+  /// Total shares disposed of (sum of all disposal transactions from closed rounds)
   int get totalSharesSold {
-    return _transactions
+    return _activeTransactions
         .where((t) => t.isDisposal)
         .fold(0, (sum, t) => sum + t.numberOfShares);
   }
 
-  /// Net current issued shares
+  /// Net current issued shares (excludes draft round transactions)
   int get totalCurrentShares {
-    return _transactions.fold(0, (sum, t) => sum + t.sharesDelta);
+    return _activeTransactions.fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
   /// Shares that would be issued if all convertibles converted (Task 1.2 - Fixed)
@@ -202,14 +229,21 @@ class CoreCapTableProvider extends ChangeNotifier {
               g.status != OptionGrantStatus.cancelled &&
               g.status != OptionGrantStatus.forfeited,
         )
-        .fold(0, (sum, g) => sum + g.numberOfOptions - g.cancelledCount - g.exercisedCount);
+        .fold(
+          0,
+          (sum, g) =>
+              sum + g.numberOfOptions - g.cancelledCount - g.exercisedCount,
+        );
   }
 
   /// Fully diluted share count
   /// Includes: current shares + convertible estimates + unexercised options + unallocated ESOP pool
   /// Note: exercised options are already in totalCurrentShares, so not double-counted
   int get fullyDilutedShares {
-    return totalCurrentShares + convertibleShares + unexercisedOptionGrants + unallocatedEsopShares;
+    return totalCurrentShares +
+        convertibleShares +
+        unexercisedOptionGrants +
+        unallocatedEsopShares;
   }
 
   /// Calculate ESOP pool size based on dilution method (Task 2.1)
@@ -259,9 +293,9 @@ class CoreCapTableProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Total amount invested (sum of acquisition transaction amounts)
+  /// Total amount invested (sum of acquisition transaction amounts from closed rounds)
   double get totalInvested {
-    return _transactions
+    return _activeTransactions
         .where((t) => t.isAcquisition)
         .fold(0.0, (sum, t) => sum + t.totalAmount);
   }
@@ -281,16 +315,18 @@ class CoreCapTableProvider extends ChangeNotifier {
   }
 
   double get latestValuation {
-    if (_rounds.isEmpty) return 0;
-    final sortedRounds = List<InvestmentRound>.from(_rounds)
-      ..sort((a, b) => b.date.compareTo(a.date));
-    final latestRound = sortedRounds.first;
+    // Only consider closed rounds for valuation calculations
+    final closedRounds = _rounds.where((r) => r.isClosed).toList();
+    if (closedRounds.isEmpty) return 0;
+    closedRounds.sort((a, b) => b.date.compareTo(a.date));
+    final latestRound = closedRounds.first;
     final amountRaised = getAmountRaisedByRound(latestRound.id);
     return latestRound.preMoneyValuation + amountRaised;
   }
 
   double get latestSharePrice {
-    if (_rounds.isEmpty || totalCurrentShares == 0) return 0;
+    final closedRounds = _rounds.where((r) => r.isClosed).toList();
+    if (closedRounds.isEmpty || totalCurrentShares == 0) return 0;
     return latestValuation / totalCurrentShares;
   }
 
@@ -331,6 +367,9 @@ class CoreCapTableProvider extends ChangeNotifier {
           .toList();
       _optionGrants = (data['optionGrants'] as List? ?? [])
           .map((e) => OptionGrant.fromJson(e))
+          .toList();
+      _warrants = (data['warrants'] as List? ?? [])
+          .map((e) => Warrant.fromJson(e))
           .toList();
       _valuations = (data['valuations'] as List? ?? [])
           .map((e) => Valuation.fromJson(e))
@@ -412,6 +451,7 @@ class CoreCapTableProvider extends ChangeNotifier {
       hoursVestingSchedules: _hoursVestingSchedules,
       taxRules: _taxRules,
       optionGrants: _optionGrants,
+      warrants: _warrants,
       valuations: _valuations,
       savedScenarios: _savedScenarios,
       esopPoolChanges: _esopPoolChanges,
@@ -448,11 +488,13 @@ class CoreCapTableProvider extends ChangeNotifier {
   /// Updates internal state and persists to storage.
   Future<void> syncEsopData({
     required List<OptionGrant> optionGrants,
+    required List<Warrant> warrants,
     required List<EsopPoolChange> esopPoolChanges,
     required EsopDilutionMethod esopDilutionMethod,
     required double esopPoolPercent,
   }) async {
     _optionGrants = List.from(optionGrants);
+    _warrants = List.from(warrants);
     _esopPoolChanges = List.from(esopPoolChanges);
     _esopDilutionMethod = esopDilutionMethod;
     _esopPoolPercent = esopPoolPercent;
@@ -472,9 +514,7 @@ class CoreCapTableProvider extends ChangeNotifier {
 
   /// Called by ValuationsProvider when valuations data changes.
   /// Updates internal state and persists to storage.
-  Future<void> syncValuationsData({
-    required List<Valuation> valuations,
-  }) async {
+  Future<void> syncValuationsData({required List<Valuation> valuations}) async {
     _valuations = List.from(valuations);
     await _save();
     notifyListeners();
@@ -617,6 +657,157 @@ class CoreCapTableProvider extends ChangeNotifier {
     }
   }
 
+  /// Toggle round status between open (draft) and closed.
+  /// When closing a round:
+  /// - Pending conversions become finalized (pendingConversion → converted)
+  /// - Pending warrants become active (pending → active)
+  /// - All transactions in the round become "active" and count in cap table
+  /// When reopening a round:
+  /// - Conversions revert to pending (converted → pendingConversion)
+  /// - Warrants revert to pending (active → pending) if issued in this round
+  /// - Transactions move back to draft and don't count in cap table
+  Future<void> toggleRoundStatus(String roundId) async {
+    final index = _rounds.indexWhere((r) => r.id == roundId);
+    if (index == -1) return;
+
+    final round = _rounds[index];
+    final newIsClosed = !round.isClosed;
+
+    if (newIsClosed) {
+      // Closing the round: finalize any pending conversions
+      for (int i = 0; i < _convertibles.length; i++) {
+        final c = _convertibles[i];
+        if (c.conversionRoundId == roundId &&
+            c.status == ConvertibleStatus.pendingConversion) {
+          _convertibles[i] = c.copyWith(status: ConvertibleStatus.converted);
+        }
+      }
+
+      // Closing the round: activate pending warrants issued in this round
+      for (int i = 0; i < _warrants.length; i++) {
+        final w = _warrants[i];
+        if (w.roundId == roundId && w.status == WarrantStatus.pending) {
+          _warrants[i] = w.copyWith(status: WarrantStatus.active);
+        }
+      }
+
+      // Closing the round: activate pending option grants issued in this round
+      for (int i = 0; i < _optionGrants.length; i++) {
+        final g = _optionGrants[i];
+        if (g.roundId == roundId && g.status == OptionGrantStatus.pending) {
+          _optionGrants[i] = g.copyWith(status: OptionGrantStatus.active);
+        }
+      }
+
+      // Closing the round: finalize pending warrant exercises
+      for (int i = 0; i < _warrants.length; i++) {
+        final w = _warrants[i];
+        if (w.status == WarrantStatus.pendingExercise &&
+            w.exerciseTransactionId != null) {
+          // Check if this warrant's exercise transaction is in this round
+          final exerciseTx = getTransactionById(w.exerciseTransactionId!);
+          if (exerciseTx != null && exerciseTx.roundId == roundId) {
+            // Finalize the exercise
+            final newStatus = w.exercisedCount >= w.numberOfWarrants
+                ? WarrantStatus.fullyExercised
+                : WarrantStatus.partiallyExercised;
+            _warrants[i] = w.copyWith(status: newStatus);
+          }
+        }
+      }
+
+      // Closing the round: finalize pending option exercises
+      for (int i = 0; i < _optionGrants.length; i++) {
+        final g = _optionGrants[i];
+        if (g.status == OptionGrantStatus.pendingExercise &&
+            g.exerciseTransactionId != null) {
+          // Check if this grant's exercise transaction is in this round
+          final exerciseTx = getTransactionById(g.exerciseTransactionId!);
+          if (exerciseTx != null && exerciseTx.roundId == roundId) {
+            // Finalize the exercise
+            final newStatus = g.exercisedCount >= g.numberOfOptions
+                ? OptionGrantStatus.fullyExercised
+                : OptionGrantStatus.partiallyExercised;
+            _optionGrants[i] = g.copyWith(status: newStatus);
+          }
+        }
+      }
+    } else {
+      // Reopening the round: revert conversions back to pending
+      // (keeps the conversion data but shows it's not finalized)
+      for (int i = 0; i < _convertibles.length; i++) {
+        final c = _convertibles[i];
+        if (c.conversionRoundId == roundId &&
+            (c.status == ConvertibleStatus.converted ||
+                c.status == ConvertibleStatus.pendingConversion)) {
+          _convertibles[i] = c.copyWith(
+            status: ConvertibleStatus.pendingConversion,
+          );
+        }
+      }
+
+      // Reopening the round: revert warrants back to pending
+      // Only revert warrants that were issued in this round and haven't been exercised
+      for (int i = 0; i < _warrants.length; i++) {
+        final w = _warrants[i];
+        if (w.roundId == roundId &&
+            (w.status == WarrantStatus.active ||
+                w.status == WarrantStatus.pending)) {
+          _warrants[i] = w.copyWith(status: WarrantStatus.pending);
+        }
+      }
+
+      // Reopening the round: revert option grants back to pending
+      // Only revert grants that were issued in this round and haven't been exercised
+      for (int i = 0; i < _optionGrants.length; i++) {
+        final g = _optionGrants[i];
+        if (g.roundId == roundId &&
+            (g.status == OptionGrantStatus.active ||
+                g.status == OptionGrantStatus.pending)) {
+          _optionGrants[i] = g.copyWith(status: OptionGrantStatus.pending);
+        }
+      }
+
+      // Reopening the round: revert warrant exercises back to pendingExercise
+      for (int i = 0; i < _warrants.length; i++) {
+        final w = _warrants[i];
+        if (w.exerciseTransactionId != null &&
+            (w.status == WarrantStatus.partiallyExercised ||
+                w.status == WarrantStatus.fullyExercised ||
+                w.status == WarrantStatus.pendingExercise)) {
+          // Check if this warrant's exercise transaction is in this round
+          final exerciseTx = getTransactionById(w.exerciseTransactionId!);
+          if (exerciseTx != null && exerciseTx.roundId == roundId) {
+            _warrants[i] = w.copyWith(status: WarrantStatus.pendingExercise);
+          }
+        }
+      }
+
+      // Reopening the round: revert option exercises back to pendingExercise
+      for (int i = 0; i < _optionGrants.length; i++) {
+        final g = _optionGrants[i];
+        if (g.exerciseTransactionId != null &&
+            (g.status == OptionGrantStatus.partiallyExercised ||
+                g.status == OptionGrantStatus.fullyExercised ||
+                g.status == OptionGrantStatus.pendingExercise)) {
+          // Check if this grant's exercise transaction is in this round
+          final exerciseTx = getTransactionById(g.exerciseTransactionId!);
+          if (exerciseTx != null && exerciseTx.roundId == roundId) {
+            _optionGrants[i] = g.copyWith(
+              status: OptionGrantStatus.pendingExercise,
+            );
+          }
+        }
+      }
+    }
+
+    // Update the round status
+    _rounds[index] = round.copyWith(isClosed: newIsClosed);
+
+    await _save();
+    notifyListeners();
+  }
+
   Future<void> deleteRound(String id) async {
     _rounds.removeWhere((r) => r.id == id);
     // Remove all transactions for this round
@@ -629,6 +820,97 @@ class CoreCapTableProvider extends ChangeNotifier {
     _vestingSchedules.removeWhere(
       (v) => roundTransactionIds.contains(v.transactionId),
     );
+
+    // Revert convertibles that were pending/converted in this round back to outstanding
+    for (int i = 0; i < _convertibles.length; i++) {
+      final c = _convertibles[i];
+      if (c.conversionRoundId == id &&
+          (c.status == ConvertibleStatus.pendingConversion ||
+              c.status == ConvertibleStatus.converted)) {
+        _convertibles[i] = ConvertibleInstrument(
+          id: c.id,
+          investorId: c.investorId,
+          type: c.type,
+          principalAmount: c.principalAmount,
+          interestRate: c.interestRate,
+          discountPercent: c.discountPercent,
+          valuationCap: c.valuationCap,
+          maturityDate: c.maturityDate,
+          issueDate: c.issueDate,
+          hasMFN: c.hasMFN,
+          hasProRata: c.hasProRata,
+          mfnUpgradeHistory: c.mfnUpgradeHistory,
+          status: ConvertibleStatus.outstanding,
+          // Clear conversion data
+          conversionRoundId: null,
+          conversionShares: null,
+          conversionPricePerShare: null,
+          conversionDate: null,
+          includeInFD: c.includeInFD,
+          notes: c.notes,
+        );
+      }
+    }
+
+    // Remove warrants that were issued in this round
+    _warrants.removeWhere((w) => w.roundId == id);
+
+    // Remove option grants that were issued in this round
+    _optionGrants.removeWhere((g) => g.roundId == id);
+
+    // Revert warrant exercises that were in this round
+    for (int i = 0; i < _warrants.length; i++) {
+      final w = _warrants[i];
+      if (w.exerciseTransactionId != null &&
+          roundTransactionIds.contains(w.exerciseTransactionId)) {
+        // Create new instance to clear nullable exerciseTransactionId
+        _warrants[i] = Warrant(
+          id: w.id,
+          investorId: w.investorId,
+          roundId: w.roundId,
+          numberOfWarrants: w.numberOfWarrants,
+          strikePrice: w.strikePrice,
+          issueDate: w.issueDate,
+          expiryDate: w.expiryDate,
+          exercisedCount: 0,
+          cancelledCount: w.cancelledCount,
+          exerciseTransactionId: null,
+          status: WarrantStatus.active,
+          sourceConvertibleId: w.sourceConvertibleId,
+          coveragePercent: w.coveragePercent,
+          shareClassId: w.shareClassId,
+          notes: w.notes,
+        );
+      }
+    }
+
+    // Revert option grant exercises that were in this round
+    for (int i = 0; i < _optionGrants.length; i++) {
+      final g = _optionGrants[i];
+      if (g.exerciseTransactionId != null &&
+          roundTransactionIds.contains(g.exerciseTransactionId)) {
+        // Create new instance to clear nullable exerciseTransactionId
+        _optionGrants[i] = OptionGrant(
+          id: g.id,
+          investorId: g.investorId,
+          shareClassId: g.shareClassId,
+          numberOfOptions: g.numberOfOptions,
+          strikePrice: g.strikePrice,
+          grantDate: g.grantDate,
+          expiryDate: g.expiryDate,
+          status: OptionGrantStatus.active,
+          exercisedCount: 0,
+          cancelledCount: g.cancelledCount,
+          vestingScheduleId: g.vestingScheduleId,
+          exerciseTransactionId: null,
+          notes: g.notes,
+          earlyExerciseAllowed: g.earlyExerciseAllowed,
+          essCompliant: g.essCompliant,
+          roundId: g.roundId,
+        );
+      }
+    }
+
     await _save();
     notifyListeners();
   }
@@ -698,25 +980,35 @@ class CoreCapTableProvider extends ChangeNotifier {
 
   /// Get total issued shares before a specific round
   /// Uses round order to determine which rounds came before
+  /// Only counts transactions from CLOSED rounds (excludes draft rounds)
   int getIssuedSharesBeforeRound(String roundId) {
     final targetRound = getRoundById(roundId);
     if (targetRound == null) return totalCurrentShares;
 
-    // Get all rounds that came before this one (by order)
-    final priorRoundIds = _rounds
-        .where((r) => r.order < targetRound.order)
+    // Get all CLOSED rounds that came before this one (by order)
+    final priorClosedRoundIds = _rounds
+        .where((r) => r.order < targetRound.order && r.isClosed)
         .map((r) => r.id)
         .toSet();
 
-    // Sum shares from transactions in prior rounds
+    // Sum shares from transactions in prior closed rounds
     // Also include any transactions not linked to a round (secondary, grants, etc.)
     // that occurred before this round's date
     return _transactions
         .where(
           (t) =>
-              (t.roundId != null && priorRoundIds.contains(t.roundId)) ||
+              (t.roundId != null && priorClosedRoundIds.contains(t.roundId)) ||
               (t.roundId == null && t.date.isBefore(targetRound.date)),
         )
+        .fold(0, (sum, t) => sum + t.sharesDelta);
+  }
+
+  /// Get total issued shares before a specific date.
+  /// Useful for calculating implied price before a round is created.
+  /// Only counts transactions from closed rounds
+  int getIssuedSharesBeforeDate(DateTime date) {
+    return _activeTransactions
+        .where((t) => t.date.isBefore(date))
         .fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
@@ -859,8 +1151,9 @@ class CoreCapTableProvider extends ChangeNotifier {
   }
 
   /// Get total vested shares for an investor across all their transactions
+  /// Only considers transactions from closed rounds
   int getVestedSharesByInvestor(String investorId) {
-    final investorTransactions = _transactions
+    final investorTransactions = _activeTransactions
         .where((t) => t.investorId == investorId && t.isAcquisition)
         .toList();
 
@@ -874,7 +1167,7 @@ class CoreCapTableProvider extends ChangeNotifier {
     }
 
     // Subtract sold shares (disposals reduce vested count)
-    final soldShares = _transactions
+    final soldShares = _activeTransactions
         .where((t) => t.investorId == investorId && t.isDisposal)
         .fold(0, (sum, t) => sum + t.numberOfShares);
 
@@ -888,9 +1181,9 @@ class CoreCapTableProvider extends ChangeNotifier {
     return (currentShares - vestedShares).clamp(0, currentShares);
   }
 
-  /// Check if an investor has any vesting schedules
+  /// Check if an investor has any vesting schedules (from closed rounds only)
   bool hasVestingSchedules(String investorId) {
-    final investorTransactions = _transactions
+    final investorTransactions = _activeTransactions
         .where((t) => t.investorId == investorId && t.isAcquisition)
         .toList();
 
@@ -1016,6 +1309,46 @@ class CoreCapTableProvider extends ChangeNotifier {
     return activeOptionGrants.fold(
       0.0,
       (sum, g) => sum + getVestedIntrinsicValueForGrant(g),
+    );
+  }
+
+  // === Warrant Read-Only Helpers (data synced from EsopProvider) ===
+
+  Warrant? getWarrantById(String id) {
+    try {
+      return _warrants.firstWhere((w) => w.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<Warrant> getWarrantsByInvestor(String investorId) {
+    return _warrants.where((w) => w.investorId == investorId).toList();
+  }
+
+  /// Active warrants (not pending, expired, cancelled, or fully exercised)
+  /// Excludes pending warrants (issued in draft rounds)
+  List<Warrant> get activeWarrants => _warrants
+      .where(
+        (w) =>
+            w.status == WarrantStatus.active ||
+            w.status == WarrantStatus.partiallyExercised,
+      )
+      .toList();
+
+  /// Pending warrants (issued in draft rounds, not yet active)
+  List<Warrant> get pendingWarrants =>
+      _warrants.where((w) => w.status == WarrantStatus.pending).toList();
+
+  /// Total warrant shares that could be exercised
+  int get totalWarrantShares =>
+      _warrants.fold(0, (sum, w) => sum + w.remainingWarrants);
+
+  /// Total intrinsic value of all active warrants
+  double get totalWarrantIntrinsicValue {
+    return activeWarrants.fold(
+      0.0,
+      (sum, w) => sum + w.intrinsicValue(latestSharePrice),
     );
   }
 
@@ -1284,8 +1617,8 @@ class CoreCapTableProvider extends ChangeNotifier {
   Map<String, double> getOwnershipByShareClass({bool includeEsopPool = true}) {
     final Map<String, int> sharesByClass = {};
 
-    // Use transactions to calculate current shares by class
-    for (var transaction in _transactions) {
+    // Use active transactions only (exclude draft rounds)
+    for (var transaction in _activeTransactions) {
       sharesByClass[transaction.shareClassId] =
           (sharesByClass[transaction.shareClassId] ?? 0) +
           transaction.sharesDelta;
@@ -1302,16 +1635,16 @@ class CoreCapTableProvider extends ChangeNotifier {
     );
   }
 
-  /// Get total shares ever acquired by investor (ignoring sales)
+  /// Get total shares ever acquired by investor (ignoring sales, from closed rounds only)
   int getSharesByInvestor(String investorId) {
-    return _transactions
+    return _activeTransactions
         .where((t) => t.investorId == investorId && t.isAcquisition)
         .fold(0, (sum, t) => sum + t.numberOfShares);
   }
 
-  /// Get total amount invested by investor
+  /// Get total amount invested by investor (from closed rounds only)
   double getInvestmentByInvestor(String investorId) {
-    return _transactions
+    return _activeTransactions
         .where((t) => t.investorId == investorId && t.isAcquisition)
         .fold(0.0, (sum, t) => sum + t.totalAmount);
   }
@@ -1325,15 +1658,15 @@ class CoreCapTableProvider extends ChangeNotifier {
     return getCurrentSharesByInvestor(investorId) * latestSharePrice;
   }
 
-  /// Get voting power for an investor (shares × voting multiplier)
+  /// Get voting power for an investor (shares × voting multiplier, from closed rounds only)
   double getVotingPowerByInvestor(String investorId) {
     double votes = 0;
-    final investorTransactions = _transactions.where(
+    final investorTransactions = _activeTransactions.where(
       (t) => t.investorId == investorId && t.isAcquisition,
     );
 
-    // Sum shares sold (disposals)
-    final soldShares = _transactions
+    // Sum shares sold (disposals) from active transactions only
+    final soldShares = _activeTransactions
         .where((t) => t.investorId == investorId && t.isDisposal)
         .fold(0, (sum, t) => sum + t.numberOfShares);
 
@@ -1371,10 +1704,11 @@ class CoreCapTableProvider extends ChangeNotifier {
   }
 
   /// Calculate accrued dividends for an investor based on share class dividend rates
+  /// Only considers transactions from closed rounds
   double getAccruedDividendsByInvestor(String investorId) {
     double totalDividends = 0;
 
-    final investorTransactions = _transactions
+    final investorTransactions = _activeTransactions
         .where((t) => t.investorId == investorId && t.isAcquisition)
         .toList();
 
@@ -1438,7 +1772,21 @@ class CoreCapTableProvider extends ChangeNotifier {
     _rounds = [];
     _vestingSchedules = [];
     _transactions = [];
+    _convertibles = [];
+    _milestones = [];
+    _hoursVestingSchedules = [];
+    _taxRules = [];
+    _optionGrants = [];
+    _warrants = [];
+    _valuations = [];
+    _savedScenarios = [];
+    _esopPoolChanges = [];
+    _tableColumnWidths = {};
     _companyName = 'My Company Pty Ltd';
+    _esopDilutionMethod = EsopDilutionMethod.preRoundCap;
+    _esopPoolPercent = 10.0;
+    _authorizedShares = 0;
+    _showFullyDiluted = false;
     await _storageService.clearData();
     await loadData(); // Reinitialize defaults
   }
@@ -1554,7 +1902,8 @@ class CoreCapTableProvider extends ChangeNotifier {
     await addTransaction(transaction);
   }
 
-  /// Get transactions for an investor, sorted chronologically
+  /// Get ALL transactions for an investor, sorted chronologically
+  /// Includes transactions from draft rounds - use for display/history purposes
   List<Transaction> getTransactionsByInvestor(String investorId) {
     final investorTransactions = _transactions
         .where((t) => t.investorId == investorId)
@@ -1563,8 +1912,18 @@ class CoreCapTableProvider extends ChangeNotifier {
     return investorTransactions;
   }
 
-  /// Get acquisition transactions (purchases, grants, etc.) for an investor
-  /// This replaces the old getShareholdingsByInvestor method
+  /// Get ACTIVE transactions for an investor (from closed rounds only)
+  /// Use for calculations that should exclude draft round transactions
+  List<Transaction> getActiveTransactionsByInvestor(String investorId) {
+    final investorTransactions = _activeTransactions
+        .where((t) => t.investorId == investorId)
+        .toList();
+    investorTransactions.sort((a, b) => a.date.compareTo(b.date));
+    return investorTransactions;
+  }
+
+  /// Get ALL acquisition transactions (purchases, grants, etc.) for an investor
+  /// Includes draft rounds - use for display/history purposes
   List<Transaction> getAcquisitionsByInvestor(String investorId) {
     return _transactions
         .where((t) => t.investorId == investorId && t.isAcquisition)
@@ -1572,8 +1931,17 @@ class CoreCapTableProvider extends ChangeNotifier {
       ..sort((a, b) => a.date.compareTo(b.date));
   }
 
-  /// Get sale/disposal transactions for an investor
-  /// This replaces the old getSalesByInvestor method
+  /// Get ACTIVE acquisition transactions for an investor (from closed rounds only)
+  /// Use for calculations that should exclude draft round transactions
+  List<Transaction> getActiveAcquisitionsByInvestor(String investorId) {
+    return _activeTransactions
+        .where((t) => t.investorId == investorId && t.isAcquisition)
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+  }
+
+  /// Get ALL sale/disposal transactions for an investor
+  /// Includes draft rounds - use for display/history purposes
   List<Transaction> getSalesByInvestor(String investorId) {
     return _transactions
         .where((t) => t.investorId == investorId && t.isDisposal)
@@ -1581,34 +1949,35 @@ class CoreCapTableProvider extends ChangeNotifier {
       ..sort((a, b) => a.date.compareTo(b.date));
   }
 
-  /// Get total shares sold by an investor (using transactions)
+  /// Get total shares sold by an investor (from closed rounds only)
   int getSharesSoldByInvestor(String investorId) {
-    return _transactions
+    return _activeTransactions
         .where((t) => t.investorId == investorId && t.isDisposal)
         .fold(0, (sum, t) => sum + t.numberOfShares);
   }
 
-  /// Get total proceeds from sales for an investor
+  /// Get total proceeds from sales for an investor (from closed rounds only)
   double getSaleProceedsByInvestor(String investorId) {
-    return _transactions
+    return _activeTransactions
         .where((t) => t.investorId == investorId && t.isDisposal)
         .fold(0.0, (sum, t) => sum + t.totalAmount);
   }
 
-  /// Get current shares by stepping through all transactions chronologically.
+  /// Get current shares by stepping through all active transactions chronologically.
   /// Handles buy -> sell -> buy scenarios correctly.
+  /// Excludes transactions from draft/open rounds.
   int getCurrentSharesByInvestor(String investorId) {
-    return _transactions
+    return _activeTransactions
         .where((t) => t.investorId == investorId)
         .fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
-  /// Get current shares by share class for an investor
+  /// Get current shares by share class for an investor (from closed rounds only)
   int getCurrentSharesByInvestorAndClass(
     String investorId,
     String shareClassId,
   ) {
-    return _transactions
+    return _activeTransactions
         .where(
           (t) => t.investorId == investorId && t.shareClassId == shareClassId,
         )
@@ -1660,16 +2029,18 @@ class CoreCapTableProvider extends ChangeNotifier {
   }
 
   /// Get shares owned by investor at a specific date
-  /// Sums all transactions (acquisitions and sales) up to and including the date
+  /// Sums all active transactions (acquisitions and sales) up to and including the date
+  /// Excludes transactions from draft/open rounds
   int getSharesAtDate(String investorId, DateTime date) {
     // Normalize to end of day to include all transactions on that date
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
-    return _transactions
+    return _activeTransactions
         .where((t) => t.investorId == investorId && !t.date.isAfter(endOfDay))
         .fold(0, (sum, t) => sum + t.sharesDelta);
   }
 
   /// Get shares owned by investor for a specific share class at a specific date
+  /// Excludes transactions from draft/open rounds
   int getSharesAtDateByClass(
     String investorId,
     String shareClassId,
@@ -1677,7 +2048,7 @@ class CoreCapTableProvider extends ChangeNotifier {
   ) {
     // Normalize to end of day to include all transactions on that date
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
-    return _transactions
+    return _activeTransactions
         .where(
           (t) =>
               t.investorId == investorId &&
@@ -1709,12 +2080,13 @@ class CoreCapTableProvider extends ChangeNotifier {
   }
 
   /// Calculate realized profit (from sales only) using transactions
+  /// Only considers transactions from closed rounds
   double getRealizedProfitByInvestor(String investorId) {
     final soldShares = getSharesSoldByInvestor(investorId);
     if (soldShares == 0) return 0;
 
     // Calculate cost basis using weighted average from acquisition transactions
-    final acquisitions = _transactions.where(
+    final acquisitions = _activeTransactions.where(
       (t) => t.investorId == investorId && t.isAcquisition,
     );
 
