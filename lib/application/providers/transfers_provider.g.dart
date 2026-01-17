@@ -6,9 +6,10 @@ part of 'transfers_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$transfersStreamHash() => r'3b820abd044ff6b5ce0e417d519ef56b795d4579';
+String _$transfersStreamHash() => r'dcf1cba45d57a26abf30fd89e0dd6d1f10756197';
 
 /// Watches all transfers for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [transfersStream].
 @ProviderFor(transfersStream)
@@ -199,23 +200,5 @@ final transfersSummaryProvider = AutoDisposeProvider<TransfersSummary>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef TransfersSummaryRef = AutoDisposeProviderRef<TransfersSummary>;
-String _$transferMutationsHash() => r'da7d076bb0707eeecfc51bf98591c8814ca722ee';
-
-/// Notifier for transfer mutations.
-///
-/// Copied from [TransferMutations].
-@ProviderFor(TransferMutations)
-final transferMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<TransferMutations, void>.internal(
-      TransferMutations.new,
-      name: r'transferMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$transferMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$TransferMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

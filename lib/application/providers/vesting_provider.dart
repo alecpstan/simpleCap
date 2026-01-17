@@ -1,23 +1,18 @@
-import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/constants/constants.dart';
 import '../../domain/services/vesting_calculator.dart';
 import '../../infrastructure/database/database.dart';
-import 'database_provider.dart';
-import 'company_provider.dart';
+import 'projection_adapters.dart';
 
 part 'vesting_provider.g.dart';
 
 /// Watches all vesting schedules for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 @riverpod
 Stream<List<VestingSchedule>> vestingSchedulesStream(
   VestingSchedulesStreamRef ref,
 ) {
-  final companyId = ref.watch(currentCompanyIdProvider);
-  if (companyId == null) return Stream.value([]);
-
-  final db = ref.watch(databaseProvider);
-  return db.watchVestingSchedules(companyId);
+  return ref.watch(unifiedVestingSchedulesStreamProvider.stream);
 }
 
 /// Gets a specific vesting schedule by ID.
@@ -184,114 +179,6 @@ class VestingStatus {
     if (cliffDate == null || isCliffMet) return null;
     final days = cliffDate!.difference(DateTime.now()).inDays;
     return days > 0 ? days : 0;
-  }
-}
-
-/// Notifier for vesting schedule mutations.
-@riverpod
-class VestingScheduleMutations extends _$VestingScheduleMutations {
-  @override
-  FutureOr<void> build() {}
-
-  /// Create a new vesting schedule.
-  Future<String> create({
-    required String companyId,
-    required String name,
-    required String type,
-    int? totalMonths,
-    int cliffMonths = 0,
-    String? frequency,
-    String? milestonesJson,
-    int? totalHours,
-    String? notes,
-  }) async {
-    final db = ref.read(databaseProvider);
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
-    final now = DateTime.now();
-
-    await db.upsertVestingSchedule(
-      VestingSchedulesCompanion.insert(
-        id: id,
-        companyId: companyId,
-        name: name,
-        type: type,
-        totalMonths: Value(totalMonths),
-        cliffMonths: Value(cliffMonths),
-        frequency: Value(frequency),
-        milestonesJson: Value(milestonesJson),
-        totalHours: Value(totalHours),
-        notes: Value(notes),
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
-
-    return id;
-  }
-
-  /// Create standard 4-year / 1-year cliff schedule.
-  Future<String> createStandard4Year({required String companyId}) async {
-    return create(
-      companyId: companyId,
-      name: '4 Year / 1 Year Cliff',
-      type: VestingType.timeBased,
-      totalMonths: 48,
-      cliffMonths: 12,
-      frequency: VestingFrequency.monthly,
-    );
-  }
-
-  /// Create 3-year monthly schedule (no cliff).
-  Future<String> create3YearNoCliff({required String companyId}) async {
-    return create(
-      companyId: companyId,
-      name: '3 Year / Monthly',
-      type: VestingType.timeBased,
-      totalMonths: 36,
-      cliffMonths: 0,
-      frequency: VestingFrequency.monthly,
-    );
-  }
-
-  /// Update an existing vesting schedule.
-  Future<void> updateSchedule({
-    required String id,
-    String? name,
-    String? type,
-    int? totalMonths,
-    int? cliffMonths,
-    String? frequency,
-    String? notes,
-  }) async {
-    final db = ref.read(databaseProvider);
-    final schedules = await db.getVestingSchedules(
-      ref.read(currentCompanyIdProvider) ?? '',
-    );
-    final existing = schedules.where((s) => s.id == id).firstOrNull;
-    if (existing == null) return;
-
-    await db.upsertVestingSchedule(
-      VestingSchedulesCompanion(
-        id: Value(id),
-        companyId: Value(existing.companyId),
-        name: Value(name ?? existing.name),
-        type: Value(type ?? existing.type),
-        totalMonths: Value(totalMonths ?? existing.totalMonths),
-        cliffMonths: Value(cliffMonths ?? existing.cliffMonths),
-        frequency: Value(frequency ?? existing.frequency),
-        milestonesJson: Value(existing.milestonesJson),
-        totalHours: Value(existing.totalHours),
-        notes: Value(notes ?? existing.notes),
-        createdAt: Value(existing.createdAt),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
-  }
-
-  /// Delete a vesting schedule.
-  Future<void> deleteSchedule(String id) async {
-    final db = ref.read(databaseProvider);
-    await db.deleteVestingSchedule(id);
   }
 }
 

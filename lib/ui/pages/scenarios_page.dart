@@ -153,9 +153,8 @@ class _DilutionCalculatorTabState
     });
 
     await ref
-        .read(scenarioMutationsProvider.notifier)
-        .save(
-          companyId: company.id,
+        .read(scenarioCommandsProvider.notifier)
+        .saveScenario(
           name: name,
           type: 'dilution',
           parametersJson: parametersJson,
@@ -499,9 +498,8 @@ class _WaterfallCalculatorTabState
     });
 
     await ref
-        .read(scenarioMutationsProvider.notifier)
-        .save(
-          companyId: company.id,
+        .read(scenarioCommandsProvider.notifier)
+        .saveScenario(
           name: name,
           type: 'waterfall',
           parametersJson: parametersJson,
@@ -879,8 +877,8 @@ class _SavedScenarioCard extends ConsumerWidget {
               );
               if (confirm == true) {
                 await ref
-                    .read(scenarioMutationsProvider.notifier)
-                    .delete(scenario.id);
+                    .read(scenarioCommandsProvider.notifier)
+                    .deleteScenario(scenarioId: scenario.id);
               }
             }
           },

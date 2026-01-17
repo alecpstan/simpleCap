@@ -757,28 +757,15 @@ class OptionsPage extends ConsumerWidget {
                 if (!isEditing && selectedStakeholderId == null) return;
                 if (selectedShareClassId == null) return;
 
-                final mutations = ref.read(
-                  optionGrantMutationsProvider.notifier,
-                );
+                final commands = ref.read(optionGrantCommandsProvider.notifier);
 
                 if (isEditing) {
-                  await mutations.updateOptionGrant(
-                    id: option.id,
-                    shareClassId: selectedShareClassId,
-                    vestingScheduleId: selectedVestingScheduleId,
-                    esopPoolId: selectedEsopPoolId,
-                    quantity: quantity,
-                    strikePrice: strike,
-                    grantDate: grantDate,
-                    expiryDate: expiryDate,
-                    allowsEarlyExercise: allowsEarlyExercise,
-                    notes: notesController.text.trim().isEmpty
-                        ? null
-                        : notesController.text.trim(),
+                  // TODO: Implement updateOptionGrant in OptionGrantCommands
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Edit not yet implemented')),
                   );
                 } else {
-                  await mutations.create(
-                    companyId: companyId!,
+                  await commands.grantOptions(
                     stakeholderId: selectedStakeholderId!,
                     shareClassId: selectedShareClassId!,
                     vestingScheduleId: selectedVestingScheduleId,
@@ -936,8 +923,13 @@ class OptionsPage extends ConsumerWidget {
                 onPressed: shares > 0 && shares <= maxShares
                     ? () async {
                         await ref
-                            .read(optionGrantMutationsProvider.notifier)
-                            .exercise(id: option.id, sharesToExercise: shares);
+                            .read(optionGrantCommandsProvider.notifier)
+                            .exerciseOptions(
+                              grantId: option.id,
+                              exercisedCount: shares,
+                              exercisePrice: option.strikePrice,
+                              exerciseDate: DateTime.now(),
+                            );
 
                         if (context.mounted) Navigator.pop(context);
                       }
@@ -1017,9 +1009,11 @@ class OptionsPage extends ConsumerWidget {
               final shares = int.tryParse(sharesController.text);
               if (shares == null || shares <= 0 || shares > maxShares) return;
 
-              await ref
-                  .read(optionGrantMutationsProvider.notifier)
-                  .unexercise(id: option.id, sharesToUnexercise: shares);
+              // TODO: Implement unexercise in OptionGrantCommands
+              // The current commands only have exerciseOptions and cancelOptions
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Unexercise not yet implemented')),
+              );
 
               if (context.mounted) Navigator.pop(context);
             },
@@ -1076,7 +1070,14 @@ class OptionsPage extends ConsumerWidget {
     );
 
     if (confirmed && context.mounted) {
-      await ref.read(optionGrantMutationsProvider.notifier).delete(option.id);
+      await ref
+          .read(optionGrantCommandsProvider.notifier)
+          .cancelOptions(
+            grantId: option.id,
+            cancelledCount:
+                option.quantity - option.exercisedCount - option.cancelledCount,
+            reason: 'Deleted by user',
+          );
     }
   }
 
@@ -1100,8 +1101,8 @@ class OptionsPage extends ConsumerWidget {
               subtitle: const Text('Standard startup vesting'),
               onTap: () async {
                 await ref
-                    .read(vestingScheduleMutationsProvider.notifier)
-                    .createStandard4Year(companyId: companyId);
+                    .read(vestingScheduleCommandsProvider.notifier)
+                    .createStandard4YearSchedule();
                 if (context.mounted) Navigator.pop(context);
               },
             ),
@@ -1111,8 +1112,8 @@ class OptionsPage extends ConsumerWidget {
               subtitle: const Text('No cliff, monthly vesting'),
               onTap: () async {
                 await ref
-                    .read(vestingScheduleMutationsProvider.notifier)
-                    .create3YearNoCliff(companyId: companyId);
+                    .read(vestingScheduleCommandsProvider.notifier)
+                    .create3YearNoCliffSchedule();
                 if (context.mounted) Navigator.pop(context);
               },
             ),

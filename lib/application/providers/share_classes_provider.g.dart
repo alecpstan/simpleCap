@@ -7,9 +7,10 @@ part of 'share_classes_provider.dart';
 // **************************************************************************
 
 String _$shareClassesStreamHash() =>
-    r'5c791284b1e7853f1cebce4889e80902ee482096';
+    r'59a770c91c6ee391222ce8084dfae31794d6e568';
 
 /// Watches all share classes for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [shareClassesStream].
 @ProviderFor(shareClassesStream)
@@ -180,24 +181,5 @@ class _ShareClassProviderElement
   String get id => (origin as ShareClassProvider).id;
 }
 
-String _$shareClassMutationsHash() =>
-    r'bb7181b01e8eac7df72a85865eb69032e1381f0f';
-
-/// Notifier for share class mutations.
-///
-/// Copied from [ShareClassMutations].
-@ProviderFor(ShareClassMutations)
-final shareClassMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<ShareClassMutations, void>.internal(
-      ShareClassMutations.new,
-      name: r'shareClassMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$shareClassMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$ShareClassMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

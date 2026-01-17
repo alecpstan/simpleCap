@@ -317,23 +317,5 @@ final savedScenariosStreamProvider =
 // ignore: unused_element
 typedef SavedScenariosStreamRef =
     AutoDisposeStreamProviderRef<List<SavedScenario>>;
-String _$scenarioMutationsHash() => r'8c81f72b41f7a4d85c942c082aac0aaf815dee29';
-
-/// Notifier for scenario mutations.
-///
-/// Copied from [ScenarioMutations].
-@ProviderFor(ScenarioMutations)
-final scenarioMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<ScenarioMutations, void>.internal(
-      ScenarioMutations.new,
-      name: r'scenarioMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$scenarioMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$ScenarioMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

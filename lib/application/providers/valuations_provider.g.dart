@@ -6,9 +6,10 @@ part of 'valuations_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$valuationsStreamHash() => r'a0d8eb73254ac2c1ad53e36e25d43086476d4a03';
+String _$valuationsStreamHash() => r'3144d8fbc42ee0c2f2dd0cad364f36f339085746';
 
 /// Stream of all valuations for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [valuationsStream].
 @ProviderFor(valuationsStream)
@@ -93,24 +94,5 @@ final valuationsSummaryProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef ValuationsSummaryRef = AutoDisposeFutureProviderRef<ValuationsSummary>;
-String _$valuationMutationsHash() =>
-    r'c1375a2fe45e64bef999023fb315fca8e7b8b482';
-
-/// Notifier for valuation mutations.
-///
-/// Copied from [ValuationMutations].
-@ProviderFor(ValuationMutations)
-final valuationMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<ValuationMutations, void>.internal(
-      ValuationMutations.new,
-      name: r'valuationMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$valuationMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$ValuationMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

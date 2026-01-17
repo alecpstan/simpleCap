@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers/providers.dart';
@@ -461,37 +460,26 @@ class ShareClassesPage extends ConsumerWidget {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
 
-                final mutations = ref.read(
-                  shareClassMutationsProvider.notifier,
-                );
+                final commands = ref.read(shareClassCommandsProvider.notifier);
 
                 if (isEditing) {
-                  // Update existing
-                  final db = ref.read(databaseProvider);
-                  await db.upsertShareClass(
-                    ShareClassesCompanion(
-                      id: drift.Value(existing.id),
-                      companyId: drift.Value(companyId),
-                      name: drift.Value(name),
-                      type: drift.Value(selectedType),
-                      votingMultiplier: drift.Value(votingMultiplier),
-                      liquidationPreference: drift.Value(liquidationPreference),
-                      isParticipating: drift.Value(isParticipating),
-                      dividendRate: drift.Value(dividendRate),
-                      seniority: drift.Value(seniority),
-                      antiDilutionType: drift.Value(antiDilutionType),
-                      notes: drift.Value(
-                        notesController.text.trim().isEmpty
-                            ? null
-                            : notesController.text.trim(),
-                      ),
-                      createdAt: drift.Value(existing.createdAt),
-                      updatedAt: drift.Value(DateTime.now()),
-                    ),
+                  // Update existing using command handler
+                  await commands.updateShareClass(
+                    shareClassId: existing.id,
+                    name: name,
+                    type: selectedType,
+                    votingMultiplier: votingMultiplier,
+                    liquidationPreference: liquidationPreference,
+                    isParticipating: isParticipating,
+                    dividendRate: dividendRate,
+                    seniority: seniority,
+                    antiDilutionType: antiDilutionType,
+                    notes: notesController.text.trim().isEmpty
+                        ? null
+                        : notesController.text.trim(),
                   );
                 } else {
-                  await mutations.create(
-                    companyId: companyId,
+                  await commands.createShareClass(
                     name: name,
                     type: selectedType,
                     votingMultiplier: votingMultiplier,
@@ -527,9 +515,13 @@ class ShareClassesPage extends ConsumerWidget {
     );
 
     if (confirmed) {
-      await ref
-          .read(shareClassMutationsProvider.notifier)
-          .delete(shareClass.id);
+      // TODO: Implement deleteShareClass in ShareClassCommands
+      // This operation is not yet supported in the event-sourcing architecture.
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Delete not yet implemented')),
+        );
+      }
     }
   }
 

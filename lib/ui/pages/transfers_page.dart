@@ -393,7 +393,9 @@ class TransfersPage extends ConsumerWidget {
     if (!confirmed) return;
 
     try {
-      await ref.read(transferMutationsProvider.notifier).waiveRofr(transfer.id);
+      await ref
+          .read(transferCommandsProvider.notifier)
+          .waiveRofr(transferId: transfer.id);
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
@@ -425,8 +427,8 @@ class TransfersPage extends ConsumerWidget {
 
     try {
       await ref
-          .read(transferMutationsProvider.notifier)
-          .executeTransfer(transfer.id);
+          .read(transferCommandsProvider.notifier)
+          .executeTransfer(transferId: transfer.id);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Transfer executed successfully')),
@@ -454,7 +456,9 @@ class TransfersPage extends ConsumerWidget {
     if (!confirmed) return;
 
     try {
-      await ref.read(transferMutationsProvider.notifier).delete(transfer.id);
+      await ref
+          .read(transferCommandsProvider.notifier)
+          .cancelTransfer(transferId: transfer.id);
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
@@ -778,16 +782,15 @@ class _TransferFormState extends ConsumerState<_TransferForm> {
           : null;
 
       await ref
-          .read(transferMutationsProvider.notifier)
+          .read(transferCommandsProvider.notifier)
           .createTransfer(
-            companyId: widget.companyId,
             sellerStakeholderId: _sellerId!,
             buyerStakeholderId: _buyerId!,
             shareClassId: _shareClassId!,
             shareCount: int.parse(_sharesController.text),
             pricePerShare: double.parse(_priceController.text),
             transactionDate: _transactionDate,
-            type: _type,
+            transferType: _type,
             fairMarketValue: fmv,
             notes: _notesController.text.isNotEmpty
                 ? _notesController.text

@@ -436,9 +436,15 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                       itemName: 'holding',
                     );
                     if (confirmed && mounted) {
-                      await ref
-                          .read(holdingMutationsProvider.notifier)
-                          .delete(h.id);
+                      // TODO: Implement deleteHolding in HoldingCommands
+                      // This operation is not yet supported in the event-sourcing architecture.
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Delete not yet implemented'),
+                          ),
+                        );
+                      }
                     }
                   },
                 ),
@@ -586,7 +592,9 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     if (!confirmed) return;
 
     try {
-      await ref.read(roundMutationsProvider.notifier).closeRound(round.id);
+      await ref
+          .read(roundCommandsProvider.notifier)
+          .closeRound(roundId: round.id, amountRaised: round.amountRaised);
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
@@ -615,7 +623,9 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     if (!confirmed) return;
 
     try {
-      await ref.read(roundMutationsProvider.notifier).reopenRound(round.id);
+      await ref
+          .read(roundCommandsProvider.notifier)
+          .reopenRound(roundId: round.id);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Round reopened - securities reversed')),
@@ -645,7 +655,9 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
 
     if (confirmed && mounted) {
       try {
-        await ref.read(roundMutationsProvider.notifier).delete(round.id);
+        await ref
+            .read(roundCommandsProvider.notifier)
+            .deleteRound(roundId: round.id);
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,

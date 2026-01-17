@@ -16,6 +16,7 @@ const List<String> defaultToolOrder = [
   'convertibles',
   'warrants',
   'transfers',
+  'timeline',
 ];
 
 /// Provides the user's preferred tool order for the dashboard.

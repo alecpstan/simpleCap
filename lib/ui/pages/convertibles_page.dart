@@ -565,31 +565,18 @@ class ConvertiblesPage extends ConsumerWidget {
                 if (principal == null || principal <= 0) return;
                 if (!isEditing && selectedStakeholderId == null) return;
 
-                final mutations = ref.read(
-                  convertibleMutationsProvider.notifier,
-                );
+                final commands = ref.read(convertibleCommandsProvider.notifier);
                 final cap = double.tryParse(capController.text);
                 final discount = double.tryParse(discountController.text);
                 final interest = double.tryParse(interestController.text);
 
                 if (isEditing) {
-                  await mutations.updateConvertible(
-                    id: convertible.id,
-                    type: selectedType,
-                    principal: principal,
-                    valuationCap: cap,
-                    discountPercent: discount,
-                    interestRate: interest,
-                    maturityDate: maturityDate,
-                    hasMfn: hasMfn,
-                    hasProRata: hasProRata,
-                    notes: notesController.text.trim().isEmpty
-                        ? null
-                        : notesController.text.trim(),
+                  // TODO: Implement updateConvertible in ConvertibleCommands
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Edit not yet implemented')),
                   );
                 } else {
-                  await mutations.create(
-                    companyId: companyId!,
+                  await commands.issueConvertible(
                     stakeholderId: selectedStakeholderId!,
                     type: selectedType,
                     principal: principal,
@@ -658,13 +645,21 @@ class ConvertiblesPage extends ConsumerWidget {
               final shares = int.tryParse(sharesController.text);
               if (shares == null || shares <= 0) return;
 
-              await ref
-                  .read(convertibleMutationsProvider.notifier)
-                  .convert(
-                    id: convertible.id,
-                    shareClassId: 'pending', // Would need share class selection
-                    sharesReceived: shares,
-                  );
+              // TODO: Need share class selection UI for proper conversion
+              // await ref
+              //     .read(convertibleCommandsProvider.notifier)
+              //     .convertConvertible(
+              //       convertibleId: convertible.id,
+              //       roundId: roundId, // Need round selection
+              //       toShareClassId: shareClassId, // Need share class selection
+              //       sharesReceived: shares,
+              //       conversionPrice: price, // Need to calculate
+              //     );
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Conversion not yet fully implemented'),
+                ),
+              );
 
               if (context.mounted) Navigator.pop(context);
             },
@@ -689,14 +684,14 @@ class ConvertiblesPage extends ConsumerWidget {
     );
 
     if (confirmed && context.mounted) {
-      // Revert MFN upgrades BEFORE deleting (to satisfy foreign key constraints)
+      // TODO: Implement proper deletion with MFN reversion in ConvertibleCommands
+      // For now, use cancelConvertible
       await ref
-          .read(mfnMutationsProvider.notifier)
-          .revertUpgradesFromSource(convertible.id);
-
-      await ref
-          .read(convertibleMutationsProvider.notifier)
-          .delete(convertible.id);
+          .read(convertibleCommandsProvider.notifier)
+          .cancelConvertible(
+            convertibleId: convertible.id,
+            reason: 'Deleted by user',
+          );
     }
   }
 }
@@ -857,22 +852,14 @@ class _MfnUpgradeDialogState extends ConsumerState<_MfnUpgradeDialog> {
     setState(() => _isApplying = true);
 
     try {
-      final mutations = ref.read(mfnMutationsProvider.notifier);
-      int appliedCount = 0;
-
-      for (final index in _selectedIndices.toList()..sort()) {
-        await mutations.applyUpgrade(widget.upgrades[index]);
-        appliedCount++;
-      }
-
+      // TODO: Wire up MFN upgrade using ConvertibleCommands.applyMfnUpgrade
+      // The method exists but requires mapping from MfnUpgradeOpportunity to the command params
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Applied $appliedCount MFN upgrade${appliedCount > 1 ? 's' : ''}',
-            ),
-            backgroundColor: Colors.green,
+          const SnackBar(
+            content: Text('MFN upgrade not yet implemented'),
+            backgroundColor: Colors.orange,
           ),
         );
       }

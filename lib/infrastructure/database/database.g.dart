@@ -8839,6 +8839,17 @@ class $CapitalizationEventsTable extends CapitalizationEvents
       'REFERENCES companies (id)',
     ),
   );
+  static const VerificationMeta _sequenceNumberMeta = const VerificationMeta(
+    'sequenceNumber',
+  );
+  @override
+  late final GeneratedColumn<int> sequenceNumber = GeneratedColumn<int>(
+    'sequence_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _eventTypeMeta = const VerificationMeta(
     'eventType',
   );
@@ -8850,18 +8861,6 @@ class $CapitalizationEventsTable extends CapitalizationEvents
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _effectiveDateMeta = const VerificationMeta(
-    'effectiveDate',
-  );
-  @override
-  late final GeneratedColumn<DateTime> effectiveDate =
-      GeneratedColumn<DateTime>(
-        'effective_date',
-        aliasedName,
-        false,
-        type: DriftSqlType.dateTime,
-        requiredDuringInsert: true,
-      );
   static const VerificationMeta _eventDataJsonMeta = const VerificationMeta(
     'eventDataJson',
   );
@@ -8873,40 +8872,49 @@ class $CapitalizationEventsTable extends CapitalizationEvents
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _roundIdMeta = const VerificationMeta(
-    'roundId',
+  static const VerificationMeta _timestampMeta = const VerificationMeta(
+    'timestamp',
   );
   @override
-  late final GeneratedColumn<String> roundId = GeneratedColumn<String>(
-    'round_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES rounds (id)',
-    ),
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
+  late final GeneratedColumn<DateTime> timestamp = GeneratedColumn<DateTime>(
+    'timestamp',
     aliasedName,
     false,
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _actorIdMeta = const VerificationMeta(
+    'actorId',
+  );
+  @override
+  late final GeneratedColumn<String> actorId = GeneratedColumn<String>(
+    'actor_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _signatureMeta = const VerificationMeta(
+    'signature',
+  );
+  @override
+  late final GeneratedColumn<String> signature = GeneratedColumn<String>(
+    'signature',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     companyId,
+    sequenceNumber,
     eventType,
-    effectiveDate,
     eventDataJson,
-    roundId,
-    createdAt,
+    timestamp,
+    actorId,
+    signature,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8933,6 +8941,17 @@ class $CapitalizationEventsTable extends CapitalizationEvents
     } else if (isInserting) {
       context.missing(_companyIdMeta);
     }
+    if (data.containsKey('sequence_number')) {
+      context.handle(
+        _sequenceNumberMeta,
+        sequenceNumber.isAcceptableOrUnknown(
+          data['sequence_number']!,
+          _sequenceNumberMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sequenceNumberMeta);
+    }
     if (data.containsKey('event_type')) {
       context.handle(
         _eventTypeMeta,
@@ -8940,17 +8959,6 @@ class $CapitalizationEventsTable extends CapitalizationEvents
       );
     } else if (isInserting) {
       context.missing(_eventTypeMeta);
-    }
-    if (data.containsKey('effective_date')) {
-      context.handle(
-        _effectiveDateMeta,
-        effectiveDate.isAcceptableOrUnknown(
-          data['effective_date']!,
-          _effectiveDateMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_effectiveDateMeta);
     }
     if (data.containsKey('event_data_json')) {
       context.handle(
@@ -8963,19 +8971,25 @@ class $CapitalizationEventsTable extends CapitalizationEvents
     } else if (isInserting) {
       context.missing(_eventDataJsonMeta);
     }
-    if (data.containsKey('round_id')) {
+    if (data.containsKey('timestamp')) {
       context.handle(
-        _roundIdMeta,
-        roundId.isAcceptableOrUnknown(data['round_id']!, _roundIdMeta),
-      );
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+        _timestampMeta,
+        timestamp.isAcceptableOrUnknown(data['timestamp']!, _timestampMeta),
       );
     } else if (isInserting) {
-      context.missing(_createdAtMeta);
+      context.missing(_timestampMeta);
+    }
+    if (data.containsKey('actor_id')) {
+      context.handle(
+        _actorIdMeta,
+        actorId.isAcceptableOrUnknown(data['actor_id']!, _actorIdMeta),
+      );
+    }
+    if (data.containsKey('signature')) {
+      context.handle(
+        _signatureMeta,
+        signature.isAcceptableOrUnknown(data['signature']!, _signatureMeta),
+      );
     }
     return context;
   }
@@ -8994,26 +9008,30 @@ class $CapitalizationEventsTable extends CapitalizationEvents
         DriftSqlType.string,
         data['${effectivePrefix}company_id'],
       )!,
+      sequenceNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sequence_number'],
+      )!,
       eventType: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}event_type'],
-      )!,
-      effectiveDate: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}effective_date'],
       )!,
       eventDataJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}event_data_json'],
       )!,
-      roundId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}round_id'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
+      timestamp: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
+        data['${effectivePrefix}timestamp'],
       )!,
+      actorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}actor_id'],
+      ),
+      signature: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}signature'],
+      ),
     );
   }
 
@@ -9027,32 +9045,49 @@ class CapitalizationEvent extends DataClass
     implements Insertable<CapitalizationEvent> {
   final String id;
   final String companyId;
+
+  /// Sequence number for ordering within a company. Auto-incremented.
+  final int sequenceNumber;
+
+  /// The event type discriminator (e.g., 'stakeholderAdded', 'roundClosed')
   final String eventType;
-  final DateTime effectiveDate;
+
+  /// The full event data as JSON (includes all fields from the Freezed event)
   final String eventDataJson;
-  final String? roundId;
-  final DateTime createdAt;
+
+  /// When the event was recorded
+  final DateTime timestamp;
+
+  /// Who performed the action (for audit trail, nullable until auth is added)
+  final String? actorId;
+
+  /// Optional cryptographic signature for tamper-proofing
+  final String? signature;
   const CapitalizationEvent({
     required this.id,
     required this.companyId,
+    required this.sequenceNumber,
     required this.eventType,
-    required this.effectiveDate,
     required this.eventDataJson,
-    this.roundId,
-    required this.createdAt,
+    required this.timestamp,
+    this.actorId,
+    this.signature,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['company_id'] = Variable<String>(companyId);
+    map['sequence_number'] = Variable<int>(sequenceNumber);
     map['event_type'] = Variable<String>(eventType);
-    map['effective_date'] = Variable<DateTime>(effectiveDate);
     map['event_data_json'] = Variable<String>(eventDataJson);
-    if (!nullToAbsent || roundId != null) {
-      map['round_id'] = Variable<String>(roundId);
+    map['timestamp'] = Variable<DateTime>(timestamp);
+    if (!nullToAbsent || actorId != null) {
+      map['actor_id'] = Variable<String>(actorId);
     }
-    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || signature != null) {
+      map['signature'] = Variable<String>(signature);
+    }
     return map;
   }
 
@@ -9060,13 +9095,16 @@ class CapitalizationEvent extends DataClass
     return CapitalizationEventsCompanion(
       id: Value(id),
       companyId: Value(companyId),
+      sequenceNumber: Value(sequenceNumber),
       eventType: Value(eventType),
-      effectiveDate: Value(effectiveDate),
       eventDataJson: Value(eventDataJson),
-      roundId: roundId == null && nullToAbsent
+      timestamp: Value(timestamp),
+      actorId: actorId == null && nullToAbsent
           ? const Value.absent()
-          : Value(roundId),
-      createdAt: Value(createdAt),
+          : Value(actorId),
+      signature: signature == null && nullToAbsent
+          ? const Value.absent()
+          : Value(signature),
     );
   }
 
@@ -9078,11 +9116,12 @@ class CapitalizationEvent extends DataClass
     return CapitalizationEvent(
       id: serializer.fromJson<String>(json['id']),
       companyId: serializer.fromJson<String>(json['companyId']),
+      sequenceNumber: serializer.fromJson<int>(json['sequenceNumber']),
       eventType: serializer.fromJson<String>(json['eventType']),
-      effectiveDate: serializer.fromJson<DateTime>(json['effectiveDate']),
       eventDataJson: serializer.fromJson<String>(json['eventDataJson']),
-      roundId: serializer.fromJson<String?>(json['roundId']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      timestamp: serializer.fromJson<DateTime>(json['timestamp']),
+      actorId: serializer.fromJson<String?>(json['actorId']),
+      signature: serializer.fromJson<String?>(json['signature']),
     );
   }
   @override
@@ -9091,44 +9130,48 @@ class CapitalizationEvent extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'companyId': serializer.toJson<String>(companyId),
+      'sequenceNumber': serializer.toJson<int>(sequenceNumber),
       'eventType': serializer.toJson<String>(eventType),
-      'effectiveDate': serializer.toJson<DateTime>(effectiveDate),
       'eventDataJson': serializer.toJson<String>(eventDataJson),
-      'roundId': serializer.toJson<String?>(roundId),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'timestamp': serializer.toJson<DateTime>(timestamp),
+      'actorId': serializer.toJson<String?>(actorId),
+      'signature': serializer.toJson<String?>(signature),
     };
   }
 
   CapitalizationEvent copyWith({
     String? id,
     String? companyId,
+    int? sequenceNumber,
     String? eventType,
-    DateTime? effectiveDate,
     String? eventDataJson,
-    Value<String?> roundId = const Value.absent(),
-    DateTime? createdAt,
+    DateTime? timestamp,
+    Value<String?> actorId = const Value.absent(),
+    Value<String?> signature = const Value.absent(),
   }) => CapitalizationEvent(
     id: id ?? this.id,
     companyId: companyId ?? this.companyId,
+    sequenceNumber: sequenceNumber ?? this.sequenceNumber,
     eventType: eventType ?? this.eventType,
-    effectiveDate: effectiveDate ?? this.effectiveDate,
     eventDataJson: eventDataJson ?? this.eventDataJson,
-    roundId: roundId.present ? roundId.value : this.roundId,
-    createdAt: createdAt ?? this.createdAt,
+    timestamp: timestamp ?? this.timestamp,
+    actorId: actorId.present ? actorId.value : this.actorId,
+    signature: signature.present ? signature.value : this.signature,
   );
   CapitalizationEvent copyWithCompanion(CapitalizationEventsCompanion data) {
     return CapitalizationEvent(
       id: data.id.present ? data.id.value : this.id,
       companyId: data.companyId.present ? data.companyId.value : this.companyId,
+      sequenceNumber: data.sequenceNumber.present
+          ? data.sequenceNumber.value
+          : this.sequenceNumber,
       eventType: data.eventType.present ? data.eventType.value : this.eventType,
-      effectiveDate: data.effectiveDate.present
-          ? data.effectiveDate.value
-          : this.effectiveDate,
       eventDataJson: data.eventDataJson.present
           ? data.eventDataJson.value
           : this.eventDataJson,
-      roundId: data.roundId.present ? data.roundId.value : this.roundId,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
+      actorId: data.actorId.present ? data.actorId.value : this.actorId,
+      signature: data.signature.present ? data.signature.value : this.signature,
     );
   }
 
@@ -9137,11 +9180,12 @@ class CapitalizationEvent extends DataClass
     return (StringBuffer('CapitalizationEvent(')
           ..write('id: $id, ')
           ..write('companyId: $companyId, ')
+          ..write('sequenceNumber: $sequenceNumber, ')
           ..write('eventType: $eventType, ')
-          ..write('effectiveDate: $effectiveDate, ')
           ..write('eventDataJson: $eventDataJson, ')
-          ..write('roundId: $roundId, ')
-          ..write('createdAt: $createdAt')
+          ..write('timestamp: $timestamp, ')
+          ..write('actorId: $actorId, ')
+          ..write('signature: $signature')
           ..write(')'))
         .toString();
   }
@@ -9150,11 +9194,12 @@ class CapitalizationEvent extends DataClass
   int get hashCode => Object.hash(
     id,
     companyId,
+    sequenceNumber,
     eventType,
-    effectiveDate,
     eventDataJson,
-    roundId,
-    createdAt,
+    timestamp,
+    actorId,
+    signature,
   );
   @override
   bool operator ==(Object other) =>
@@ -9162,66 +9207,72 @@ class CapitalizationEvent extends DataClass
       (other is CapitalizationEvent &&
           other.id == this.id &&
           other.companyId == this.companyId &&
+          other.sequenceNumber == this.sequenceNumber &&
           other.eventType == this.eventType &&
-          other.effectiveDate == this.effectiveDate &&
           other.eventDataJson == this.eventDataJson &&
-          other.roundId == this.roundId &&
-          other.createdAt == this.createdAt);
+          other.timestamp == this.timestamp &&
+          other.actorId == this.actorId &&
+          other.signature == this.signature);
 }
 
 class CapitalizationEventsCompanion
     extends UpdateCompanion<CapitalizationEvent> {
   final Value<String> id;
   final Value<String> companyId;
+  final Value<int> sequenceNumber;
   final Value<String> eventType;
-  final Value<DateTime> effectiveDate;
   final Value<String> eventDataJson;
-  final Value<String?> roundId;
-  final Value<DateTime> createdAt;
+  final Value<DateTime> timestamp;
+  final Value<String?> actorId;
+  final Value<String?> signature;
   final Value<int> rowid;
   const CapitalizationEventsCompanion({
     this.id = const Value.absent(),
     this.companyId = const Value.absent(),
+    this.sequenceNumber = const Value.absent(),
     this.eventType = const Value.absent(),
-    this.effectiveDate = const Value.absent(),
     this.eventDataJson = const Value.absent(),
-    this.roundId = const Value.absent(),
-    this.createdAt = const Value.absent(),
+    this.timestamp = const Value.absent(),
+    this.actorId = const Value.absent(),
+    this.signature = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CapitalizationEventsCompanion.insert({
     required String id,
     required String companyId,
+    required int sequenceNumber,
     required String eventType,
-    required DateTime effectiveDate,
     required String eventDataJson,
-    this.roundId = const Value.absent(),
-    required DateTime createdAt,
+    required DateTime timestamp,
+    this.actorId = const Value.absent(),
+    this.signature = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        companyId = Value(companyId),
+       sequenceNumber = Value(sequenceNumber),
        eventType = Value(eventType),
-       effectiveDate = Value(effectiveDate),
        eventDataJson = Value(eventDataJson),
-       createdAt = Value(createdAt);
+       timestamp = Value(timestamp);
   static Insertable<CapitalizationEvent> custom({
     Expression<String>? id,
     Expression<String>? companyId,
+    Expression<int>? sequenceNumber,
     Expression<String>? eventType,
-    Expression<DateTime>? effectiveDate,
     Expression<String>? eventDataJson,
-    Expression<String>? roundId,
-    Expression<DateTime>? createdAt,
+    Expression<DateTime>? timestamp,
+    Expression<String>? actorId,
+    Expression<String>? signature,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (companyId != null) 'company_id': companyId,
+      if (sequenceNumber != null) 'sequence_number': sequenceNumber,
       if (eventType != null) 'event_type': eventType,
-      if (effectiveDate != null) 'effective_date': effectiveDate,
       if (eventDataJson != null) 'event_data_json': eventDataJson,
-      if (roundId != null) 'round_id': roundId,
-      if (createdAt != null) 'created_at': createdAt,
+      if (timestamp != null) 'timestamp': timestamp,
+      if (actorId != null) 'actor_id': actorId,
+      if (signature != null) 'signature': signature,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -9229,21 +9280,23 @@ class CapitalizationEventsCompanion
   CapitalizationEventsCompanion copyWith({
     Value<String>? id,
     Value<String>? companyId,
+    Value<int>? sequenceNumber,
     Value<String>? eventType,
-    Value<DateTime>? effectiveDate,
     Value<String>? eventDataJson,
-    Value<String?>? roundId,
-    Value<DateTime>? createdAt,
+    Value<DateTime>? timestamp,
+    Value<String?>? actorId,
+    Value<String?>? signature,
     Value<int>? rowid,
   }) {
     return CapitalizationEventsCompanion(
       id: id ?? this.id,
       companyId: companyId ?? this.companyId,
+      sequenceNumber: sequenceNumber ?? this.sequenceNumber,
       eventType: eventType ?? this.eventType,
-      effectiveDate: effectiveDate ?? this.effectiveDate,
       eventDataJson: eventDataJson ?? this.eventDataJson,
-      roundId: roundId ?? this.roundId,
-      createdAt: createdAt ?? this.createdAt,
+      timestamp: timestamp ?? this.timestamp,
+      actorId: actorId ?? this.actorId,
+      signature: signature ?? this.signature,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -9257,20 +9310,23 @@ class CapitalizationEventsCompanion
     if (companyId.present) {
       map['company_id'] = Variable<String>(companyId.value);
     }
+    if (sequenceNumber.present) {
+      map['sequence_number'] = Variable<int>(sequenceNumber.value);
+    }
     if (eventType.present) {
       map['event_type'] = Variable<String>(eventType.value);
-    }
-    if (effectiveDate.present) {
-      map['effective_date'] = Variable<DateTime>(effectiveDate.value);
     }
     if (eventDataJson.present) {
       map['event_data_json'] = Variable<String>(eventDataJson.value);
     }
-    if (roundId.present) {
-      map['round_id'] = Variable<String>(roundId.value);
+    if (timestamp.present) {
+      map['timestamp'] = Variable<DateTime>(timestamp.value);
     }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
+    if (actorId.present) {
+      map['actor_id'] = Variable<String>(actorId.value);
+    }
+    if (signature.present) {
+      map['signature'] = Variable<String>(signature.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -9283,11 +9339,12 @@ class CapitalizationEventsCompanion
     return (StringBuffer('CapitalizationEventsCompanion(')
           ..write('id: $id, ')
           ..write('companyId: $companyId, ')
+          ..write('sequenceNumber: $sequenceNumber, ')
           ..write('eventType: $eventType, ')
-          ..write('effectiveDate: $effectiveDate, ')
           ..write('eventDataJson: $eventDataJson, ')
-          ..write('roundId: $roundId, ')
-          ..write('createdAt: $createdAt, ')
+          ..write('timestamp: $timestamp, ')
+          ..write('actorId: $actorId, ')
+          ..write('signature: $signature, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -12230,6 +12287,383 @@ class EsopPoolExpansionsCompanion extends UpdateCompanion<EsopPoolExpansion> {
   }
 }
 
+class $SnapshotsTable extends Snapshots
+    with TableInfo<$SnapshotsTable, Snapshot> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SnapshotsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _companyIdMeta = const VerificationMeta(
+    'companyId',
+  );
+  @override
+  late final GeneratedColumn<String> companyId = GeneratedColumn<String>(
+    'company_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES companies (id)',
+    ),
+  );
+  static const VerificationMeta _atSequenceNumberMeta = const VerificationMeta(
+    'atSequenceNumber',
+  );
+  @override
+  late final GeneratedColumn<int> atSequenceNumber = GeneratedColumn<int>(
+    'at_sequence_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stateJsonMeta = const VerificationMeta(
+    'stateJson',
+  );
+  @override
+  late final GeneratedColumn<String> stateJson = GeneratedColumn<String>(
+    'state_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    companyId,
+    atSequenceNumber,
+    stateJson,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'snapshots';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Snapshot> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('company_id')) {
+      context.handle(
+        _companyIdMeta,
+        companyId.isAcceptableOrUnknown(data['company_id']!, _companyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_companyIdMeta);
+    }
+    if (data.containsKey('at_sequence_number')) {
+      context.handle(
+        _atSequenceNumberMeta,
+        atSequenceNumber.isAcceptableOrUnknown(
+          data['at_sequence_number']!,
+          _atSequenceNumberMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_atSequenceNumberMeta);
+    }
+    if (data.containsKey('state_json')) {
+      context.handle(
+        _stateJsonMeta,
+        stateJson.isAcceptableOrUnknown(data['state_json']!, _stateJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateJsonMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Snapshot map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Snapshot(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      companyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}company_id'],
+      )!,
+      atSequenceNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}at_sequence_number'],
+      )!,
+      stateJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state_json'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SnapshotsTable createAlias(String alias) {
+    return $SnapshotsTable(attachedDatabase, alias);
+  }
+}
+
+class Snapshot extends DataClass implements Insertable<Snapshot> {
+  final String id;
+  final String companyId;
+
+  /// The sequence number at which this snapshot was taken
+  final int atSequenceNumber;
+
+  /// The full projected state as JSON
+  final String stateJson;
+
+  /// When the snapshot was created
+  final DateTime createdAt;
+  const Snapshot({
+    required this.id,
+    required this.companyId,
+    required this.atSequenceNumber,
+    required this.stateJson,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['company_id'] = Variable<String>(companyId);
+    map['at_sequence_number'] = Variable<int>(atSequenceNumber);
+    map['state_json'] = Variable<String>(stateJson);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  SnapshotsCompanion toCompanion(bool nullToAbsent) {
+    return SnapshotsCompanion(
+      id: Value(id),
+      companyId: Value(companyId),
+      atSequenceNumber: Value(atSequenceNumber),
+      stateJson: Value(stateJson),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Snapshot.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Snapshot(
+      id: serializer.fromJson<String>(json['id']),
+      companyId: serializer.fromJson<String>(json['companyId']),
+      atSequenceNumber: serializer.fromJson<int>(json['atSequenceNumber']),
+      stateJson: serializer.fromJson<String>(json['stateJson']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'companyId': serializer.toJson<String>(companyId),
+      'atSequenceNumber': serializer.toJson<int>(atSequenceNumber),
+      'stateJson': serializer.toJson<String>(stateJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  Snapshot copyWith({
+    String? id,
+    String? companyId,
+    int? atSequenceNumber,
+    String? stateJson,
+    DateTime? createdAt,
+  }) => Snapshot(
+    id: id ?? this.id,
+    companyId: companyId ?? this.companyId,
+    atSequenceNumber: atSequenceNumber ?? this.atSequenceNumber,
+    stateJson: stateJson ?? this.stateJson,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Snapshot copyWithCompanion(SnapshotsCompanion data) {
+    return Snapshot(
+      id: data.id.present ? data.id.value : this.id,
+      companyId: data.companyId.present ? data.companyId.value : this.companyId,
+      atSequenceNumber: data.atSequenceNumber.present
+          ? data.atSequenceNumber.value
+          : this.atSequenceNumber,
+      stateJson: data.stateJson.present ? data.stateJson.value : this.stateJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Snapshot(')
+          ..write('id: $id, ')
+          ..write('companyId: $companyId, ')
+          ..write('atSequenceNumber: $atSequenceNumber, ')
+          ..write('stateJson: $stateJson, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, companyId, atSequenceNumber, stateJson, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Snapshot &&
+          other.id == this.id &&
+          other.companyId == this.companyId &&
+          other.atSequenceNumber == this.atSequenceNumber &&
+          other.stateJson == this.stateJson &&
+          other.createdAt == this.createdAt);
+}
+
+class SnapshotsCompanion extends UpdateCompanion<Snapshot> {
+  final Value<String> id;
+  final Value<String> companyId;
+  final Value<int> atSequenceNumber;
+  final Value<String> stateJson;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const SnapshotsCompanion({
+    this.id = const Value.absent(),
+    this.companyId = const Value.absent(),
+    this.atSequenceNumber = const Value.absent(),
+    this.stateJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SnapshotsCompanion.insert({
+    required String id,
+    required String companyId,
+    required int atSequenceNumber,
+    required String stateJson,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       companyId = Value(companyId),
+       atSequenceNumber = Value(atSequenceNumber),
+       stateJson = Value(stateJson),
+       createdAt = Value(createdAt);
+  static Insertable<Snapshot> custom({
+    Expression<String>? id,
+    Expression<String>? companyId,
+    Expression<int>? atSequenceNumber,
+    Expression<String>? stateJson,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (companyId != null) 'company_id': companyId,
+      if (atSequenceNumber != null) 'at_sequence_number': atSequenceNumber,
+      if (stateJson != null) 'state_json': stateJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SnapshotsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? companyId,
+    Value<int>? atSequenceNumber,
+    Value<String>? stateJson,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return SnapshotsCompanion(
+      id: id ?? this.id,
+      companyId: companyId ?? this.companyId,
+      atSequenceNumber: atSequenceNumber ?? this.atSequenceNumber,
+      stateJson: stateJson ?? this.stateJson,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (companyId.present) {
+      map['company_id'] = Variable<String>(companyId.value);
+    }
+    if (atSequenceNumber.present) {
+      map['at_sequence_number'] = Variable<int>(atSequenceNumber.value);
+    }
+    if (stateJson.present) {
+      map['state_json'] = Variable<String>(stateJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SnapshotsCompanion(')
+          ..write('id: $id, ')
+          ..write('companyId: $companyId, ')
+          ..write('atSequenceNumber: $atSequenceNumber, ')
+          ..write('stateJson: $stateJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -12253,6 +12687,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MfnUpgradesTable mfnUpgrades = $MfnUpgradesTable(this);
   late final $EsopPoolExpansionsTable esopPoolExpansions =
       $EsopPoolExpansionsTable(this);
+  late final $SnapshotsTable snapshots = $SnapshotsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -12274,6 +12709,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     transfers,
     mfnUpgrades,
     esopPoolExpansions,
+    snapshots,
   ];
 }
 
@@ -12590,6 +13026,24 @@ final class $$CompaniesTableReferences
     final cache = $_typedResult.readTableOrNull(
       _esopPoolExpansionsRefsTable($_db),
     );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SnapshotsTable, List<Snapshot>>
+  _snapshotsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.snapshots,
+    aliasName: $_aliasNameGenerator(db.companies.id, db.snapshots.companyId),
+  );
+
+  $$SnapshotsTableProcessedTableManager get snapshotsRefs {
+    final manager = $$SnapshotsTableTableManager(
+      $_db,
+      $_db.snapshots,
+    ).filter((f) => f.companyId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_snapshotsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -12991,6 +13445,31 @@ class $$CompaniesTableFilterComposer
           }) => $$EsopPoolExpansionsTableFilterComposer(
             $db: $db,
             $table: $db.esopPoolExpansions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> snapshotsRefs(
+    Expression<bool> Function($$SnapshotsTableFilterComposer f) f,
+  ) {
+    final $$SnapshotsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.snapshots,
+      getReferencedColumn: (t) => t.companyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnapshotsTableFilterComposer(
+            $db: $db,
+            $table: $db.snapshots,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -13428,6 +13907,31 @@ class $$CompaniesTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> snapshotsRefs<T extends Object>(
+    Expression<T> Function($$SnapshotsTableAnnotationComposer a) f,
+  ) {
+    final $$SnapshotsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.snapshots,
+      getReferencedColumn: (t) => t.companyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SnapshotsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.snapshots,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$CompaniesTableTableManager
@@ -13459,6 +13963,7 @@ class $$CompaniesTableTableManager
             bool transfersRefs,
             bool mfnUpgradesRefs,
             bool esopPoolExpansionsRefs,
+            bool snapshotsRefs,
           })
         > {
   $$CompaniesTableTableManager(_$AppDatabase db, $CompaniesTable table)
@@ -13525,6 +14030,7 @@ class $$CompaniesTableTableManager
                 transfersRefs = false,
                 mfnUpgradesRefs = false,
                 esopPoolExpansionsRefs = false,
+                snapshotsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -13544,6 +14050,7 @@ class $$CompaniesTableTableManager
                     if (transfersRefs) db.transfers,
                     if (mfnUpgradesRefs) db.mfnUpgrades,
                     if (esopPoolExpansionsRefs) db.esopPoolExpansions,
+                    if (snapshotsRefs) db.snapshots,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -13863,6 +14370,27 @@ class $$CompaniesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (snapshotsRefs)
+                        await $_getPrefetchedData<
+                          Company,
+                          $CompaniesTable,
+                          Snapshot
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CompaniesTableReferences
+                              ._snapshotsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CompaniesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).snapshotsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.companyId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -13899,6 +14427,7 @@ typedef $$CompaniesTableProcessedTableManager =
         bool transfersRefs,
         bool mfnUpgradesRefs,
         bool esopPoolExpansionsRefs,
+        bool snapshotsRefs,
       })
     >;
 typedef $$StakeholdersTableCreateCompanionBuilder =
@@ -16163,34 +16692,6 @@ final class $$RoundsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
-
-  static MultiTypedResultKey<
-    $CapitalizationEventsTable,
-    List<CapitalizationEvent>
-  >
-  _capitalizationEventsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.capitalizationEvents,
-        aliasName: $_aliasNameGenerator(
-          db.rounds.id,
-          db.capitalizationEvents.roundId,
-        ),
-      );
-
-  $$CapitalizationEventsTableProcessedTableManager
-  get capitalizationEventsRefs {
-    final manager = $$CapitalizationEventsTableTableManager(
-      $_db,
-      $_db.capitalizationEvents,
-    ).filter((f) => f.roundId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _capitalizationEventsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
 }
 
 class $$RoundsTableFilterComposer
@@ -16424,31 +16925,6 @@ class $$RoundsTableFilterComposer
           }) => $$WarrantsTableFilterComposer(
             $db: $db,
             $table: $db.warrants,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> capitalizationEventsRefs(
-    Expression<bool> Function($$CapitalizationEventsTableFilterComposer f) f,
-  ) {
-    final $$CapitalizationEventsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.capitalizationEvents,
-      getReferencedColumn: (t) => t.roundId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CapitalizationEventsTableFilterComposer(
-            $db: $db,
-            $table: $db.capitalizationEvents,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -16798,32 +17274,6 @@ class $$RoundsTableAnnotationComposer
     );
     return f(composer);
   }
-
-  Expression<T> capitalizationEventsRefs<T extends Object>(
-    Expression<T> Function($$CapitalizationEventsTableAnnotationComposer a) f,
-  ) {
-    final $$CapitalizationEventsTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.capitalizationEvents,
-          getReferencedColumn: (t) => t.roundId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CapitalizationEventsTableAnnotationComposer(
-                $db: $db,
-                $table: $db.capitalizationEvents,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
 }
 
 class $$RoundsTableTableManager
@@ -16847,7 +17297,6 @@ class $$RoundsTableTableManager
             bool esopPoolsRefs,
             bool optionGrantsRefs,
             bool warrantsRefs,
-            bool capitalizationEventsRefs,
           })
         > {
   $$RoundsTableTableManager(_$AppDatabase db, $RoundsTable table)
@@ -16944,7 +17393,6 @@ class $$RoundsTableTableManager
                 esopPoolsRefs = false,
                 optionGrantsRefs = false,
                 warrantsRefs = false,
-                capitalizationEventsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -16954,7 +17402,6 @@ class $$RoundsTableTableManager
                     if (esopPoolsRefs) db.esopPools,
                     if (optionGrantsRefs) db.optionGrants,
                     if (warrantsRefs) db.warrants,
-                    if (capitalizationEventsRefs) db.capitalizationEvents,
                   ],
                   addJoins:
                       <
@@ -17100,27 +17547,6 @@ class $$RoundsTableTableManager
                               ),
                           typedResults: items,
                         ),
-                      if (capitalizationEventsRefs)
-                        await $_getPrefetchedData<
-                          Round,
-                          $RoundsTable,
-                          CapitalizationEvent
-                        >(
-                          currentTable: table,
-                          referencedTable: $$RoundsTableReferences
-                              ._capitalizationEventsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$RoundsTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).capitalizationEventsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.roundId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
                     ];
                   },
                 );
@@ -17149,7 +17575,6 @@ typedef $$RoundsTableProcessedTableManager =
         bool esopPoolsRefs,
         bool optionGrantsRefs,
         bool warrantsRefs,
-        bool capitalizationEventsRefs,
       })
     >;
 typedef $$HoldingsTableCreateCompanionBuilder =
@@ -22595,22 +23020,24 @@ typedef $$CapitalizationEventsTableCreateCompanionBuilder =
     CapitalizationEventsCompanion Function({
       required String id,
       required String companyId,
+      required int sequenceNumber,
       required String eventType,
-      required DateTime effectiveDate,
       required String eventDataJson,
-      Value<String?> roundId,
-      required DateTime createdAt,
+      required DateTime timestamp,
+      Value<String?> actorId,
+      Value<String?> signature,
       Value<int> rowid,
     });
 typedef $$CapitalizationEventsTableUpdateCompanionBuilder =
     CapitalizationEventsCompanion Function({
       Value<String> id,
       Value<String> companyId,
+      Value<int> sequenceNumber,
       Value<String> eventType,
-      Value<DateTime> effectiveDate,
       Value<String> eventDataJson,
-      Value<String?> roundId,
-      Value<DateTime> createdAt,
+      Value<DateTime> timestamp,
+      Value<String?> actorId,
+      Value<String?> signature,
       Value<int> rowid,
     });
 
@@ -22648,24 +23075,6 @@ final class $$CapitalizationEventsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
-
-  static $RoundsTable _roundIdTable(_$AppDatabase db) => db.rounds.createAlias(
-    $_aliasNameGenerator(db.capitalizationEvents.roundId, db.rounds.id),
-  );
-
-  $$RoundsTableProcessedTableManager? get roundId {
-    final $_column = $_itemColumn<String>('round_id');
-    if ($_column == null) return null;
-    final manager = $$RoundsTableTableManager(
-      $_db,
-      $_db.rounds,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_roundIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
 }
 
 class $$CapitalizationEventsTableFilterComposer
@@ -22682,13 +23091,13 @@ class $$CapitalizationEventsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get eventType => $composableBuilder(
-    column: $table.eventType,
+  ColumnFilters<int> get sequenceNumber => $composableBuilder(
+    column: $table.sequenceNumber,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<DateTime> get effectiveDate => $composableBuilder(
-    column: $table.effectiveDate,
+  ColumnFilters<String> get eventType => $composableBuilder(
+    column: $table.eventType,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -22697,8 +23106,18 @@ class $$CapitalizationEventsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
+  ColumnFilters<DateTime> get timestamp => $composableBuilder(
+    column: $table.timestamp,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get actorId => $composableBuilder(
+    column: $table.actorId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get signature => $composableBuilder(
+    column: $table.signature,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -22724,29 +23143,6 @@ class $$CapitalizationEventsTableFilterComposer
     );
     return composer;
   }
-
-  $$RoundsTableFilterComposer get roundId {
-    final $$RoundsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.roundId,
-      referencedTable: $db.rounds,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$RoundsTableFilterComposer(
-            $db: $db,
-            $table: $db.rounds,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$CapitalizationEventsTableOrderingComposer
@@ -22763,13 +23159,13 @@ class $$CapitalizationEventsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get eventType => $composableBuilder(
-    column: $table.eventType,
+  ColumnOrderings<int> get sequenceNumber => $composableBuilder(
+    column: $table.sequenceNumber,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get effectiveDate => $composableBuilder(
-    column: $table.effectiveDate,
+  ColumnOrderings<String> get eventType => $composableBuilder(
+    column: $table.eventType,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -22778,8 +23174,18 @@ class $$CapitalizationEventsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
+  ColumnOrderings<DateTime> get timestamp => $composableBuilder(
+    column: $table.timestamp,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get actorId => $composableBuilder(
+    column: $table.actorId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get signature => $composableBuilder(
+    column: $table.signature,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -22805,29 +23211,6 @@ class $$CapitalizationEventsTableOrderingComposer
     );
     return composer;
   }
-
-  $$RoundsTableOrderingComposer get roundId {
-    final $$RoundsTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.roundId,
-      referencedTable: $db.rounds,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$RoundsTableOrderingComposer(
-            $db: $db,
-            $table: $db.rounds,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$CapitalizationEventsTableAnnotationComposer
@@ -22842,21 +23225,27 @@ class $$CapitalizationEventsTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<String> get eventType =>
-      $composableBuilder(column: $table.eventType, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get effectiveDate => $composableBuilder(
-    column: $table.effectiveDate,
+  GeneratedColumn<int> get sequenceNumber => $composableBuilder(
+    column: $table.sequenceNumber,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get eventType =>
+      $composableBuilder(column: $table.eventType, builder: (column) => column);
 
   GeneratedColumn<String> get eventDataJson => $composableBuilder(
     column: $table.eventDataJson,
     builder: (column) => column,
   );
 
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+  GeneratedColumn<DateTime> get timestamp =>
+      $composableBuilder(column: $table.timestamp, builder: (column) => column);
+
+  GeneratedColumn<String> get actorId =>
+      $composableBuilder(column: $table.actorId, builder: (column) => column);
+
+  GeneratedColumn<String> get signature =>
+      $composableBuilder(column: $table.signature, builder: (column) => column);
 
   $$CompaniesTableAnnotationComposer get companyId {
     final $$CompaniesTableAnnotationComposer composer = $composerBuilder(
@@ -22880,29 +23269,6 @@ class $$CapitalizationEventsTableAnnotationComposer
     );
     return composer;
   }
-
-  $$RoundsTableAnnotationComposer get roundId {
-    final $$RoundsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.roundId,
-      referencedTable: $db.rounds,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$RoundsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.rounds,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
 }
 
 class $$CapitalizationEventsTableTableManager
@@ -22918,7 +23284,7 @@ class $$CapitalizationEventsTableTableManager
           $$CapitalizationEventsTableUpdateCompanionBuilder,
           (CapitalizationEvent, $$CapitalizationEventsTableReferences),
           CapitalizationEvent,
-          PrefetchHooks Function({bool companyId, bool roundId})
+          PrefetchHooks Function({bool companyId})
         > {
   $$CapitalizationEventsTableTableManager(
     _$AppDatabase db,
@@ -22943,40 +23309,44 @@ class $$CapitalizationEventsTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> companyId = const Value.absent(),
+                Value<int> sequenceNumber = const Value.absent(),
                 Value<String> eventType = const Value.absent(),
-                Value<DateTime> effectiveDate = const Value.absent(),
                 Value<String> eventDataJson = const Value.absent(),
-                Value<String?> roundId = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> timestamp = const Value.absent(),
+                Value<String?> actorId = const Value.absent(),
+                Value<String?> signature = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CapitalizationEventsCompanion(
                 id: id,
                 companyId: companyId,
+                sequenceNumber: sequenceNumber,
                 eventType: eventType,
-                effectiveDate: effectiveDate,
                 eventDataJson: eventDataJson,
-                roundId: roundId,
-                createdAt: createdAt,
+                timestamp: timestamp,
+                actorId: actorId,
+                signature: signature,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String id,
                 required String companyId,
+                required int sequenceNumber,
                 required String eventType,
-                required DateTime effectiveDate,
                 required String eventDataJson,
-                Value<String?> roundId = const Value.absent(),
-                required DateTime createdAt,
+                required DateTime timestamp,
+                Value<String?> actorId = const Value.absent(),
+                Value<String?> signature = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CapitalizationEventsCompanion.insert(
                 id: id,
                 companyId: companyId,
+                sequenceNumber: sequenceNumber,
                 eventType: eventType,
-                effectiveDate: effectiveDate,
                 eventDataJson: eventDataJson,
-                roundId: roundId,
-                createdAt: createdAt,
+                timestamp: timestamp,
+                actorId: actorId,
+                signature: signature,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -22987,7 +23357,7 @@ class $$CapitalizationEventsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({companyId = false, roundId = false}) {
+          prefetchHooksCallback: ({companyId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -23022,21 +23392,6 @@ class $$CapitalizationEventsTableTableManager
                               )
                               as T;
                     }
-                    if (roundId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.roundId,
-                                referencedTable:
-                                    $$CapitalizationEventsTableReferences
-                                        ._roundIdTable(db),
-                                referencedColumn:
-                                    $$CapitalizationEventsTableReferences
-                                        ._roundIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
 
                     return state;
                   },
@@ -23061,7 +23416,7 @@ typedef $$CapitalizationEventsTableProcessedTableManager =
       $$CapitalizationEventsTableUpdateCompanionBuilder,
       (CapitalizationEvent, $$CapitalizationEventsTableReferences),
       CapitalizationEvent,
-      PrefetchHooks Function({bool companyId, bool roundId})
+      PrefetchHooks Function({bool companyId})
     >;
 typedef $$SavedScenariosTableCreateCompanionBuilder =
     SavedScenariosCompanion Function({
@@ -25558,6 +25913,327 @@ typedef $$EsopPoolExpansionsTableProcessedTableManager =
       EsopPoolExpansion,
       PrefetchHooks Function({bool companyId, bool poolId})
     >;
+typedef $$SnapshotsTableCreateCompanionBuilder =
+    SnapshotsCompanion Function({
+      required String id,
+      required String companyId,
+      required int atSequenceNumber,
+      required String stateJson,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$SnapshotsTableUpdateCompanionBuilder =
+    SnapshotsCompanion Function({
+      Value<String> id,
+      Value<String> companyId,
+      Value<int> atSequenceNumber,
+      Value<String> stateJson,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$SnapshotsTableReferences
+    extends BaseReferences<_$AppDatabase, $SnapshotsTable, Snapshot> {
+  $$SnapshotsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $CompaniesTable _companyIdTable(_$AppDatabase db) =>
+      db.companies.createAlias(
+        $_aliasNameGenerator(db.snapshots.companyId, db.companies.id),
+      );
+
+  $$CompaniesTableProcessedTableManager get companyId {
+    final $_column = $_itemColumn<String>('company_id')!;
+
+    final manager = $$CompaniesTableTableManager(
+      $_db,
+      $_db.companies,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_companyIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$SnapshotsTableFilterComposer
+    extends Composer<_$AppDatabase, $SnapshotsTable> {
+  $$SnapshotsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get atSequenceNumber => $composableBuilder(
+    column: $table.atSequenceNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get stateJson => $composableBuilder(
+    column: $table.stateJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CompaniesTableFilterComposer get companyId {
+    final $$CompaniesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.companyId,
+      referencedTable: $db.companies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CompaniesTableFilterComposer(
+            $db: $db,
+            $table: $db.companies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SnapshotsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SnapshotsTable> {
+  $$SnapshotsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get atSequenceNumber => $composableBuilder(
+    column: $table.atSequenceNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get stateJson => $composableBuilder(
+    column: $table.stateJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CompaniesTableOrderingComposer get companyId {
+    final $$CompaniesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.companyId,
+      referencedTable: $db.companies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CompaniesTableOrderingComposer(
+            $db: $db,
+            $table: $db.companies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SnapshotsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SnapshotsTable> {
+  $$SnapshotsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get atSequenceNumber => $composableBuilder(
+    column: $table.atSequenceNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get stateJson =>
+      $composableBuilder(column: $table.stateJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$CompaniesTableAnnotationComposer get companyId {
+    final $$CompaniesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.companyId,
+      referencedTable: $db.companies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CompaniesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.companies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$SnapshotsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SnapshotsTable,
+          Snapshot,
+          $$SnapshotsTableFilterComposer,
+          $$SnapshotsTableOrderingComposer,
+          $$SnapshotsTableAnnotationComposer,
+          $$SnapshotsTableCreateCompanionBuilder,
+          $$SnapshotsTableUpdateCompanionBuilder,
+          (Snapshot, $$SnapshotsTableReferences),
+          Snapshot,
+          PrefetchHooks Function({bool companyId})
+        > {
+  $$SnapshotsTableTableManager(_$AppDatabase db, $SnapshotsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SnapshotsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SnapshotsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SnapshotsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> companyId = const Value.absent(),
+                Value<int> atSequenceNumber = const Value.absent(),
+                Value<String> stateJson = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SnapshotsCompanion(
+                id: id,
+                companyId: companyId,
+                atSequenceNumber: atSequenceNumber,
+                stateJson: stateJson,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String companyId,
+                required int atSequenceNumber,
+                required String stateJson,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SnapshotsCompanion.insert(
+                id: id,
+                companyId: companyId,
+                atSequenceNumber: atSequenceNumber,
+                stateJson: stateJson,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$SnapshotsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({companyId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (companyId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.companyId,
+                                referencedTable: $$SnapshotsTableReferences
+                                    ._companyIdTable(db),
+                                referencedColumn: $$SnapshotsTableReferences
+                                    ._companyIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$SnapshotsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SnapshotsTable,
+      Snapshot,
+      $$SnapshotsTableFilterComposer,
+      $$SnapshotsTableOrderingComposer,
+      $$SnapshotsTableAnnotationComposer,
+      $$SnapshotsTableCreateCompanionBuilder,
+      $$SnapshotsTableUpdateCompanionBuilder,
+      (Snapshot, $$SnapshotsTableReferences),
+      Snapshot,
+      PrefetchHooks Function({bool companyId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -25594,4 +26270,6 @@ class $AppDatabaseManager {
       $$MfnUpgradesTableTableManager(_db, _db.mfnUpgrades);
   $$EsopPoolExpansionsTableTableManager get esopPoolExpansions =>
       $$EsopPoolExpansionsTableTableManager(_db, _db.esopPoolExpansions);
+  $$SnapshotsTableTableManager get snapshots =>
+      $$SnapshotsTableTableManager(_db, _db.snapshots);
 }

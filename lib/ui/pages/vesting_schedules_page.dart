@@ -26,14 +26,14 @@ class VestingSchedulesPage extends ConsumerWidget {
             tooltip: 'Quick Add',
             onSelected: (value) async {
               if (companyId == null) return;
-              final mutations = ref.read(
-                vestingScheduleMutationsProvider.notifier,
+              final commands = ref.read(
+                vestingScheduleCommandsProvider.notifier,
               );
 
               if (value == '4year') {
-                await mutations.createStandard4Year(companyId: companyId);
+                await commands.createStandard4YearSchedule();
               } else if (value == '3year') {
-                await mutations.create3YearNoCliff(companyId: companyId);
+                await commands.create3YearNoCliffSchedule();
               }
             },
             itemBuilder: (context) => [
@@ -455,13 +455,13 @@ class VestingSchedulesPage extends ConsumerWidget {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
 
-                final mutations = ref.read(
-                  vestingScheduleMutationsProvider.notifier,
+                final commands = ref.read(
+                  vestingScheduleCommandsProvider.notifier,
                 );
 
                 if (isEditing) {
-                  await mutations.updateSchedule(
-                    id: existing.id,
+                  await commands.updateVestingSchedule(
+                    scheduleId: existing.id,
                     name: name,
                     type: selectedType,
                     totalMonths: selectedType == VestingType.timeBased
@@ -478,8 +478,7 @@ class VestingSchedulesPage extends ConsumerWidget {
                         : notesController.text.trim(),
                   );
                 } else {
-                  await mutations.create(
-                    companyId: companyId,
+                  await commands.createVestingSchedule(
                     name: name,
                     type: selectedType,
                     totalMonths: selectedType == VestingType.timeBased
@@ -522,8 +521,8 @@ class VestingSchedulesPage extends ConsumerWidget {
 
     if (confirmed) {
       await ref
-          .read(vestingScheduleMutationsProvider.notifier)
-          .deleteSchedule(schedule.id);
+          .read(vestingScheduleCommandsProvider.notifier)
+          .deleteVestingSchedule(scheduleId: schedule.id);
     }
   }
 

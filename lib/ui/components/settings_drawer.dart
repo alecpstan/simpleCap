@@ -370,9 +370,10 @@ class SettingsDrawer extends ConsumerWidget {
   }
 
   void _showCompanySwitcher(BuildContext context, WidgetRef ref) {
+    final parentContext = context; // Store parent context before it's shadowed
     showModalBottomSheet(
       context: context,
-      builder: (context) => Column(
+      builder: (sheetContext) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           const ListTile(
@@ -384,8 +385,8 @@ class SettingsDrawer extends ConsumerWidget {
             leading: const CircleAvatar(child: Icon(Icons.add)),
             title: const Text('Create New Company'),
             onTap: () {
-              Navigator.pop(context);
-              _showCreateCompanyDialog(context, ref);
+              Navigator.pop(sheetContext);
+              _showCreateCompanyDialog(parentContext, ref);
             },
           ),
           // TODO: List existing companies
@@ -400,7 +401,7 @@ class SettingsDrawer extends ConsumerWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Create Company'),
         content: TextField(
           controller: nameController,
@@ -409,28 +410,54 @@ class SettingsDrawer extends ConsumerWidget {
             hintText: 'e.g., Acme Pty Ltd',
           ),
           autofocus: true,
+          onSubmitted: (_) async {
+            if (nameController.text.isEmpty) return;
+            try {
+              debugPrint(
+                'Creating company from settings: ${nameController.text}',
+              );
+              final companyId = await ref
+                  .read(companyCommandsProvider.notifier)
+                  .createCompany(name: nameController.text);
+              debugPrint('Company created: $companyId');
+              // Select the newly created company
+              await ref
+                  .read(currentCompanyIdProvider.notifier)
+                  .setCompany(companyId);
+              debugPrint('Company set as current');
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+            } catch (e, st) {
+              debugPrint('Error creating company: $e');
+              debugPrint('Stack trace: $st');
+            }
+          },
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () async {
               if (nameController.text.isEmpty) return;
-              final db = ref.read(databaseProvider);
-              final id = DateTime.now().millisecondsSinceEpoch.toString();
-              await db
-                  .into(db.companies)
-                  .insert(
-                    CompaniesCompanion.insert(
-                      id: id,
-                      name: nameController.text,
-                      createdAt: DateTime.now(),
-                      updatedAt: DateTime.now(),
-                    ),
-                  );
-              if (context.mounted) Navigator.pop(context);
+              try {
+                debugPrint(
+                  'Creating company from settings button: ${nameController.text}',
+                );
+                final companyId = await ref
+                    .read(companyCommandsProvider.notifier)
+                    .createCompany(name: nameController.text);
+                debugPrint('Company created: $companyId');
+                // Select the newly created company
+                await ref
+                    .read(currentCompanyIdProvider.notifier)
+                    .setCompany(companyId);
+                debugPrint('Company set as current');
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              } catch (e, st) {
+                debugPrint('Error creating company: $e');
+                debugPrint('Stack trace: $st');
+              }
             },
             child: const Text('Create'),
           ),
@@ -559,27 +586,13 @@ class SettingsDrawer extends ConsumerWidget {
           FilledButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              try {
-                final count = await ref
-                    .read(holdingMutationsProvider.notifier)
-                    .deleteOrphanHoldings(companyId);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        count > 0
-                            ? 'Deleted $count orphan holding${count > 1 ? 's' : ''}'
-                            : 'No orphan holdings found',
-                      ),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                }
+              // TODO: Implement deleteOrphanHoldings in HoldingCommands
+              // This operation is not yet supported in the event-sourcing architecture.
+              // For now, show a message that this feature is coming soon.
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('This feature is coming soon')),
+                );
               }
             },
             child: const Text('Clean Up'),

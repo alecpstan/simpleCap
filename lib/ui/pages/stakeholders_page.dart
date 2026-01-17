@@ -100,7 +100,10 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
   }
 
-  Widget _buildGroupedList(BuildContext context, List<Stakeholder> stakeholders) {
+  Widget _buildGroupedList(
+    BuildContext context,
+    List<Stakeholder> stakeholders,
+  ) {
     // Group stakeholders by type
     final grouped = <String, List<Stakeholder>>{};
     for (final s in stakeholders) {
@@ -123,7 +126,9 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     for (final type in sortedTypes) {
       final typeStakeholders = grouped[type]!;
       children.add(_buildGroupHeader(context, type, typeStakeholders.length));
-      children.addAll(typeStakeholders.map((s) => _buildStakeholderCard(context, s)));
+      children.addAll(
+        typeStakeholders.map((s) => _buildStakeholderCard(context, s)),
+      );
     }
     children.add(const SizedBox(height: 80));
 
@@ -140,11 +145,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Row(
         children: [
-          Icon(
-            _getTypeIcon(type),
-            size: 20,
-            color: _getTypeColor(type),
-          ),
+          Icon(_getTypeIcon(type), size: 20, color: _getTypeColor(type)),
           const SizedBox(width: 8),
           Text(
             _formatTypeForHeader(type),
@@ -248,9 +249,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: Icon(
-                  _groupByType ? Icons.view_agenda : Icons.view_list,
-                ),
+                icon: Icon(_groupByType ? Icons.view_agenda : Icons.view_list),
                 tooltip: _groupByType ? 'Show flat list' : 'Group by type',
                 onPressed: () => setState(() => _groupByType = !_groupByType),
               ),
@@ -279,10 +278,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
                     value: 'angel',
                     child: Text('Angel Investors'),
                   ),
-                  const PopupMenuItem(
-                    value: 'vcFund',
-                    child: Text('VC Funds'),
-                  ),
+                  const PopupMenuItem(value: 'vcFund', child: Text('VC Funds')),
                   const PopupMenuItem(
                     value: 'institution',
                     child: Text('Institutions'),
@@ -295,10 +291,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
                     value: 'company',
                     child: Text('Companies'),
                   ),
-                  const PopupMenuItem(
-                    value: 'other',
-                    child: Text('Other'),
-                  ),
+                  const PopupMenuItem(value: 'other', child: Text('Other')),
                 ],
               ),
             ],
@@ -466,20 +459,22 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
 
     // Check if stakeholder has any draft holdings
-    final hasDraftEquity = holdingsAsync.whenOrNull(
-      data: (holdings) {
-        final draftRoundIds = roundsAsync.whenOrNull(
-          data: (rounds) => {
-            for (final r in rounds)
-              if (r.status == 'draft') r.id,
+    final hasDraftEquity =
+        holdingsAsync.whenOrNull(
+          data: (holdings) {
+            final draftRoundIds = roundsAsync.whenOrNull(
+              data: (rounds) => {
+                for (final r in rounds)
+                  if (r.status == 'draft') r.id,
+              },
+            );
+            if (draftRoundIds == null) return false;
+            return holdings.any(
+              (h) => h.roundId != null && draftRoundIds.contains(h.roundId),
+            );
           },
-        );
-        if (draftRoundIds == null) return false;
-        return holdings.any(
-          (h) => h.roundId != null && draftRoundIds.contains(h.roundId),
-        );
-      },
-    ) ?? false;
+        ) ??
+        false;
 
     return ExpandableCard(
       leading: EntityAvatar(
@@ -663,7 +658,10 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
 
     if (confirmed && mounted) {
-      await ref.read(holdingMutationsProvider.notifier).delete(holding.id);
+      // TODO: Implement deleteHolding in HoldingCommands
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Delete not yet implemented')),
+      );
     }
   }
 
@@ -740,15 +738,18 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
 
     if (confirmed && mounted) {
-      await ref.read(optionGrantMutationsProvider.notifier).delete(option.id);
+      // TODO: Implement deleteOptionGrant in OptionGrantCommands
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Delete not yet implemented')),
+      );
     }
   }
 
   void _showOptionEditDialog(BuildContext context, OptionGrant option) {
     // TODO: Implement option edit dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Option editing coming soon')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Option editing coming soon')));
   }
 
   void _showOptionExerciseDialog(BuildContext context, OptionGrant option) {
@@ -803,9 +804,15 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
       onTap: () => ConvertibleDetailDialog.show(
         context: context,
         convertible: convertible,
-        onEdit: isConverted ? null : () => _showConvertibleEditDialog(context, convertible),
-        onConvert: isConverted ? null : () => _showConvertibleConvertDialog(context, convertible),
-        onRevert: isConverted ? () => _revertConvertible(context, convertible) : null,
+        onEdit: isConverted
+            ? null
+            : () => _showConvertibleEditDialog(context, convertible),
+        onConvert: isConverted
+            ? null
+            : () => _showConvertibleConvertDialog(context, convertible),
+        onRevert: isConverted
+            ? () => _revertConvertible(context, convertible)
+            : null,
         onDelete: () => _confirmDeleteConvertible(context, convertible),
       ),
     );
@@ -821,25 +828,38 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
 
     if (confirmed && mounted) {
-      await ref.read(convertibleMutationsProvider.notifier).delete(convertible.id);
+      // TODO: Implement cancelConvertible in ConvertibleCommands
+      // or add revertConversion command
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Delete not yet implemented')),
+      );
     }
   }
 
-  void _showConvertibleEditDialog(BuildContext context, Convertible convertible) {
+  void _showConvertibleEditDialog(
+    BuildContext context,
+    Convertible convertible,
+  ) {
     // TODO: Implement convertible edit dialog
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Convertible editing coming soon')),
     );
   }
 
-  void _showConvertibleConvertDialog(BuildContext context, Convertible convertible) {
+  void _showConvertibleConvertDialog(
+    BuildContext context,
+    Convertible convertible,
+  ) {
     // TODO: Implement convertible conversion dialog
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Convertible conversion coming soon')),
     );
   }
 
-  Future<void> _revertConvertible(BuildContext context, Convertible convertible) async {
+  Future<void> _revertConvertible(
+    BuildContext context,
+    Convertible convertible,
+  ) async {
     final confirmed = await ConfirmDialog.show(
       context: context,
       title: 'Revert Conversion?',
@@ -849,9 +869,9 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
 
     if (confirmed && mounted) {
-      await ref.read(convertibleMutationsProvider.notifier).updateConvertible(
-        id: convertible.id,
-        status: 'outstanding',
+      // TODO: Implement revertConversion in ConvertibleCommands
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Revert not yet implemented')),
       );
     }
   }
@@ -901,7 +921,8 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
           classes.where((c) => c.id == warrant.shareClassId).firstOrNull?.name,
     );
     final isActive = warrant.status == 'active';
-    final remaining = warrant.quantity - warrant.exercisedCount - warrant.cancelledCount;
+    final remaining =
+        warrant.quantity - warrant.exercisedCount - warrant.cancelledCount;
 
     return WarrantItem(
       quantity: warrant.quantity,
@@ -916,7 +937,9 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
         warrant: warrant,
         shareClassName: shareClassName,
         onEdit: () => _showWarrantEditDialog(context, warrant),
-        onExercise: (isActive && remaining > 0) ? () => _showWarrantExerciseDialog(context, warrant) : null,
+        onExercise: (isActive && remaining > 0)
+            ? () => _showWarrantExerciseDialog(context, warrant)
+            : null,
         onDelete: () => _confirmDeleteWarrant(context, warrant),
       ),
     );
@@ -932,7 +955,10 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
 
     if (confirmed && mounted) {
-      await ref.read(warrantMutationsProvider.notifier).delete(warrant.id);
+      // TODO: Implement deleteWarrant in WarrantCommands
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Delete not yet implemented')),
+      );
     }
   }
 
@@ -968,10 +994,12 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
           final shares = int.tryParse(sharesController.text) ?? 0;
           final isValid = shares > 0 && shares <= maxShares;
           final totalCost = shares * warrant.strikePrice;
-          final currentValue =
-              pricePerShare != null ? shares * pricePerShare : null;
-          final potentialGain =
-              currentValue != null ? currentValue - totalCost : null;
+          final currentValue = pricePerShare != null
+              ? shares * pricePerShare
+              : null;
+          final potentialGain = currentValue != null
+              ? currentValue - totalCost
+              : null;
 
           return AlertDialog(
             title: const Text('Exercise Warrants'),
@@ -1020,8 +1048,8 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
                   Text(
                     'Exercise Summary',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   _buildExerciseSummaryRow(
@@ -1051,7 +1079,9 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
                       context,
                       'Potential Gain',
                       Formatters.currency(potentialGain!),
-                      valueColor: potentialGain >= 0 ? Colors.green : Colors.red,
+                      valueColor: potentialGain >= 0
+                          ? Colors.green
+                          : Colors.red,
                     ),
                   ],
                 ],
@@ -1066,10 +1096,11 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
                 onPressed: isValid
                     ? () async {
                         await ref
-                            .read(warrantMutationsProvider.notifier)
-                            .exercise(
-                              id: warrant.id,
-                              sharesToExercise: shares,
+                            .read(warrantCommandsProvider.notifier)
+                            .exerciseWarrants(
+                              warrantId: warrant.id,
+                              exercisedCount: shares,
+                              exercisePrice: warrant.strikePrice,
                               exerciseDate: exerciseDate,
                             );
 
@@ -1100,15 +1131,15 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
           Text(
             label,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: highlight ? FontWeight.bold : null,
-                ),
+              fontWeight: highlight ? FontWeight.bold : null,
+            ),
           ),
           Text(
             value,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: highlight ? FontWeight.bold : null,
-                  color: valueColor,
-                ),
+              fontWeight: highlight ? FontWeight.bold : null,
+              color: valueColor,
+            ),
           ),
         ],
       ),
@@ -1214,11 +1245,23 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
                   decoration: const InputDecoration(labelText: 'Type'),
                   items: const [
                     DropdownMenuItem(value: 'founder', child: Text('Founder')),
-                    DropdownMenuItem(value: 'employee', child: Text('Employee')),
-                    DropdownMenuItem(value: 'investor', child: Text('Investor')),
-                    DropdownMenuItem(value: 'angel', child: Text('Angel Investor')),
+                    DropdownMenuItem(
+                      value: 'employee',
+                      child: Text('Employee'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'investor',
+                      child: Text('Investor'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'angel',
+                      child: Text('Angel Investor'),
+                    ),
                     DropdownMenuItem(value: 'vcFund', child: Text('VC Fund')),
-                    DropdownMenuItem(value: 'institution', child: Text('Institution')),
+                    DropdownMenuItem(
+                      value: 'institution',
+                      child: Text('Institution'),
+                    ),
                     DropdownMenuItem(value: 'advisor', child: Text('Advisor')),
                     DropdownMenuItem(value: 'company', child: Text('Company')),
                     DropdownMenuItem(value: 'other', child: Text('Other')),
@@ -1245,13 +1288,11 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
 
-                final mutations = ref.read(
-                  stakeholderMutationsProvider.notifier,
-                );
+                final commands = ref.read(stakeholderCommandsProvider.notifier);
 
                 if (isEditing) {
-                  await mutations.updateStakeholder(
-                    id: stakeholder.id,
+                  await commands.updateStakeholder(
+                    stakeholderId: stakeholder.id,
                     name: name,
                     type: selectedType,
                     email: emailController.text.trim().isEmpty
@@ -1262,8 +1303,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
                         : notesController.text.trim(),
                   );
                 } else {
-                  await mutations.create(
-                    companyId: companyId!,
+                  await commands.addStakeholder(
                     name: name,
                     type: selectedType,
                     email: emailController.text.trim().isEmpty
@@ -1296,8 +1336,8 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
 
     if (confirmed && mounted) {
       await ref
-          .read(stakeholderMutationsProvider.notifier)
-          .delete(stakeholder.id);
+          .read(stakeholderCommandsProvider.notifier)
+          .removeStakeholder(stakeholderId: stakeholder.id);
     }
   }
 }

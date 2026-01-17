@@ -1,9 +1,7 @@
-import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../infrastructure/database/database.dart';
-import 'database_provider.dart';
-import 'company_provider.dart';
 import 'rounds_provider.dart';
+import 'projection_adapters.dart';
 
 part 'valuations_provider.g.dart';
 
@@ -60,13 +58,10 @@ class EffectiveValuation {
 enum ValuationSource { manualValuation, roundPreMoney, roundPostMoney }
 
 /// Stream of all valuations for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 @riverpod
 Stream<List<Valuation>> valuationsStream(ValuationsStreamRef ref) {
-  final companyId = ref.watch(currentCompanyIdProvider);
-  if (companyId == null) return Stream.value([]);
-
-  final db = ref.watch(databaseProvider);
-  return db.watchValuations(companyId);
+  return ref.watch(unifiedValuationsStreamProvider.stream);
 }
 
 /// Gets the latest valuation for the company.
@@ -209,76 +204,6 @@ Future<ValuationsSummary> valuationsSummary(ValuationsSummaryRef ref) async {
     valuationCount: valuations.length,
     latestDate: current.date,
   );
-}
-
-/// Notifier for valuation mutations.
-@riverpod
-class ValuationMutations extends _$ValuationMutations {
-  @override
-  FutureOr<void> build() {}
-
-  /// Create a new valuation.
-  Future<String> create({
-    required String companyId,
-    required DateTime date,
-    required double preMoneyValue,
-    required String method,
-    String? methodParamsJson,
-    String? notes,
-  }) async {
-    final db = ref.read(databaseProvider);
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
-    final now = DateTime.now();
-
-    await db
-        .into(db.valuations)
-        .insert(
-          ValuationsCompanion.insert(
-            id: id,
-            companyId: companyId,
-            date: date,
-            preMoneyValue: preMoneyValue,
-            method: method,
-            methodParamsJson: Value(methodParamsJson),
-            notes: Value(notes),
-            createdAt: now,
-          ),
-        );
-
-    return id;
-  }
-
-  /// Update an existing valuation.
-  Future<void> updateValuation({
-    required String id,
-    DateTime? date,
-    double? preMoneyValue,
-    String? method,
-    String? methodParamsJson,
-    String? notes,
-  }) async {
-    final db = ref.read(databaseProvider);
-
-    await (db.update(db.valuations)..where((v) => v.id.equals(id))).write(
-      ValuationsCompanion(
-        date: date != null ? Value(date) : const Value.absent(),
-        preMoneyValue: preMoneyValue != null
-            ? Value(preMoneyValue)
-            : const Value.absent(),
-        method: method != null ? Value(method) : const Value.absent(),
-        methodParamsJson: methodParamsJson != null
-            ? Value(methodParamsJson)
-            : const Value.absent(),
-        notes: notes != null ? Value(notes) : const Value.absent(),
-      ),
-    );
-  }
-
-  /// Delete a valuation.
-  Future<void> delete(String id) async {
-    final db = ref.read(databaseProvider);
-    await (db.delete(db.valuations)..where((v) => v.id.equals(id))).go();
-  }
 }
 
 /// Valuation methods enum.

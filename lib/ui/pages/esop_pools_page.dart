@@ -682,8 +682,8 @@ class EsopPoolsPage extends ConsumerWidget {
 
                 try {
                   await ref
-                      .read(createEsopPoolProvider.notifier)
-                      .call(
+                      .read(esopPoolCommandsProvider.notifier)
+                      .createPool(
                         name: nameController.text,
                         shareClassId: selectedShareClassId!,
                         poolSize: poolSize,
@@ -898,34 +898,14 @@ class EsopPoolsPage extends ConsumerWidget {
                 }
 
                 try {
-                  await ref
-                      .read(updateEsopPoolProvider.notifier)
-                      .call(
-                        id: pool.id,
-                        name: nameController.text,
-                        shareClassId: selectedShareClassId,
-                        status: status,
-                        targetPercentage: double.tryParse(
-                          targetPercentController.text,
-                        ),
-                        defaultVestingScheduleId: selectedVestingScheduleId,
-                        strikePriceMethod: strikePriceMethod,
-                        defaultStrikePrice: double.tryParse(
-                          strikePriceController.text,
-                        ),
-                        defaultExpiryYears: int.tryParse(
-                          expiryYearsController.text,
-                        ),
-                        notes: notesController.text.isNotEmpty
-                            ? notesController.text
-                            : null,
-                      );
-
+                  // TODO: Implement updatePool in EsopPoolCommands
+                  // This operation is not yet supported in the event-sourcing architecture.
+                  // The current commands only support createPool and expandPool.
                   if (context.mounted) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('ESOP pool updated'),
+                        content: Text('Pool update not yet implemented'),
                         behavior: SnackBarBehavior.floating,
                       ),
                     );
@@ -1003,12 +983,14 @@ class EsopPoolsPage extends ConsumerWidget {
               }
 
               try {
-                // Use the new history-tracking expansion mutations
+                // Use event-sourced expansion command
                 await ref
-                    .read(poolExpansionMutationsProvider.notifier)
+                    .read(esopPoolCommandsProvider.notifier)
                     .expandPool(
                       poolId: pool.id,
-                      additionalShares: additional,
+                      previousSize: pool.poolSize,
+                      newSize: pool.poolSize + additional,
+                      sharesAdded: additional,
                       reason: 'manual',
                       resolutionReference: resolutionController.text.isNotEmpty
                           ? resolutionController.text
@@ -1060,28 +1042,16 @@ class EsopPoolsPage extends ConsumerWidget {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              try {
-                await ref.read(deleteEsopPoolProvider.notifier).call(pool.id);
-
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('ESOP pool deleted'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $e'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
+              // TODO: Implement deletePool in EsopPoolCommands
+              // This operation is not yet supported in the event-sourcing architecture.
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Pool delete not yet implemented'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
               }
             },
             child: const Text('Delete'),
@@ -1261,14 +1231,16 @@ class _PoolExpansionDialogState extends ConsumerState<_PoolExpansionDialog> {
     setState(() => _isApplying = true);
 
     try {
-      final mutations = ref.read(poolExpansionMutationsProvider.notifier);
+      final commands = ref.read(esopPoolCommandsProvider.notifier);
       int appliedCount = 0;
 
       for (final index in _selectedIndices.toList()..sort()) {
         final expansion = widget.expansionsNeeded[index];
-        await mutations.expandPool(
+        await commands.expandPool(
           poolId: expansion.pool.id,
-          additionalShares: expansion.sharesToAdd,
+          previousSize: expansion.pool.poolSize,
+          newSize: expansion.pool.poolSize + expansion.sharesToAdd,
+          sharesAdded: expansion.sharesToAdd,
           reason: 'target_percentage',
           resolutionReference: _resolutionController.text.isNotEmpty
               ? _resolutionController.text

@@ -11,6 +11,7 @@ export 'round_builder_page.dart';
 export 'rounds_page.dart';
 export 'scenarios_page.dart';
 export 'stakeholders_page.dart';
+export 'timeline_page.dart';
 export 'transfers_page.dart';
 export 'value_page.dart';
 export 'valuations_page.dart';

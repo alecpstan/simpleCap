@@ -408,11 +408,12 @@ class HoldingsPage extends ConsumerWidget {
     if (!confirmed) return;
 
     try {
-      await ref.read(holdingMutationsProvider.notifier).delete(holding.id);
+      // TODO: Implement deleteHolding in HoldingCommands
+      // This operation is not yet supported in the event-sourcing architecture.
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Holding deleted')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Delete not yet implemented')),
+        );
       }
     } catch (e) {
       if (context.mounted) {
@@ -664,9 +665,8 @@ class _IssueStockFormState extends ConsumerState<_IssueStockForm> {
 
     try {
       await ref
-          .read(holdingMutationsProvider.notifier)
+          .read(holdingCommandsProvider.notifier)
           .issueShares(
-            companyId: widget.companyId,
             stakeholderId: _stakeholderId!,
             shareClassId: _shareClassId!,
             shareCount: int.parse(_sharesController.text),

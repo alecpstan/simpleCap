@@ -529,11 +529,11 @@ class WarrantsPage extends ConsumerWidget {
                 if (!isEditing && selectedStakeholderId == null) return;
                 if (selectedShareClassId == null) return;
 
-                final mutations = ref.read(warrantMutationsProvider.notifier);
+                final commands = ref.read(warrantCommandsProvider.notifier);
 
                 if (isEditing) {
-                  await mutations.updateWarrant(
-                    id: warrant.id,
+                  await commands.updateWarrant(
+                    warrantId: warrant.id,
                     shareClassId: selectedShareClassId,
                     quantity: quantity,
                     strikePrice: strike,
@@ -545,8 +545,7 @@ class WarrantsPage extends ConsumerWidget {
                         : notesController.text.trim(),
                   );
                 } else {
-                  await mutations.create(
-                    companyId: companyId!,
+                  await commands.issueWarrant(
                     stakeholderId: selectedStakeholderId!,
                     shareClassId: selectedShareClassId!,
                     quantity: quantity,
@@ -725,10 +724,11 @@ class WarrantsPage extends ConsumerWidget {
                 onPressed: shares > 0 && shares <= maxShares
                     ? () async {
                         await ref
-                            .read(warrantMutationsProvider.notifier)
-                            .exercise(
-                              id: warrant.id,
-                              sharesToExercise: shares,
+                            .read(warrantCommandsProvider.notifier)
+                            .exerciseWarrants(
+                              warrantId: warrant.id,
+                              exercisedCount: shares,
+                              exercisePrice: warrant.strikePrice,
                               exerciseDate: exerciseDate,
                             );
 
@@ -811,8 +811,12 @@ class WarrantsPage extends ConsumerWidget {
               if (shares == null || shares <= 0 || shares > maxShares) return;
 
               await ref
-                  .read(warrantMutationsProvider.notifier)
-                  .unexercise(id: warrant.id, sharesToUnexercise: shares);
+                  .read(warrantCommandsProvider.notifier)
+                  .unexerciseWarrants(
+                    warrantId: warrant.id,
+                    unexercisedCount: shares,
+                    reason: 'User correction',
+                  );
 
               if (context.mounted) Navigator.pop(context);
             },
@@ -869,7 +873,16 @@ class WarrantsPage extends ConsumerWidget {
     );
 
     if (confirmed && context.mounted) {
-      await ref.read(warrantMutationsProvider.notifier).delete(warrant.id);
+      await ref
+          .read(warrantCommandsProvider.notifier)
+          .cancelWarrants(
+            warrantId: warrant.id,
+            cancelledCount:
+                warrant.quantity -
+                warrant.exercisedCount -
+                warrant.cancelledCount,
+            reason: 'Deleted by user',
+          );
     }
   }
 }

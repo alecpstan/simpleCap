@@ -6,9 +6,10 @@ part of 'rounds_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$roundsStreamHash() => r'ec72e7a2f972691bab75aa7edf9aa3e66ca4826d';
+String _$roundsStreamHash() => r'1cbf11232a48d13a4de4d85727e119f8e66ca9e5';
 
 /// Watches all rounds for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [roundsStream].
 @ProviderFor(roundsStream)
@@ -212,23 +213,5 @@ final roundsSummaryProvider = AutoDisposeFutureProvider<RoundsSummary>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef RoundsSummaryRef = AutoDisposeFutureProviderRef<RoundsSummary>;
-String _$roundMutationsHash() => r'cdc2de55c306ec75d4e029926ef1269af7ddc1d2';
-
-/// Notifier for round mutations.
-///
-/// Copied from [RoundMutations].
-@ProviderFor(RoundMutations)
-final roundMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<RoundMutations, void>.internal(
-      RoundMutations.new,
-      name: r'roundMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$roundMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$RoundMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

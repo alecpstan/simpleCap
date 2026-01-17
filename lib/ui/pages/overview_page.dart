@@ -9,6 +9,7 @@ import 'convertibles_page.dart';
 import 'esop_pools_page.dart';
 import 'options_page.dart';
 import 'scenarios_page.dart';
+import 'timeline_page.dart';
 import 'transfers_page.dart';
 import 'valuations_page.dart';
 import 'vesting_management_page.dart';
@@ -313,6 +314,17 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const TransfersPage()),
+        ),
+      ),
+      ToolCardData(
+        id: 'timeline',
+        icon: Icons.history,
+        label: 'Timeline',
+        subtitle: 'Event history',
+        color: Colors.blueGrey,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const TimelinePage()),
         ),
       ),
     ];

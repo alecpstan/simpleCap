@@ -1,20 +1,17 @@
-import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../infrastructure/database/database.dart';
 import 'database_provider.dart';
 import 'company_provider.dart';
 import 'holdings_provider.dart';
+import 'projection_adapters.dart';
 
 part 'esop_pools_provider.g.dart';
 
 /// Watches all ESOP pools for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 @riverpod
 Stream<List<EsopPool>> esopPoolsStream(EsopPoolsStreamRef ref) {
-  final companyId = ref.watch(currentCompanyIdProvider);
-  if (companyId == null) return Stream.value([]);
-
-  final db = ref.watch(databaseProvider);
-  return db.watchEsopPools(companyId);
+  return ref.watch(unifiedEsopPoolsStreamProvider.stream);
 }
 
 /// Gets the list of ESOP pools synchronously from the stream.
@@ -159,200 +156,6 @@ class AllPoolsSummary {
       totalPoolSize > 0 ? (totalAllocated / totalPoolSize) * 100 : 0.0;
 }
 
-// =============================================================================
-// ESOP Pool Mutations (Create, Update, Delete)
-// =============================================================================
-
-/// Creates a new ESOP pool.
-@riverpod
-class CreateEsopPool extends _$CreateEsopPool {
-  @override
-  FutureOr<void> build() {}
-
-  Future<String> call({
-    required String name,
-    required String shareClassId,
-    required int poolSize,
-    double? targetPercentage,
-    required DateTime establishedDate,
-    String? resolutionReference,
-    String? roundId,
-    String? defaultVestingScheduleId,
-    String strikePriceMethod = 'fmv',
-    double? defaultStrikePrice,
-    int defaultExpiryYears = 10,
-    String? notes,
-  }) async {
-    final db = ref.read(databaseProvider);
-    final companyId = ref.read(currentCompanyIdProvider);
-    if (companyId == null) throw Exception('No company selected');
-
-    final now = DateTime.now();
-    final id = 'pool_${now.millisecondsSinceEpoch}';
-
-    await db.upsertEsopPool(
-      EsopPoolsCompanion.insert(
-        id: id,
-        companyId: companyId,
-        name: name,
-        shareClassId: shareClassId,
-        status: Value('active'),
-        poolSize: poolSize,
-        targetPercentage: Value(targetPercentage),
-        establishedDate: establishedDate,
-        resolutionReference: Value(resolutionReference),
-        roundId: Value(roundId),
-        defaultVestingScheduleId: Value(defaultVestingScheduleId),
-        strikePriceMethod: Value(strikePriceMethod),
-        defaultStrikePrice: Value(defaultStrikePrice),
-        defaultExpiryYears: Value(defaultExpiryYears),
-        notes: Value(notes),
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
-
-    // Invalidate streams to refresh UI
-    ref.invalidate(esopPoolsStreamProvider);
-
-    return id;
-  }
-}
-
-/// Updates an existing ESOP pool.
-@riverpod
-class UpdateEsopPool extends _$UpdateEsopPool {
-  @override
-  FutureOr<void> build() {}
-
-  Future<void> call({
-    required String id,
-    String? name,
-    String? shareClassId,
-    String? status,
-    int? poolSize,
-    double? targetPercentage,
-    DateTime? establishedDate,
-    String? resolutionReference,
-    String? roundId,
-    String? defaultVestingScheduleId,
-    String? strikePriceMethod,
-    double? defaultStrikePrice,
-    int? defaultExpiryYears,
-    String? notes,
-  }) async {
-    final db = ref.read(databaseProvider);
-    final existing = await db.getEsopPool(id);
-    if (existing == null) throw Exception('ESOP pool not found');
-
-    await db.upsertEsopPool(
-      EsopPoolsCompanion(
-        id: Value(id),
-        companyId: Value(existing.companyId),
-        name: Value(name ?? existing.name),
-        shareClassId: Value(shareClassId ?? existing.shareClassId),
-        status: Value(status ?? existing.status),
-        poolSize: Value(poolSize ?? existing.poolSize),
-        targetPercentage: Value(targetPercentage ?? existing.targetPercentage),
-        establishedDate: Value(establishedDate ?? existing.establishedDate),
-        resolutionReference: Value(
-          resolutionReference ?? existing.resolutionReference,
-        ),
-        roundId: Value(roundId ?? existing.roundId),
-        defaultVestingScheduleId: Value(
-          defaultVestingScheduleId ?? existing.defaultVestingScheduleId,
-        ),
-        strikePriceMethod: Value(
-          strikePriceMethod ?? existing.strikePriceMethod,
-        ),
-        defaultStrikePrice: Value(
-          defaultStrikePrice ?? existing.defaultStrikePrice,
-        ),
-        defaultExpiryYears: Value(
-          defaultExpiryYears ?? existing.defaultExpiryYears,
-        ),
-        notes: Value(notes ?? existing.notes),
-        createdAt: Value(existing.createdAt),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
-
-    ref.invalidate(esopPoolsStreamProvider);
-    ref.invalidate(esopPoolByIdProvider(id));
-    ref.invalidate(esopPoolSummaryProvider(id));
-  }
-}
-
-/// Expands an existing ESOP pool by adding more shares.
-@riverpod
-class ExpandEsopPool extends _$ExpandEsopPool {
-  @override
-  FutureOr<void> build() {}
-
-  Future<void> call({
-    required String poolId,
-    required int additionalShares,
-    String? resolutionReference,
-  }) async {
-    final db = ref.read(databaseProvider);
-    final existing = await db.getEsopPool(poolId);
-    if (existing == null) throw Exception('ESOP pool not found');
-
-    final newSize = existing.poolSize + additionalShares;
-
-    await db.upsertEsopPool(
-      EsopPoolsCompanion(
-        id: Value(poolId),
-        companyId: Value(existing.companyId),
-        name: Value(existing.name),
-        shareClassId: Value(existing.shareClassId),
-        status: Value(existing.status),
-        poolSize: Value(newSize),
-        targetPercentage: Value(existing.targetPercentage),
-        establishedDate: Value(existing.establishedDate),
-        resolutionReference: Value(
-          resolutionReference ?? existing.resolutionReference,
-        ),
-        roundId: Value(existing.roundId),
-        defaultVestingScheduleId: Value(existing.defaultVestingScheduleId),
-        strikePriceMethod: Value(existing.strikePriceMethod),
-        defaultStrikePrice: Value(existing.defaultStrikePrice),
-        defaultExpiryYears: Value(existing.defaultExpiryYears),
-        notes: Value(existing.notes),
-        createdAt: Value(existing.createdAt),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
-
-    ref.invalidate(esopPoolsStreamProvider);
-    ref.invalidate(esopPoolByIdProvider(poolId));
-    ref.invalidate(esopPoolSummaryProvider(poolId));
-  }
-}
-
-/// Deletes an ESOP pool.
-@riverpod
-class DeleteEsopPool extends _$DeleteEsopPool {
-  @override
-  FutureOr<void> build() {}
-
-  Future<void> call(String id) async {
-    final db = ref.read(databaseProvider);
-
-    // Check if there are any grants associated with this pool
-    final grants = await db.getOptionGrantsForPool(id);
-    if (grants.isNotEmpty) {
-      throw Exception(
-        'Cannot delete pool with ${grants.length} existing grants. '
-        'Please transfer or delete the grants first.',
-      );
-    }
-
-    await db.deleteEsopPool(id);
-    ref.invalidate(esopPoolsStreamProvider);
-  }
-}
-
 /// Checks if a grant can be made from a specific pool.
 @riverpod
 Future<bool> canGrantFromPool(
@@ -439,14 +242,16 @@ Future<List<PoolExpansionNeeded>> poolsNeedingExpansion(
       final sharesToAdd = suggestedNewSize - pool.poolSize;
 
       if (sharesToAdd > 0) {
-        needsExpansion.add(PoolExpansionNeeded(
-          pool: pool,
-          currentPercent: currentPercent,
-          targetPercent: targetPercent,
-          currentSize: pool.poolSize,
-          suggestedNewSize: suggestedNewSize,
-          sharesToAdd: sharesToAdd,
-        ));
+        needsExpansion.add(
+          PoolExpansionNeeded(
+            pool: pool,
+            currentPercent: currentPercent,
+            targetPercent: targetPercent,
+            currentSize: pool.poolSize,
+            suggestedNewSize: suggestedNewSize,
+            sharesToAdd: sharesToAdd,
+          ),
+        );
       }
     }
   }
@@ -480,135 +285,4 @@ Stream<List<EsopPoolExpansion>> poolExpansionHistoryStream(
   return db.watchExpansionsForPool(poolId);
 }
 
-/// Mutations for pool expansions (record, revert).
-@riverpod
-class PoolExpansionMutations extends _$PoolExpansionMutations {
-  @override
-  FutureOr<void> build() {}
-
-  /// Record a pool expansion with history tracking.
-  Future<void> expandPool({
-    required String poolId,
-    required int additionalShares,
-    required String reason,
-    String? resolutionReference,
-    String? notes,
-    DateTime? expansionDate,
-  }) async {
-    final db = ref.read(databaseProvider);
-    final companyId = ref.read(currentCompanyIdProvider);
-    if (companyId == null) throw Exception('No company selected');
-
-    final pool = await db.getEsopPool(poolId);
-    if (pool == null) throw Exception('Pool not found');
-
-    final now = DateTime.now();
-    final effectiveDate = expansionDate ?? now;
-    final previousSize = pool.poolSize;
-    final newSize = previousSize + additionalShares;
-
-    // Record the expansion in history
-    final expansionId = 'exp_${now.millisecondsSinceEpoch}';
-    await db.insertPoolExpansion(
-      EsopPoolExpansionsCompanion.insert(
-        id: expansionId,
-        companyId: companyId,
-        poolId: poolId,
-        previousSize: previousSize,
-        newSize: newSize,
-        sharesAdded: additionalShares,
-        reason: reason,
-        resolutionReference: Value(resolutionReference),
-        expansionDate: effectiveDate,
-        notes: Value(notes),
-        createdAt: now,
-      ),
-    );
-
-    // Update the pool size
-    await db.upsertEsopPool(
-      EsopPoolsCompanion(
-        id: Value(poolId),
-        companyId: Value(pool.companyId),
-        name: Value(pool.name),
-        shareClassId: Value(pool.shareClassId),
-        status: Value(pool.status),
-        poolSize: Value(newSize),
-        targetPercentage: Value(pool.targetPercentage),
-        establishedDate: Value(pool.establishedDate),
-        resolutionReference: Value(resolutionReference ?? pool.resolutionReference),
-        roundId: Value(pool.roundId),
-        defaultVestingScheduleId: Value(pool.defaultVestingScheduleId),
-        strikePriceMethod: Value(pool.strikePriceMethod),
-        defaultStrikePrice: Value(pool.defaultStrikePrice),
-        defaultExpiryYears: Value(pool.defaultExpiryYears),
-        notes: Value(pool.notes),
-        createdAt: Value(pool.createdAt),
-        updatedAt: Value(now),
-      ),
-    );
-
-    // Invalidate relevant providers
-    ref.invalidate(esopPoolsStreamProvider);
-    ref.invalidate(esopPoolByIdProvider(poolId));
-    ref.invalidate(esopPoolSummaryProvider(poolId));
-    ref.invalidate(poolExpansionsStreamProvider);
-    ref.invalidate(poolExpansionHistoryStreamProvider(poolId));
-    ref.invalidate(poolsNeedingExpansionProvider);
-  }
-
-  /// Revert the most recent expansion for a pool.
-  Future<void> revertLatestExpansion(String poolId) async {
-    final db = ref.read(databaseProvider);
-
-    final latestExpansion = await db.getLatestExpansionForPool(poolId);
-    if (latestExpansion == null) {
-      throw Exception('No expansion history found for this pool');
-    }
-
-    final pool = await db.getEsopPool(poolId);
-    if (pool == null) throw Exception('Pool not found');
-
-    // Verify the pool size matches what we expect
-    if (pool.poolSize != latestExpansion.newSize) {
-      throw Exception(
-        'Pool size has been modified since the last expansion. '
-        'Expected ${latestExpansion.newSize}, found ${pool.poolSize}',
-      );
-    }
-
-    // Revert the pool size
-    await db.upsertEsopPool(
-      EsopPoolsCompanion(
-        id: Value(poolId),
-        companyId: Value(pool.companyId),
-        name: Value(pool.name),
-        shareClassId: Value(pool.shareClassId),
-        status: Value(pool.status),
-        poolSize: Value(latestExpansion.previousSize),
-        targetPercentage: Value(pool.targetPercentage),
-        establishedDate: Value(pool.establishedDate),
-        resolutionReference: Value(pool.resolutionReference),
-        roundId: Value(pool.roundId),
-        defaultVestingScheduleId: Value(pool.defaultVestingScheduleId),
-        strikePriceMethod: Value(pool.strikePriceMethod),
-        defaultStrikePrice: Value(pool.defaultStrikePrice),
-        defaultExpiryYears: Value(pool.defaultExpiryYears),
-        notes: Value(pool.notes),
-        createdAt: Value(pool.createdAt),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
-
-    // Delete the expansion record
-    await db.deletePoolExpansion(latestExpansion.id);
-
-    // Invalidate relevant providers
-    ref.invalidate(esopPoolsStreamProvider);
-    ref.invalidate(esopPoolByIdProvider(poolId));
-    ref.invalidate(esopPoolSummaryProvider(poolId));
-    ref.invalidate(poolExpansionsStreamProvider);
-    ref.invalidate(poolExpansionHistoryStreamProvider(poolId));
-    ref.invalidate(poolsNeedingExpansionProvider);
-  }
-}
+// NOTE: PoolExpansionMutations removed - use EsopPoolCommands.expandPool instead

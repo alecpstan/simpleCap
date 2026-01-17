@@ -6,9 +6,10 @@ part of 'holdings_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$holdingsStreamHash() => r'b00f2eaae5439130ef8c241084099bd4e2acf5db';
+String _$holdingsStreamHash() => r'bf9d9266421735da9136f9f848c0c408c3a5fcae';
 
 /// Watches all holdings for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [holdingsStream].
 @ProviderFor(holdingsStream)
@@ -27,7 +28,7 @@ final holdingsStreamProvider =
 // ignore: unused_element
 typedef HoldingsStreamRef = AutoDisposeStreamProviderRef<List<Holding>>;
 String _$stakeholderHoldingsHash() =>
-    r'8f1cf4c9e46f3c8d1dda50162598fc0b6988cde5';
+    r'1c810671a8db8139890c7793d58185b23b1c03a4';
 
 /// Copied from Dart SDK
 class _SystemHash {
@@ -51,21 +52,25 @@ class _SystemHash {
 }
 
 /// Gets holdings for a specific stakeholder.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [stakeholderHoldings].
 @ProviderFor(stakeholderHoldings)
 const stakeholderHoldingsProvider = StakeholderHoldingsFamily();
 
 /// Gets holdings for a specific stakeholder.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [stakeholderHoldings].
 class StakeholderHoldingsFamily extends Family<AsyncValue<List<Holding>>> {
   /// Gets holdings for a specific stakeholder.
+  /// Uses event sourcing when active, falls back to direct DB otherwise.
   ///
   /// Copied from [stakeholderHoldings].
   const StakeholderHoldingsFamily();
 
   /// Gets holdings for a specific stakeholder.
+  /// Uses event sourcing when active, falls back to direct DB otherwise.
   ///
   /// Copied from [stakeholderHoldings].
   StakeholderHoldingsProvider call(String stakeholderId) {
@@ -95,11 +100,13 @@ class StakeholderHoldingsFamily extends Family<AsyncValue<List<Holding>>> {
 }
 
 /// Gets holdings for a specific stakeholder.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [stakeholderHoldings].
 class StakeholderHoldingsProvider
     extends AutoDisposeStreamProvider<List<Holding>> {
   /// Gets holdings for a specific stakeholder.
+  /// Uses event sourcing when active, falls back to direct DB otherwise.
   ///
   /// Copied from [stakeholderHoldings].
   StakeholderHoldingsProvider(String stakeholderId)
@@ -224,23 +231,5 @@ final draftRoundIdsProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef DraftRoundIdsRef = AutoDisposeFutureProviderRef<Map<String, bool>>;
-String _$holdingMutationsHash() => r'2e3130d5749cc777ccbd5c659866c0a2872fcb5b';
-
-/// Notifier for holding mutations.
-///
-/// Copied from [HoldingMutations].
-@ProviderFor(HoldingMutations)
-final holdingMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<HoldingMutations, void>.internal(
-      HoldingMutations.new,
-      name: r'holdingMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$holdingMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$HoldingMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

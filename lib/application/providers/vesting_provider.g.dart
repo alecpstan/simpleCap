@@ -7,9 +7,10 @@ part of 'vesting_provider.dart';
 // **************************************************************************
 
 String _$vestingSchedulesStreamHash() =>
-    r'1ed7472478491820a3985107f57d942037b4bc01';
+    r'd69d39265820d5448a64cf557d36c0ec7a415c75';
 
 /// Watches all vesting schedules for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [vestingSchedulesStream].
 @ProviderFor(vestingSchedulesStream)
@@ -377,24 +378,5 @@ class _CalculateVestingStatusProviderElement
   DateTime? get asOfDate => (origin as CalculateVestingStatusProvider).asOfDate;
 }
 
-String _$vestingScheduleMutationsHash() =>
-    r'0dfa84be5a92951bdab317adea49af07ac7221fb';
-
-/// Notifier for vesting schedule mutations.
-///
-/// Copied from [VestingScheduleMutations].
-@ProviderFor(VestingScheduleMutations)
-final vestingScheduleMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<VestingScheduleMutations, void>.internal(
-      VestingScheduleMutations.new,
-      name: r'vestingScheduleMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$vestingScheduleMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$VestingScheduleMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

@@ -6,9 +6,10 @@ part of 'warrants_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$warrantsStreamHash() => r'3f4a15dc8c76bcc228bc25bc16f35c86def4bdbe';
+String _$warrantsStreamHash() => r'900474af946435a3b580bfa194c9aa8f1a4f2552';
 
 /// Stream of all warrants for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [warrantsStream].
 @ProviderFor(warrantsStream)
@@ -64,23 +65,5 @@ final warrantsSummaryProvider = AutoDisposeProvider<WarrantsSummary>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef WarrantsSummaryRef = AutoDisposeProviderRef<WarrantsSummary>;
-String _$warrantMutationsHash() => r'18cd7a6ac7bbb6dfd13f8b055d4bb4e1a4a601d3';
-
-/// Mutations for warrants.
-///
-/// Copied from [WarrantMutations].
-@ProviderFor(WarrantMutations)
-final warrantMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<WarrantMutations, void>.internal(
-      WarrantMutations.new,
-      name: r'warrantMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$warrantMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$WarrantMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

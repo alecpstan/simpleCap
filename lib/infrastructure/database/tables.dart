@@ -243,14 +243,30 @@ class EsopPools extends Table {
 }
 
 /// Capitalization events table (event sourcing).
+///
+/// This is the append-only event log. All cap table state is derived
+/// by projecting these events. Events are immutable once written.
 class CapitalizationEvents extends Table {
   TextColumn get id => text()();
   TextColumn get companyId => text().references(Companies, #id)();
-  TextColumn get eventType => text()(); // CapEventType enum
-  DateTimeColumn get effectiveDate => dateTime()();
+
+  /// Sequence number for ordering within a company. Auto-incremented.
+  IntColumn get sequenceNumber => integer()();
+
+  /// The event type discriminator (e.g., 'stakeholderAdded', 'roundClosed')
+  TextColumn get eventType => text()();
+
+  /// The full event data as JSON (includes all fields from the Freezed event)
   TextColumn get eventDataJson => text()();
-  TextColumn get roundId => text().nullable().references(Rounds, #id)();
-  DateTimeColumn get createdAt => dateTime()();
+
+  /// When the event was recorded
+  DateTimeColumn get timestamp => dateTime()();
+
+  /// Who performed the action (for audit trail, nullable until auth is added)
+  TextColumn get actorId => text().nullable()();
+
+  /// Optional cryptographic signature for tamper-proofing
+  TextColumn get signature => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -379,6 +395,27 @@ class MfnUpgrades extends Table {
       boolean().withDefault(const Constant(false))();
 
   DateTimeColumn get upgradeDate => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Snapshots table for event sourcing performance.
+///
+/// Stores periodic snapshots of the projected state to avoid
+/// replaying all events from genesis on every app launch.
+class Snapshots extends Table {
+  TextColumn get id => text()();
+  TextColumn get companyId => text().references(Companies, #id)();
+
+  /// The sequence number at which this snapshot was taken
+  IntColumn get atSequenceNumber => integer()();
+
+  /// The full projected state as JSON
+  TextColumn get stateJson => text()();
+
+  /// When the snapshot was created
   DateTimeColumn get createdAt => dateTime()();
 
   @override

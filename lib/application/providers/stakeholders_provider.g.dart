@@ -7,9 +7,10 @@ part of 'stakeholders_provider.dart';
 // **************************************************************************
 
 String _$stakeholdersStreamHash() =>
-    r'98b2159f93887b769495f5a2c91906c2cc2add77';
+    r'bd7300a57cad0ca54172c153e83e7f923c2dccec';
 
 /// Watches all stakeholders for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [stakeholdersStream].
 @ProviderFor(stakeholdersStream)
@@ -201,24 +202,5 @@ class _StakeholderProviderElement
   String get id => (origin as StakeholderProvider).id;
 }
 
-String _$stakeholderMutationsHash() =>
-    r'd19c04d214eea4714d038306d9fc9f9585020eec';
-
-/// Notifier for stakeholder mutations.
-///
-/// Copied from [StakeholderMutations].
-@ProviderFor(StakeholderMutations)
-final stakeholderMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<StakeholderMutations, void>.internal(
-      StakeholderMutations.new,
-      name: r'stakeholderMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$stakeholderMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$StakeholderMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

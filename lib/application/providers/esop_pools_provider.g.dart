@@ -6,9 +6,10 @@ part of 'esop_pools_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$esopPoolsStreamHash() => r'25ae72f42ed7c869bcf6f2ad39b3a21a71b54b79';
+String _$esopPoolsStreamHash() => r'2caed8a9b9dbc06023a658fc21002d0330715009';
 
 /// Watches all ESOP pools for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [esopPoolsStream].
 @ProviderFor(esopPoolsStream)
@@ -828,96 +829,5 @@ class _PoolExpansionHistoryStreamProviderElement
   String get poolId => (origin as PoolExpansionHistoryStreamProvider).poolId;
 }
 
-String _$createEsopPoolHash() => r'1dcca5c3830c8682aa2fc149ed0623ce2220dda1';
-
-/// Creates a new ESOP pool.
-///
-/// Copied from [CreateEsopPool].
-@ProviderFor(CreateEsopPool)
-final createEsopPoolProvider =
-    AutoDisposeAsyncNotifierProvider<CreateEsopPool, void>.internal(
-      CreateEsopPool.new,
-      name: r'createEsopPoolProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$createEsopPoolHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$CreateEsopPool = AutoDisposeAsyncNotifier<void>;
-String _$updateEsopPoolHash() => r'641459b555f7fe73df9bf8992ef628284efa6590';
-
-/// Updates an existing ESOP pool.
-///
-/// Copied from [UpdateEsopPool].
-@ProviderFor(UpdateEsopPool)
-final updateEsopPoolProvider =
-    AutoDisposeAsyncNotifierProvider<UpdateEsopPool, void>.internal(
-      UpdateEsopPool.new,
-      name: r'updateEsopPoolProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$updateEsopPoolHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$UpdateEsopPool = AutoDisposeAsyncNotifier<void>;
-String _$expandEsopPoolHash() => r'4cf38fee0169ba69b9b856976455663aabebf386';
-
-/// Expands an existing ESOP pool by adding more shares.
-///
-/// Copied from [ExpandEsopPool].
-@ProviderFor(ExpandEsopPool)
-final expandEsopPoolProvider =
-    AutoDisposeAsyncNotifierProvider<ExpandEsopPool, void>.internal(
-      ExpandEsopPool.new,
-      name: r'expandEsopPoolProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$expandEsopPoolHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$ExpandEsopPool = AutoDisposeAsyncNotifier<void>;
-String _$deleteEsopPoolHash() => r'6b41291be7e9624482cac3d27c8329e315c65014';
-
-/// Deletes an ESOP pool.
-///
-/// Copied from [DeleteEsopPool].
-@ProviderFor(DeleteEsopPool)
-final deleteEsopPoolProvider =
-    AutoDisposeAsyncNotifierProvider<DeleteEsopPool, void>.internal(
-      DeleteEsopPool.new,
-      name: r'deleteEsopPoolProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$deleteEsopPoolHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$DeleteEsopPool = AutoDisposeAsyncNotifier<void>;
-String _$poolExpansionMutationsHash() =>
-    r'1d401264ed3b0f36ba01f33164ef41fff23a7d33';
-
-/// Mutations for pool expansions (record, revert).
-///
-/// Copied from [PoolExpansionMutations].
-@ProviderFor(PoolExpansionMutations)
-final poolExpansionMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<PoolExpansionMutations, void>.internal(
-      PoolExpansionMutations.new,
-      name: r'poolExpansionMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$poolExpansionMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$PoolExpansionMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

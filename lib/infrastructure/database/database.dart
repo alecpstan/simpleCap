@@ -30,6 +30,7 @@ part 'database.g.dart';
     Transfers,
     MfnUpgrades,
     EsopPoolExpansions,
+    Snapshots,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -39,7 +40,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration {
@@ -116,6 +117,16 @@ class AppDatabase extends _$AppDatabase {
               "ALTER TABLE share_classes ADD COLUMN anti_dilution_type TEXT NOT NULL DEFAULT 'none'",
             );
           }
+        }
+        // Migration from version 7 to 8: Update CapitalizationEvents table and add Snapshots
+        if (from < 8) {
+          // Drop old capitalization_events table and recreate with new schema
+          // Since we're starting fresh (no legacy data), we can drop and recreate
+          await customStatement('DROP TABLE IF EXISTS capitalization_events');
+          await m.createTable(capitalizationEvents);
+
+          // Create snapshots table
+          await m.createTable(snapshots);
         }
       },
       beforeOpen: (details) async {
@@ -355,9 +366,8 @@ class AppDatabase extends _$AppDatabase {
         const EsopPoolsCompanion(roundId: Value(null)),
       );
 
-      // Clear roundId references in capitalization events
-      await (update(capitalizationEvents)..where((e) => e.roundId.equals(id)))
-          .write(const CapitalizationEventsCompanion(roundId: Value(null)));
+      // Note: Events are immutable, we don't update them when deleting rounds.
+      // The event log maintains the full history.
 
       // Clear roundId references in convertibles (round they were issued in)
       await (update(convertibles)..where((c) => c.roundId.equals(id))).write(
@@ -857,24 +867,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ===========================================================================
-  // Capitalization Event Operations
+  // Capitalization Event Operations (Legacy - see event sourcing methods below)
   // ===========================================================================
-
-  /// Get all events for a company.
-  Future<List<CapitalizationEvent>> getEvents(String companyId) {
-    return (select(capitalizationEvents)
-          ..where((e) => e.companyId.equals(companyId))
-          ..orderBy([(e) => OrderingTerm.asc(e.effectiveDate)]))
-        .get();
-  }
-
-  /// Watch events for real-time updates.
-  Stream<List<CapitalizationEvent>> watchEvents(String companyId) {
-    return (select(capitalizationEvents)
-          ..where((e) => e.companyId.equals(companyId))
-          ..orderBy([(e) => OrderingTerm.asc(e.effectiveDate)]))
-        .watch();
-  }
 
   /// Insert an event (events are immutable, no updates).
   Future<void> insertEvent(CapitalizationEventsCompanion event) {
@@ -966,6 +960,98 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  // ===========================================================================
+  // Event Sourcing Operations
+  // ===========================================================================
+
+  /// Get the next sequence number for events in a company.
+  Future<int> getNextEventSequence(String companyId) async {
+    final result = await customSelect(
+      'SELECT MAX(sequence_number) as max_seq FROM capitalization_events WHERE company_id = ?',
+      variables: [Variable.withString(companyId)],
+    ).getSingleOrNull();
+
+    final maxSeq = result?.read<int?>('max_seq');
+    return (maxSeq ?? 0) + 1;
+  }
+
+  /// Append events to the event log.
+  ///
+  /// Events are assigned sequential sequence numbers atomically.
+  Future<void> appendEvents(
+    String companyId,
+    List<CapitalizationEventsCompanion> events,
+  ) async {
+    await transaction(() async {
+      var nextSeq = await getNextEventSequence(companyId);
+      for (final event in events) {
+        await into(
+          capitalizationEvents,
+        ).insert(event.copyWith(sequenceNumber: Value(nextSeq)));
+        nextSeq++;
+      }
+    });
+  }
+
+  /// Get all events for a company, ordered by sequence.
+  Future<List<CapitalizationEvent>> getEvents(String companyId) {
+    return (select(capitalizationEvents)
+          ..where((e) => e.companyId.equals(companyId))
+          ..orderBy([(e) => OrderingTerm.asc(e.sequenceNumber)]))
+        .get();
+  }
+
+  /// Watch all events for a company, ordered by sequence.
+  Stream<List<CapitalizationEvent>> watchEvents(String companyId) {
+    return (select(capitalizationEvents)
+          ..where((e) => e.companyId.equals(companyId))
+          ..orderBy([(e) => OrderingTerm.asc(e.sequenceNumber)]))
+        .watch();
+  }
+
+  /// Get events after a specific sequence number.
+  Future<List<CapitalizationEvent>> getEventsAfter(
+    String companyId,
+    int afterSequence,
+  ) {
+    return (select(capitalizationEvents)
+          ..where(
+            (e) =>
+                e.companyId.equals(companyId) &
+                e.sequenceNumber.isBiggerThanValue(afterSequence),
+          )
+          ..orderBy([(e) => OrderingTerm.asc(e.sequenceNumber)]))
+        .get();
+  }
+
+  /// Save a snapshot of projected state.
+  Future<void> saveSnapshot(SnapshotsCompanion snapshot) {
+    return into(snapshots).insertOnConflictUpdate(snapshot);
+  }
+
+  /// Get the latest snapshot for a company.
+  Future<Snapshot?> getLatestSnapshot(String companyId) {
+    return (select(snapshots)
+          ..where((s) => s.companyId.equals(companyId))
+          ..orderBy([(s) => OrderingTerm.desc(s.atSequenceNumber)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Delete old snapshots, keeping only the most recent N.
+  Future<void> pruneSnapshots(String companyId, {int keepCount = 3}) async {
+    final allSnapshots =
+        await (select(snapshots)
+              ..where((s) => s.companyId.equals(companyId))
+              ..orderBy([(s) => OrderingTerm.desc(s.atSequenceNumber)]))
+            .get();
+
+    if (allSnapshots.length > keepCount) {
+      final toDelete = allSnapshots.skip(keepCount).map((s) => s.id).toList();
+      await (delete(snapshots)..where((s) => s.id.isIn(toDelete))).go();
+    }
   }
 }
 

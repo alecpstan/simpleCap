@@ -7,9 +7,10 @@ part of 'convertibles_provider.dart';
 // **************************************************************************
 
 String _$convertiblesStreamHash() =>
-    r'1426bf0cad7b12e7078f58d62be36eaef2cb9b45';
+    r'111fdaf043c224e1929e0d25f5ff9703d2a22d04';
 
 /// Watches all convertibles for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [convertiblesStream].
 @ProviderFor(convertiblesStream)
@@ -71,24 +72,5 @@ final convertiblesSummaryProvider =
 // ignore: unused_element
 typedef ConvertiblesSummaryRef =
     AutoDisposeFutureProviderRef<ConvertiblesSummary>;
-String _$convertibleMutationsHash() =>
-    r'015bd6d78dc4c759a27e6440f180ac7e937ac585';
-
-/// Notifier for convertible mutations.
-///
-/// Copied from [ConvertibleMutations].
-@ProviderFor(ConvertibleMutations)
-final convertibleMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<ConvertibleMutations, void>.internal(
-      ConvertibleMutations.new,
-      name: r'convertibleMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$convertibleMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$ConvertibleMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

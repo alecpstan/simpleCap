@@ -7,9 +7,10 @@ part of 'options_provider.dart';
 // **************************************************************************
 
 String _$optionGrantsStreamHash() =>
-    r'f35759cb0f79c294319e5f358ea3d3ac18990123';
+    r'51a2c91036040c02003bd05b133f7c725e8e6cbb';
 
 /// Watches all option grants for the current company.
+/// Uses event sourcing when active, falls back to direct DB otherwise.
 ///
 /// Copied from [optionGrantsStream].
 @ProviderFor(optionGrantsStream)
@@ -68,24 +69,5 @@ final optionsSummaryProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef OptionsSummaryRef = AutoDisposeFutureProviderRef<OptionsSummary>;
-String _$optionGrantMutationsHash() =>
-    r'e9e7af7d42d22fc3ec5c6ade8dceae4a8296cfca';
-
-/// Notifier for option grant mutations.
-///
-/// Copied from [OptionGrantMutations].
-@ProviderFor(OptionGrantMutations)
-final optionGrantMutationsProvider =
-    AutoDisposeAsyncNotifierProvider<OptionGrantMutations, void>.internal(
-      OptionGrantMutations.new,
-      name: r'optionGrantMutationsProvider',
-      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-          ? null
-          : _$optionGrantMutationsHash,
-      dependencies: null,
-      allTransitiveDependencies: null,
-    );
-
-typedef _$OptionGrantMutations = AutoDisposeAsyncNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
