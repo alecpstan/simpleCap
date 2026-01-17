@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers/providers.dart';
+import '../../domain/constants/constants.dart';
 import '../../infrastructure/database/database.dart';
 import '../components/components.dart';
 
@@ -221,6 +222,8 @@ class ShareClassesPage extends ConsumerWidget {
     bool isParticipating = existing?.isParticipating ?? false;
     double dividendRate = existing?.dividendRate ?? 0.0;
     int seniority = existing?.seniority ?? 0;
+    String antiDilutionType =
+        existing?.antiDilutionType ?? AntiDilutionType.none;
 
     showDialog(
       context: context,
@@ -419,6 +422,27 @@ class ShareClassesPage extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: antiDilutionType,
+                  decoration: const InputDecoration(
+                    labelText: 'Anti-Dilution Protection',
+                    helperText: 'Protects investors in down rounds',
+                  ),
+                  items: AntiDilutionType.all
+                      .map(
+                        (type) => DropdownMenuItem(
+                          value: type,
+                          child: Text(AntiDilutionType.displayName(type)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    setDialogState(
+                      () => antiDilutionType = v ?? AntiDilutionType.none,
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: notesController,
                   decoration: const InputDecoration(labelText: 'Notes'),
@@ -455,6 +479,7 @@ class ShareClassesPage extends ConsumerWidget {
                       isParticipating: drift.Value(isParticipating),
                       dividendRate: drift.Value(dividendRate),
                       seniority: drift.Value(seniority),
+                      antiDilutionType: drift.Value(antiDilutionType),
                       notes: drift.Value(
                         notesController.text.trim().isEmpty
                             ? null
@@ -474,6 +499,7 @@ class ShareClassesPage extends ConsumerWidget {
                     isParticipating: isParticipating,
                     dividendRate: dividendRate,
                     seniority: seniority,
+                    antiDilutionType: antiDilutionType,
                     notes: notesController.text.trim().isEmpty
                         ? null
                         : notesController.text.trim(),

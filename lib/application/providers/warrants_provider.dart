@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:uuid/uuid.dart';
 import '../../infrastructure/database/database.dart';
 import 'providers.dart';
 
@@ -187,6 +188,7 @@ class WarrantMutations extends _$WarrantMutations {
     final newExercised = warrant.exercisedCount + sharesToExercise;
     final effectiveDate = exerciseDate ?? DateTime.now();
 
+    // Update the warrant's exercised count
     await (db.update(db.warrants)..where((w) => w.id.equals(id))).write(
       WarrantsCompanion(
         exercisedCount: Value(newExercised),
@@ -196,9 +198,27 @@ class WarrantMutations extends _$WarrantMutations {
         updatedAt: Value(effectiveDate),
       ),
     );
+
+    // Create a holding record for the exercised shares
+    final holdingId = const Uuid().v4();
+    final costBasis = sharesToExercise * warrant.strikePrice;
+    await db.upsertHolding(
+      HoldingsCompanion(
+        id: Value(holdingId),
+        companyId: Value(warrant.companyId),
+        stakeholderId: Value(warrant.stakeholderId),
+        shareClassId: Value(warrant.shareClassId),
+        shareCount: Value(sharesToExercise),
+        costBasis: Value(costBasis),
+        acquiredDate: Value(effectiveDate),
+        sourceWarrantId: Value(id),
+        updatedAt: Value(effectiveDate),
+      ),
+    );
   }
 
   /// Undo exercise (revert exercised warrants back to outstanding).
+  /// Note: This will delete holdings created from exercising this warrant.
   Future<void> unexercise({
     required String id,
     required int sharesToUnexercise,
@@ -219,6 +239,9 @@ class WarrantMutations extends _$WarrantMutations {
         updatedAt: Value(now),
       ),
     );
+
+    // Delete holdings that were created from exercising this warrant
+    await db.deleteHoldingsByWarrant(id);
   }
 
   /// Cancel warrants.

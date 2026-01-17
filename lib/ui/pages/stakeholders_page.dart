@@ -944,9 +944,174 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
   }
 
   void _showWarrantExerciseDialog(BuildContext context, Warrant warrant) {
-    // TODO: Implement warrant exercise dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Warrant exercise coming soon')),
+    final maxShares =
+        warrant.quantity - warrant.exercisedCount - warrant.cancelledCount;
+    final sharesController = TextEditingController();
+    DateTime exerciseDate = DateTime.now();
+
+    final effectiveValuation = ref.read(effectiveValuationProvider).valueOrNull;
+    final ownership = ref.read(ownershipSummaryProvider).valueOrNull;
+
+    // Calculate current price per share if valuation available
+    double? pricePerShare;
+    if (effectiveValuation != null && ownership != null) {
+      final totalShares = ownership.totalIssuedShares;
+      if (totalShares > 0) {
+        pricePerShare = effectiveValuation.value / totalShares;
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final shares = int.tryParse(sharesController.text) ?? 0;
+          final isValid = shares > 0 && shares <= maxShares;
+          final totalCost = shares * warrant.strikePrice;
+          final currentValue =
+              pricePerShare != null ? shares * pricePerShare : null;
+          final potentialGain =
+              currentValue != null ? currentValue - totalCost : null;
+
+          return AlertDialog(
+            title: const Text('Exercise Warrants'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Up to ${Formatters.number(maxShares)} warrants available',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: sharesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Warrants to Exercise',
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: exerciseDate,
+                        firstDate: warrant.issueDate,
+                        lastDate: warrant.expiryDate,
+                      );
+                      if (date != null) {
+                        setDialogState(() => exerciseDate = date);
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Exercise Date',
+                        suffixIcon: Icon(Icons.calendar_today, size: 18),
+                      ),
+                      child: Text(Formatters.date(exerciseDate)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Exercise Summary',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildExerciseSummaryRow(
+                    context,
+                    'Strike Price',
+                    Formatters.currency(warrant.strikePrice),
+                  ),
+                  _buildExerciseSummaryRow(
+                    context,
+                    'Total Cost to Exercise',
+                    Formatters.currency(totalCost),
+                    highlight: true,
+                  ),
+                  if (pricePerShare != null) ...[
+                    const SizedBox(height: 8),
+                    _buildExerciseSummaryRow(
+                      context,
+                      'Current Price/Share',
+                      Formatters.currency(pricePerShare),
+                    ),
+                    _buildExerciseSummaryRow(
+                      context,
+                      'Current Value',
+                      Formatters.currency(currentValue!),
+                    ),
+                    _buildExerciseSummaryRow(
+                      context,
+                      'Potential Gain',
+                      Formatters.currency(potentialGain!),
+                      valueColor: potentialGain >= 0 ? Colors.green : Colors.red,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: isValid
+                    ? () async {
+                        await ref
+                            .read(warrantMutationsProvider.notifier)
+                            .exercise(
+                              id: warrant.id,
+                              sharesToExercise: shares,
+                              exerciseDate: exerciseDate,
+                            );
+
+                        if (dialogContext.mounted) Navigator.pop(dialogContext);
+                      }
+                    : null,
+                child: const Text('Exercise'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildExerciseSummaryRow(
+    BuildContext context,
+    String label,
+    String value, {
+    bool highlight = false,
+    Color? valueColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: highlight ? FontWeight.bold : null,
+                ),
+          ),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: highlight ? FontWeight.bold : null,
+                  color: valueColor,
+                ),
+          ),
+        ],
+      ),
     );
   }
 

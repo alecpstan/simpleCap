@@ -219,6 +219,7 @@ class WarrantsPage extends ConsumerWidget {
         isParticipating: false,
         dividendRate: 0,
         seniority: 0,
+        antiDilutionType: 'none',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
@@ -596,10 +597,12 @@ class WarrantsPage extends ConsumerWidget {
         builder: (context, setDialogState) {
           final shares = int.tryParse(sharesController.text) ?? 0;
           final totalCost = shares * warrant.strikePrice;
-          final currentValue =
-              pricePerShare != null ? shares * pricePerShare : null;
-          final potentialGain =
-              currentValue != null ? currentValue - totalCost : null;
+          final currentValue = pricePerShare != null
+              ? shares * pricePerShare
+              : null;
+          final potentialGain = currentValue != null
+              ? currentValue - totalCost
+              : null;
 
           return AlertDialog(
             title: const Text('Exercise Warrants'),
@@ -648,8 +651,8 @@ class WarrantsPage extends ConsumerWidget {
                   Text(
                     'Exercise Summary',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   _buildSummaryRow(
@@ -679,17 +682,18 @@ class WarrantsPage extends ConsumerWidget {
                       context,
                       'Potential Gain',
                       Formatters.currency(potentialGain!),
-                      valueColor: potentialGain >= 0 ? Colors.green : Colors.red,
+                      valueColor: potentialGain >= 0
+                          ? Colors.green
+                          : Colors.red,
                     ),
                   ],
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primaryContainer
-                          .withValues(alpha: 0.3),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -801,9 +805,7 @@ class WarrantsPage extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.orange,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
             onPressed: () async {
               final shares = int.tryParse(sharesController.text);
               if (shares == null || shares <= 0 || shares > maxShares) return;
@@ -836,17 +838,17 @@ class WarrantsPage extends ConsumerWidget {
           Text(
             label,
             style: highlight
-                ? Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    )
+                ? Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)
                 : Theme.of(context).textTheme.bodyMedium,
           ),
           Text(
             value,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: highlight ? FontWeight.bold : FontWeight.w500,
-                  color: valueColor,
-                ),
+              fontWeight: highlight ? FontWeight.bold : FontWeight.w500,
+              color: valueColor,
+            ),
           ),
         ],
       ),

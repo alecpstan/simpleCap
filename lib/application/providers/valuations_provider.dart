@@ -108,33 +108,48 @@ Future<EffectiveValuation?> effectiveValuation(
   }
 
   // Get latest round with a valuation
-  // Rounds are sorted by displayOrder, but we want the most recent by date
-  final roundsWithValuation = rounds
-      .where((r) => r.preMoneyValuation != null && r.preMoneyValuation! > 0)
-      .toList();
+  // Include rounds that have either:
+  // 1. preMoneyValuation > 0, OR
+  // 2. Are closed with amountRaised > 0 (post-money valuation)
+  final roundsWithValuation = rounds.where((r) {
+    final hasPreMoney = r.preMoneyValuation != null && r.preMoneyValuation! > 0;
+    final hasPostMoney = r.status == 'closed' && r.amountRaised > 0;
+    return hasPreMoney || hasPostMoney;
+  }).toList();
 
   if (roundsWithValuation.isNotEmpty) {
     // Sort by date descending to get most recent
-    roundsWithValuation.sort((a, b) => b.date.compareTo(a.date));
+    // For same date, post-money (closed) rounds are more recent than pre-money
+    roundsWithValuation.sort((a, b) {
+      final dateCompare = b.date.compareTo(a.date);
+      if (dateCompare != 0) return dateCompare;
+      // Same date: closed (post-money) > draft (pre-money)
+      final aIsClosed = a.status == 'closed' ? 1 : 0;
+      final bIsClosed = b.status == 'closed' ? 1 : 0;
+      return bIsClosed.compareTo(aIsClosed);
+    });
     final latestRound = roundsWithValuation.first;
 
     final isClosed = latestRound.status == 'closed';
-    final preMoneyVal = latestRound.preMoneyValuation!;
+    final preMoneyVal = latestRound.preMoneyValuation ?? 0;
     final amountRaised = latestRound.amountRaised;
 
     // Post-money = pre-money + amount raised
     final effectiveValue = isClosed ? preMoneyVal + amountRaised : preMoneyVal;
 
-    fromRound = EffectiveValuation(
-      value: effectiveValue,
-      date: latestRound.date,
-      source: isClosed
-          ? ValuationSource.roundPostMoney
-          : ValuationSource.roundPreMoney,
-      roundName: latestRound.name,
-      isPostMoney: isClosed,
-      round: latestRound,
-    );
+    // Only create fromRound if we have a meaningful value
+    if (effectiveValue > 0) {
+      fromRound = EffectiveValuation(
+        value: effectiveValue,
+        date: latestRound.date,
+        source: isClosed
+            ? ValuationSource.roundPostMoney
+            : ValuationSource.roundPreMoney,
+        roundName: latestRound.name,
+        isPostMoney: isClosed,
+        round: latestRound,
+      );
+    }
   }
 
   // Return whichever is more recent
@@ -143,7 +158,11 @@ Future<EffectiveValuation?> effectiveValuation(
   if (fromRound == null) return fromManual;
 
   // Compare dates and return the more recent one
-  return fromManual.date.isAfter(fromRound.date) ? fromManual : fromRound;
+  // If same date, post-money valuation (from closed round) wins
+  if (fromManual.date.isAfter(fromRound.date)) return fromManual;
+  if (fromRound.date.isAfter(fromManual.date)) return fromRound;
+  // Same date: post-money (closed round) takes precedence
+  return (fromRound.isPostMoney == true) ? fromRound : fromManual;
 }
 
 /// Summary of valuations for dashboard.

@@ -17,6 +17,7 @@ class OptionsPage extends ConsumerWidget {
     final stakeholders = ref.watch(stakeholdersStreamProvider);
     final shareClasses = ref.watch(shareClassesStreamProvider);
     final vestingSchedules = ref.watch(vestingSchedulesStreamProvider);
+    final esopPools = ref.watch(esopPoolsStreamProvider);
 
     if (companyId == null) {
       return Scaffold(
@@ -59,6 +60,7 @@ class OptionsPage extends ConsumerWidget {
                       stakeholders.valueOrNull ?? [],
                       shareClasses.valueOrNull ?? [],
                       vestingSchedules.valueOrNull ?? [],
+                      esopPools.valueOrNull ?? [],
                     ),
                   );
                 }
@@ -69,6 +71,7 @@ class OptionsPage extends ConsumerWidget {
                   stakeholders.valueOrNull ?? [],
                   shareClasses.valueOrNull ?? [],
                   vestingSchedules.valueOrNull ?? [],
+                  esopPools.valueOrNull ?? [],
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -88,6 +91,7 @@ class OptionsPage extends ConsumerWidget {
           stakeholders.valueOrNull ?? [],
           shareClasses.valueOrNull ?? [],
           vestingSchedules.valueOrNull ?? [],
+          esopPools.valueOrNull ?? [],
         ),
         child: const Icon(Icons.add),
       ),
@@ -150,6 +154,7 @@ class OptionsPage extends ConsumerWidget {
     List<Stakeholder> stakeholders,
     List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
+    List<EsopPool> esopPools,
   ) {
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 80),
@@ -163,6 +168,7 @@ class OptionsPage extends ConsumerWidget {
           stakeholders,
           shareClasses,
           vestingSchedules,
+          esopPools,
         );
       },
     );
@@ -175,6 +181,7 @@ class OptionsPage extends ConsumerWidget {
     List<Stakeholder> stakeholders,
     List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
+    List<EsopPool> esopPools,
   ) {
     final stakeholder = stakeholders.firstWhere(
       (s) => s.id == option.stakeholderId,
@@ -201,6 +208,7 @@ class OptionsPage extends ConsumerWidget {
         isParticipating: false,
         dividendRate: 0,
         seniority: 0,
+        antiDilutionType: 'none',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
@@ -277,6 +285,15 @@ class OptionsPage extends ConsumerWidget {
           ],
           _buildDetailRow('Grantee', stakeholder.name),
           _buildDetailRow('Share Class', shareClass.name),
+          if (option.esopPoolId != null)
+            _buildDetailRow(
+              'ESOP Pool',
+              esopPools
+                      .where((p) => p.id == option.esopPoolId)
+                      .firstOrNull
+                      ?.name ??
+                  'Unknown',
+            ),
           _buildDetailRow('Quantity', Formatters.number(option.quantity)),
           _buildDetailRow(
             'Strike Price',
@@ -311,6 +328,7 @@ class OptionsPage extends ConsumerWidget {
             stakeholders,
             shareClasses,
             vestingSchedules,
+            esopPools,
           ),
           tooltip: 'Edit',
         ),
@@ -496,6 +514,7 @@ class OptionsPage extends ConsumerWidget {
     List<Stakeholder> stakeholders,
     List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
+    List<EsopPool> esopPools,
   ) {
     _showOptionDialog(
       context,
@@ -504,6 +523,7 @@ class OptionsPage extends ConsumerWidget {
       stakeholders: stakeholders,
       shareClasses: shareClasses,
       vestingSchedules: vestingSchedules,
+      esopPools: esopPools,
     );
   }
 
@@ -514,6 +534,7 @@ class OptionsPage extends ConsumerWidget {
     List<Stakeholder> stakeholders,
     List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
+    List<EsopPool> esopPools,
   ) {
     _showOptionDialog(
       context,
@@ -522,6 +543,7 @@ class OptionsPage extends ConsumerWidget {
       stakeholders: stakeholders,
       shareClasses: shareClasses,
       vestingSchedules: vestingSchedules,
+      esopPools: esopPools,
     );
   }
 
@@ -533,6 +555,7 @@ class OptionsPage extends ConsumerWidget {
     required List<Stakeholder> stakeholders,
     required List<ShareClassesData> shareClasses,
     required List<VestingSchedule> vestingSchedules,
+    required List<EsopPool> esopPools,
   }) {
     final isEditing = option != null;
     final quantityController = TextEditingController(
@@ -546,6 +569,7 @@ class OptionsPage extends ConsumerWidget {
     String? selectedStakeholderId = option?.stakeholderId;
     String? selectedShareClassId = option?.shareClassId;
     String? selectedVestingScheduleId = option?.vestingScheduleId;
+    String? selectedEsopPoolId = option?.esopPoolId;
     DateTime grantDate = option?.grantDate ?? DateTime.now();
     DateTime expiryDate =
         option?.expiryDate ??
@@ -617,6 +641,24 @@ class OptionsPage extends ConsumerWidget {
                     label: const Text('Create vesting schedule'),
                   ),
                 ],
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String?>(
+                  value: selectedEsopPoolId,
+                  decoration: const InputDecoration(
+                    labelText: 'ESOP Pool (Optional)',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('None'),
+                    ),
+                    ...esopPools.map(
+                      (p) => DropdownMenuItem(value: p.id, child: Text(p.name)),
+                    ),
+                  ],
+                  onChanged: (v) =>
+                      setDialogState(() => selectedEsopPoolId = v),
+                ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: quantityController,
@@ -724,6 +766,7 @@ class OptionsPage extends ConsumerWidget {
                     id: option.id,
                     shareClassId: selectedShareClassId,
                     vestingScheduleId: selectedVestingScheduleId,
+                    esopPoolId: selectedEsopPoolId,
                     quantity: quantity,
                     strikePrice: strike,
                     grantDate: grantDate,
@@ -739,6 +782,7 @@ class OptionsPage extends ConsumerWidget {
                     stakeholderId: selectedStakeholderId!,
                     shareClassId: selectedShareClassId!,
                     vestingScheduleId: selectedVestingScheduleId,
+                    esopPoolId: selectedEsopPoolId,
                     quantity: quantity,
                     strikePrice: strike,
                     grantDate: grantDate,
@@ -785,8 +829,12 @@ class OptionsPage extends ConsumerWidget {
         builder: (context, setDialogState) {
           final shares = int.tryParse(sharesController.text) ?? 0;
           final totalCost = shares * option.strikePrice;
-          final currentValue = pricePerShare != null ? shares * pricePerShare : null;
-          final potentialGain = currentValue != null ? currentValue - totalCost : null;
+          final currentValue = pricePerShare != null
+              ? shares * pricePerShare
+              : null;
+          final potentialGain = currentValue != null
+              ? currentValue - totalCost
+              : null;
 
           return AlertDialog(
             title: const Text('Exercise Options'),
@@ -845,14 +893,18 @@ class OptionsPage extends ConsumerWidget {
                       context,
                       'Potential Gain',
                       Formatters.currency(potentialGain!),
-                      valueColor: potentialGain >= 0 ? Colors.green : Colors.red,
+                      valueColor: potentialGain >= 0
+                          ? Colors.green
+                          : Colors.red,
                     ),
                   ],
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -960,9 +1012,7 @@ class OptionsPage extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.orange,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
             onPressed: () async {
               final shares = int.tryParse(sharesController.text);
               if (shares == null || shares <= 0 || shares > maxShares) return;
@@ -995,9 +1045,9 @@ class OptionsPage extends ConsumerWidget {
           Text(
             label,
             style: highlight
-                ? Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  )
+                ? Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)
                 : Theme.of(context).textTheme.bodyMedium,
           ),
           Text(

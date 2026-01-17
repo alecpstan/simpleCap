@@ -48,7 +48,7 @@ final optionsByStatusProvider =
 // ignore: unused_element
 typedef OptionsByStatusRef =
     AutoDisposeProviderRef<Map<String, List<OptionGrant>>>;
-String _$optionsSummaryHash() => r'640631d0f4f4efb7df090ced52805ec97e658c93';
+String _$optionsSummaryHash() => r'd22dc92185c95a238c48cb2b1204bce61008dde8';
 
 /// Summary of options for dashboard (with real vesting calculations).
 ///
@@ -69,7 +69,7 @@ final optionsSummaryProvider =
 // ignore: unused_element
 typedef OptionsSummaryRef = AutoDisposeFutureProviderRef<OptionsSummary>;
 String _$optionGrantMutationsHash() =>
-    r'c33010b0d433dc703d2d6d1f0e8b73d6c875679d';
+    r'e9e7af7d42d22fc3ec5c6ade8dceae4a8296cfca';
 
 /// Notifier for option grant mutations.
 ///

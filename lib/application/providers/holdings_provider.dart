@@ -142,6 +142,40 @@ class HoldingMutations extends _$HoldingMutations {
     await db.deleteHolding(id);
   }
 
+  /// Update an existing holding.
+  Future<void> updateHolding({
+    required String id,
+    String? shareClassId,
+    int? shareCount,
+    double? costBasis,
+    DateTime? acquiredDate,
+    String? vestingScheduleId,
+    int? vestedCount,
+    String? roundId,
+  }) async {
+    final db = ref.read(databaseProvider);
+    final now = DateTime.now();
+
+    await (db.update(db.holdings)..where((h) => h.id.equals(id))).write(
+      HoldingsCompanion(
+        shareClassId:
+            shareClassId != null ? Value(shareClassId) : const Value.absent(),
+        shareCount:
+            shareCount != null ? Value(shareCount) : const Value.absent(),
+        costBasis: costBasis != null ? Value(costBasis) : const Value.absent(),
+        acquiredDate:
+            acquiredDate != null ? Value(acquiredDate) : const Value.absent(),
+        vestingScheduleId: vestingScheduleId != null
+            ? Value(vestingScheduleId)
+            : const Value.absent(),
+        vestedCount:
+            vestedCount != null ? Value(vestedCount) : const Value.absent(),
+        roundId: roundId != null ? Value(roundId) : const Value.absent(),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
   /// Delete orphan holdings (those without a roundId).
   /// Returns the number of deleted holdings.
   Future<int> deleteOrphanHoldings(String companyId) async {

@@ -181,7 +181,7 @@ class _ShareClassProviderElement
 }
 
 String _$shareClassMutationsHash() =>
-    r'450978e1914e7da359335475b7c401f25ead68f2';
+    r'bb7181b01e8eac7df72a85865eb69032e1381f0f';
 
 /// Notifier for share class mutations.
 ///

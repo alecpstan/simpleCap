@@ -10,6 +10,8 @@ export 'rounds_provider.dart';
 export 'scenarios_provider.dart';
 export 'share_classes_provider.dart';
 export 'stakeholders_provider.dart';
+export 'theme_provider.dart';
+export 'tool_order_provider.dart';
 export 'transfers_provider.dart';
 export 'valuations_provider.dart';
 export 'vesting_provider.dart';

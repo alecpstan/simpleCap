@@ -75,6 +75,49 @@ abstract class ShareClassType {
       type == esop || type == options || type == performanceRights;
 }
 
+/// Anti-dilution protection types for preference shares.
+///
+/// Protects investors when a future round prices below their original price.
+abstract class AntiDilutionType {
+  /// No anti-dilution protection.
+  static const String none = 'none';
+
+  /// Full ratchet: conversion price reset to new lower price.
+  /// Most aggressive protection for investors.
+  static const String fullRatchet = 'fullRatchet';
+
+  /// Broad-based weighted average: conversion price adjusted by formula
+  /// that accounts for all outstanding shares (more founder-friendly).
+  static const String broadBasedWeightedAverage = 'broadBasedWeightedAverage';
+
+  /// Narrow-based weighted average: like broad-based but only counts
+  /// shares in the same class (less founder-friendly).
+  static const String narrowBasedWeightedAverage = 'narrowBasedWeightedAverage';
+
+  static const List<String> all = [
+    none,
+    fullRatchet,
+    broadBasedWeightedAverage,
+    narrowBasedWeightedAverage,
+  ];
+
+  static String displayName(String type) => switch (type) {
+    none => 'None',
+    fullRatchet => 'Full Ratchet',
+    broadBasedWeightedAverage => 'Broad-Based Weighted Average',
+    narrowBasedWeightedAverage => 'Narrow-Based Weighted Average',
+    _ => type,
+  };
+
+  static String shortName(String type) => switch (type) {
+    none => 'None',
+    fullRatchet => 'Full Ratchet',
+    broadBasedWeightedAverage => 'Broad-Based WA',
+    narrowBasedWeightedAverage => 'Narrow-Based WA',
+    _ => type,
+  };
+}
+
 /// Type constants for financing rounds.
 abstract class RoundType {
   static const String incorporation = 'incorporation';

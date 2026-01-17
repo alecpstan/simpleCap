@@ -43,6 +43,10 @@ class ShareClasses extends Table {
       boolean().withDefault(const Constant(false))();
   RealColumn get dividendRate => real().withDefault(const Constant(0.0))();
   IntColumn get seniority => integer().withDefault(const Constant(0))();
+
+  /// Anti-dilution protection type: 'none', 'fullRatchet', 'broadBasedWeightedAverage', 'narrowBasedWeightedAverage'
+  TextColumn get antiDilutionType =>
+      text().withDefault(const Constant('none'))();
   TextColumn get notes => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -86,6 +90,13 @@ class Holdings extends Table {
   TextColumn get vestingScheduleId => text().nullable()();
   IntColumn get vestedCount => integer().nullable()();
   TextColumn get roundId => text().nullable().references(Rounds, #id)();
+
+  /// Source option grant ID if this holding came from exercising options.
+  TextColumn get sourceOptionGrantId => text().nullable()();
+
+  /// Source warrant ID if this holding came from exercising warrants.
+  TextColumn get sourceWarrantId => text().nullable()();
+
   DateTimeColumn get updatedAt => dateTime()();
 
   @override

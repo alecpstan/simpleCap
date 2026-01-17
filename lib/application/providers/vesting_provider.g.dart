@@ -182,7 +182,7 @@ class _VestingScheduleProviderElement
 }
 
 String _$calculateVestingStatusHash() =>
-    r'e860bf9e3b026c1b16a2639cc4d8d33cd1bc752f';
+    r'199ea930363dc18ece066bb79467beb0fd34126b';
 
 /// Calculates vesting status for an option grant.
 ///
@@ -378,7 +378,7 @@ class _CalculateVestingStatusProviderElement
 }
 
 String _$vestingScheduleMutationsHash() =>
-    r'df23227c35603ea2b45e068f7675c7f879a681f9';
+    r'0dfa84be5a92951bdab317adea49af07ac7221fb';
 
 /// Notifier for vesting schedule mutations.
 ///

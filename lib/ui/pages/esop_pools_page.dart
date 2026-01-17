@@ -235,7 +235,8 @@ class EsopPoolsPage extends ConsumerWidget {
   ) {
     showDialog(
       context: context,
-      builder: (context) => _PoolExpansionDialog(expansionsNeeded: expansionsNeeded),
+      builder: (context) =>
+          _PoolExpansionDialog(expansionsNeeded: expansionsNeeded),
     );
   }
 
@@ -250,230 +251,166 @@ class EsopPoolsPage extends ConsumerWidget {
     final shareClass = shareClassMap[pool.shareClassId];
     final summaryAsync = ref.watch(esopPoolSummaryProvider(pool.id));
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: _getStatusColor(pool.status).withOpacity(0.2),
-          child: Icon(
-            Icons.account_balance_wallet,
-            color: _getStatusColor(pool.status),
+    return summaryAsync.when(
+      data: (summary) {
+        if (summary == null) return const SizedBox.shrink();
+        return ExpandableCard(
+          leading: EntityAvatar(
+            name: pool.name,
+            type: EntityAvatarType.company,
+            size: 40,
           ),
-        ),
-        title: Text(
-          pool.name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(
-          '${Formatters.number(pool.poolSize)} shares • ${shareClass?.name ?? 'Unknown class'}',
-        ),
-        trailing: _buildStatusChip(pool.status),
-        children: [
-          summaryAsync.when(
-            data: (summary) => summary != null
-                ? _buildPoolDetails(
-                    context,
-                    ref,
-                    pool,
-                    summary,
-                    shareClasses,
-                    vestingSchedules,
-                  )
-                : const SizedBox.shrink(),
-            loading: () => const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+          title: pool.name,
+          subtitle:
+              '${Formatters.number(pool.poolSize)} shares • ${shareClass?.name ?? 'Unknown class'}',
+          badges: [
+            StatusBadge(
+              label: _formatStatus(pool.status),
+              color: _getStatusColor(pool.status),
             ),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Error: $e'),
+          ],
+          chips: [
+            MetricChip(
+              label: 'Available',
+              value: Formatters.compactNumber(summary.available),
+              color: Colors.green,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPoolDetails(
-    BuildContext context,
-    WidgetRef ref,
-    EsopPool pool,
-    EsopPoolSummary summary,
-    List<ShareClassesData> shareClasses,
-    List<VestingSchedule> vestingSchedules,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Utilization bar
-          Column(
+            MetricChip(
+              label: 'Allocated',
+              value: Formatters.compactNumber(summary.allocated),
+              color: Colors.orange,
+            ),
+            MetricChip(
+              label: 'Utilization',
+              value: '${summary.utilizationPercent.toStringAsFixed(0)}%',
+              color: summary.utilizationPercent > 90
+                  ? Colors.red
+                  : summary.utilizationPercent > 70
+                  ? Colors.orange
+                  : Colors.blue,
+            ),
+          ],
+          expandedContent: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Utilization bar
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Pool Utilization'),
-                  Text(
-                    '${summary.utilizationPercent.toStringAsFixed(1)}%',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Pool Utilization'),
+                      Text(
+                        '${summary.utilizationPercent.toStringAsFixed(1)}%',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: summary.utilizationPercent / 100,
+                      minHeight: 8,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation(
+                        summary.utilizationPercent > 90
+                            ? Colors.red
+                            : summary.utilizationPercent > 70
+                            ? Colors.orange
+                            : Colors.green,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: summary.utilizationPercent / 100,
-                  minHeight: 8,
-                  backgroundColor: Colors.grey.shade200,
-                  valueColor: AlwaysStoppedAnimation(
-                    summary.utilizationPercent > 90
-                        ? Colors.red
-                        : summary.utilizationPercent > 70
-                            ? Colors.orange
-                            : Colors.green,
-                  ),
-                ),
+              const SizedBox(height: 16),
+              // Stats
+              _buildDetailRow('Pool Size', Formatters.number(pool.poolSize)),
+              _buildDetailRow(
+                'Allocated',
+                Formatters.number(summary.allocated),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Stats grid
-          Wrap(
-            spacing: 24,
-            runSpacing: 8,
-            children: [
-              _buildStat('Pool Size', Formatters.number(pool.poolSize)),
-              _buildStat('Allocated', Formatters.number(summary.allocated)),
-              _buildStat('Available', Formatters.number(summary.available)),
-              _buildStat('Exercised', Formatters.number(summary.exercised)),
-              _buildStat('Active Grants', summary.activeGrants.toString()),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Pool details
-          Wrap(
-            spacing: 24,
-            runSpacing: 8,
-            children: [
-              _buildStat(
+              _buildDetailRow(
+                'Available',
+                Formatters.number(summary.available),
+              ),
+              _buildDetailRow(
+                'Exercised',
+                Formatters.number(summary.exercised),
+              ),
+              _buildDetailRow('Active Grants', summary.activeGrants.toString()),
+              const Divider(height: 24),
+              _buildDetailRow(
                 'Established',
                 Formatters.shortDate(pool.establishedDate),
               ),
-              _buildStat('Strike Method', _formatStrikeMethod(pool.strikePriceMethod)),
-              _buildStat('Default Expiry', '${pool.defaultExpiryYears} years'),
+              _buildDetailRow(
+                'Strike Method',
+                _formatStrikeMethod(pool.strikePriceMethod),
+              ),
+              _buildDetailRow(
+                'Default Expiry',
+                '${pool.defaultExpiryYears} years',
+              ),
               if (pool.defaultStrikePrice != null)
-                _buildStat(
+                _buildDetailRow(
                   'Default Strike',
                   Formatters.currency(pool.defaultStrikePrice!),
                 ),
+              if (pool.notes != null && pool.notes!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  pool.notes!,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                ),
+              ],
             ],
           ),
-          if (pool.notes != null && pool.notes!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              pool.notes!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontStyle: FontStyle.italic,
-                  ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => _showEditDialog(
+                context,
+                ref,
+                pool,
+                shareClasses,
+                vestingSchedules,
+              ),
+              tooltip: 'Edit',
             ),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              onPressed: () => _showExpandDialog(context, ref, pool),
+              tooltip: 'Expand Pool',
+            ),
+            if (summary.allocated == 0)
+              IconButton(
+                icon: Icon(
+                  Icons.delete_outlined,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                onPressed: () => _confirmDelete(context, ref, pool),
+                tooltip: 'Delete',
+              ),
           ],
-          const Divider(height: 24),
-          // Actions
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _showEditDialog(
-                  context,
-                  ref,
-                  pool,
-                  shareClasses,
-                  vestingSchedules,
-                ),
-                icon: const Icon(Icons.edit, size: 18),
-                label: const Text('Edit'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _showExpandDialog(context, ref, pool),
-                icon: const Icon(Icons.add_circle_outline, size: 18),
-                label: const Text('Expand Pool'),
-              ),
-              if (summary.allocated == 0)
-                OutlinedButton.icon(
-                  onPressed: () => _confirmDelete(context, ref, pool),
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('Delete'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStat(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.grey,
-          ),
+        );
+      },
+      loading: () => const Card(
+        margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Center(child: CircularProgressIndicator()),
         ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color color;
-    String label;
-    switch (status) {
-      case 'active':
-        color = Colors.green;
-        label = 'Active';
-        break;
-      case 'frozen':
-        color = Colors.blue;
-        label = 'Frozen';
-        break;
-      case 'exhausted':
-        color = Colors.orange;
-        label = 'Exhausted';
-        break;
-      case 'draft':
-      default:
-        color = Colors.grey;
-        label = 'Draft';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.5)),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          color: color,
-          fontWeight: FontWeight.w500,
+      error: (e, _) => Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text('Error: $e'),
         ),
       ),
     );
@@ -491,6 +428,40 @@ class EsopPoolsPage extends ConsumerWidget {
       default:
         return Colors.grey;
     }
+  }
+
+  String _formatStatus(String status) {
+    switch (status) {
+      case 'active':
+        return 'Active';
+      case 'frozen':
+        return 'Frozen';
+      case 'exhausted':
+        return 'Exhausted';
+      case 'draft':
+        return 'Draft';
+      default:
+        return status[0].toUpperCase() + status.substring(1);
+    }
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
   }
 
   String _formatStrikeMethod(String method) {
@@ -555,14 +526,14 @@ class EsopPoolsPage extends ConsumerWidget {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: selectedShareClassId,
-                  decoration: const InputDecoration(
-                    labelText: 'Share Class *',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Share Class *'),
                   items: shareClasses
-                      .map((sc) => DropdownMenuItem(
-                            value: sc.id,
-                            child: Text(sc.name),
-                          ))
+                      .map(
+                        (sc) => DropdownMenuItem(
+                          value: sc.id,
+                          child: Text(sc.name),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() => selectedShareClassId = v),
                 ),
@@ -610,17 +581,29 @@ class EsopPoolsPage extends ConsumerWidget {
                     labelText: 'Strike Price Method',
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'fmv', child: Text('Fair Market Value (409A)')),
-                    DropdownMenuItem(value: 'fixed', child: Text('Fixed Price')),
-                    DropdownMenuItem(value: 'discount', child: Text('Discount to FMV')),
+                    DropdownMenuItem(
+                      value: 'fmv',
+                      child: Text('Fair Market Value (409A)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'fixed',
+                      child: Text('Fixed Price'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'discount',
+                      child: Text('Discount to FMV'),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => strikePriceMethod = v ?? 'fmv'),
+                  onChanged: (v) =>
+                      setState(() => strikePriceMethod = v ?? 'fmv'),
                 ),
                 if (strikePriceMethod == 'fixed') ...[
                   const SizedBox(height: 16),
                   TextField(
                     controller: strikePriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Default Strike Price',
                       prefixText: '\$ ',
@@ -644,14 +627,13 @@ class EsopPoolsPage extends ConsumerWidget {
                       labelText: 'Default Vesting Schedule',
                     ),
                     items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('None'),
+                      const DropdownMenuItem(value: null, child: Text('None')),
+                      ...vestingSchedules.map(
+                        (vs) => DropdownMenuItem(
+                          value: vs.id,
+                          child: Text(vs.name),
+                        ),
                       ),
-                      ...vestingSchedules.map((vs) => DropdownMenuItem(
-                            value: vs.id,
-                            child: Text(vs.name),
-                          )),
                     ],
                     onChanged: (v) =>
                         setState(() => selectedVestingScheduleId = v),
@@ -699,17 +681,21 @@ class EsopPoolsPage extends ConsumerWidget {
                 }
 
                 try {
-                  await ref.read(createEsopPoolProvider.notifier).call(
+                  await ref
+                      .read(createEsopPoolProvider.notifier)
+                      .call(
                         name: nameController.text,
                         shareClassId: selectedShareClassId!,
                         poolSize: poolSize,
-                        targetPercentage:
-                            double.tryParse(targetPercentController.text),
+                        targetPercentage: double.tryParse(
+                          targetPercentController.text,
+                        ),
                         establishedDate: establishedDate,
                         defaultVestingScheduleId: selectedVestingScheduleId,
                         strikePriceMethod: strikePriceMethod,
-                        defaultStrikePrice:
-                            double.tryParse(strikePriceController.text),
+                        defaultStrikePrice: double.tryParse(
+                          strikePriceController.text,
+                        ),
                         defaultExpiryYears:
                             int.tryParse(expiryYearsController.text) ?? 10,
                         notes: notesController.text.isNotEmpty
@@ -781,35 +767,34 @@ class EsopPoolsPage extends ConsumerWidget {
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Pool Name *',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Pool Name *'),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: status,
-                  decoration: const InputDecoration(
-                    labelText: 'Status',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
                     DropdownMenuItem(value: 'draft', child: Text('Draft')),
                     DropdownMenuItem(value: 'active', child: Text('Active')),
                     DropdownMenuItem(value: 'frozen', child: Text('Frozen')),
-                    DropdownMenuItem(value: 'exhausted', child: Text('Exhausted')),
+                    DropdownMenuItem(
+                      value: 'exhausted',
+                      child: Text('Exhausted'),
+                    ),
                   ],
                   onChanged: (v) => setState(() => status = v ?? 'active'),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: selectedShareClassId,
-                  decoration: const InputDecoration(
-                    labelText: 'Share Class *',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Share Class *'),
                   items: shareClasses
-                      .map((sc) => DropdownMenuItem(
-                            value: sc.id,
-                            child: Text(sc.name),
-                          ))
+                      .map(
+                        (sc) => DropdownMenuItem(
+                          value: sc.id,
+                          child: Text(sc.name),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() => selectedShareClassId = v),
                 ),
@@ -829,17 +814,29 @@ class EsopPoolsPage extends ConsumerWidget {
                     labelText: 'Strike Price Method',
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'fmv', child: Text('Fair Market Value')),
-                    DropdownMenuItem(value: 'fixed', child: Text('Fixed Price')),
-                    DropdownMenuItem(value: 'discount', child: Text('Discount to FMV')),
+                    DropdownMenuItem(
+                      value: 'fmv',
+                      child: Text('Fair Market Value'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'fixed',
+                      child: Text('Fixed Price'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'discount',
+                      child: Text('Discount to FMV'),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => strikePriceMethod = v ?? 'fmv'),
+                  onChanged: (v) =>
+                      setState(() => strikePriceMethod = v ?? 'fmv'),
                 ),
                 if (strikePriceMethod == 'fixed') ...[
                   const SizedBox(height: 16),
                   TextField(
                     controller: strikePriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Default Strike Price',
                       prefixText: '\$ ',
@@ -862,14 +859,13 @@ class EsopPoolsPage extends ConsumerWidget {
                       labelText: 'Default Vesting Schedule',
                     ),
                     items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('None'),
+                      const DropdownMenuItem(value: null, child: Text('None')),
+                      ...vestingSchedules.map(
+                        (vs) => DropdownMenuItem(
+                          value: vs.id,
+                          child: Text(vs.name),
+                        ),
                       ),
-                      ...vestingSchedules.map((vs) => DropdownMenuItem(
-                            value: vs.id,
-                            child: Text(vs.name),
-                          )),
                     ],
                     onChanged: (v) =>
                         setState(() => selectedVestingScheduleId = v),
@@ -878,9 +874,7 @@ class EsopPoolsPage extends ConsumerWidget {
                 TextField(
                   controller: notesController,
                   maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Notes',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Notes'),
                 ),
               ],
             ),
@@ -904,19 +898,24 @@ class EsopPoolsPage extends ConsumerWidget {
                 }
 
                 try {
-                  await ref.read(updateEsopPoolProvider.notifier).call(
+                  await ref
+                      .read(updateEsopPoolProvider.notifier)
+                      .call(
                         id: pool.id,
                         name: nameController.text,
                         shareClassId: selectedShareClassId,
                         status: status,
-                        targetPercentage:
-                            double.tryParse(targetPercentController.text),
+                        targetPercentage: double.tryParse(
+                          targetPercentController.text,
+                        ),
                         defaultVestingScheduleId: selectedVestingScheduleId,
                         strikePriceMethod: strikePriceMethod,
-                        defaultStrikePrice:
-                            double.tryParse(strikePriceController.text),
-                        defaultExpiryYears:
-                            int.tryParse(expiryYearsController.text),
+                        defaultStrikePrice: double.tryParse(
+                          strikePriceController.text,
+                        ),
+                        defaultExpiryYears: int.tryParse(
+                          expiryYearsController.text,
+                        ),
                         notes: notesController.text.isNotEmpty
                             ? notesController.text
                             : null,
@@ -992,8 +991,7 @@ class EsopPoolsPage extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () async {
-              final additional =
-                  int.tryParse(additionalSharesController.text);
+              final additional = int.tryParse(additionalSharesController.text);
               if (additional == null || additional <= 0) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -1006,7 +1004,9 @@ class EsopPoolsPage extends ConsumerWidget {
 
               try {
                 // Use the new history-tracking expansion mutations
-                await ref.read(poolExpansionMutationsProvider.notifier).expandPool(
+                await ref
+                    .read(poolExpansionMutationsProvider.notifier)
+                    .expandPool(
                       poolId: pool.id,
                       additionalShares: additional,
                       reason: 'manual',
@@ -1058,9 +1058,7 @@ class EsopPoolsPage extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               try {
                 await ref.read(deleteEsopPoolProvider.notifier).call(pool.id);
@@ -1114,7 +1112,9 @@ class _PoolExpansionDialogState extends ConsumerState<_PoolExpansionDialog> {
   void initState() {
     super.initState();
     // Select all by default
-    _selectedIndices.addAll(List.generate(widget.expansionsNeeded.length, (i) => i));
+    _selectedIndices.addAll(
+      List.generate(widget.expansionsNeeded.length, (i) => i),
+    );
   }
 
   @override
@@ -1273,7 +1273,8 @@ class _PoolExpansionDialogState extends ConsumerState<_PoolExpansionDialog> {
           resolutionReference: _resolutionController.text.isNotEmpty
               ? _resolutionController.text
               : null,
-          notes: 'Expanded to meet target of ${expansion.targetPercent.toStringAsFixed(1)}%',
+          notes:
+              'Expanded to meet target of ${expansion.targetPercent.toStringAsFixed(1)}%',
         );
         appliedCount++;
       }

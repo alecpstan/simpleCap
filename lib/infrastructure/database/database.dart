@@ -39,7 +39,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration {
@@ -102,6 +102,20 @@ class AppDatabase extends _$AppDatabase {
         // Migration from version 5 to 6: Add EsopPoolExpansions table
         if (from < 6) {
           await m.createTable(esopPoolExpansions);
+        }
+        // Migration from version 6 to 7: Add antiDilutionType to share_classes
+        if (from < 7) {
+          final shareClassesColumns = await customSelect(
+            "PRAGMA table_info(share_classes)",
+          ).get();
+          final hasAntiDilution = shareClassesColumns.any(
+            (row) => row.read<String>('name') == 'anti_dilution_type',
+          );
+          if (!hasAntiDilution) {
+            await customStatement(
+              "ALTER TABLE share_classes ADD COLUMN anti_dilution_type TEXT NOT NULL DEFAULT 'none'",
+            );
+          }
         }
       },
       beforeOpen: (details) async {
@@ -267,21 +281,74 @@ class AppDatabase extends _$AppDatabase {
 
   /// Delete a round.
   ///
-  /// Deletes holdings issued in this round and clears references in other tables.
+  /// Deletes holdings and warrants issued in this round, and clears references in other tables.
+  /// Also deletes any holdings created from exercising options/warrants in this round.
+  /// Also clears sourceHoldingId on transfers that reference deleted holdings.
   Future<void> deleteRound(String id) async {
     await transaction(() async {
+      // First, get the IDs of warrants and options that belong to this round
+      // so we can delete their associated exercised holdings
+      final roundWarrants = await (select(
+        warrants,
+      )..where((w) => w.roundId.equals(id))).get();
+      final roundOptions = await (select(
+        optionGrants,
+      )..where((o) => o.roundId.equals(id))).get();
+
+      // Get all holdings that will be deleted so we can clear transfer references
+      final holdingsToDelete = <String>[];
+
+      // Collect holding IDs from exercised warrants
+      for (final warrant in roundWarrants) {
+        final exercisedHoldings = await (select(
+          holdings,
+        )..where((h) => h.sourceWarrantId.equals(warrant.id))).get();
+        holdingsToDelete.addAll(exercisedHoldings.map((h) => h.id));
+      }
+
+      // Collect holding IDs from exercised options
+      for (final option in roundOptions) {
+        final exercisedHoldings = await (select(
+          holdings,
+        )..where((h) => h.sourceOptionGrantId.equals(option.id))).get();
+        holdingsToDelete.addAll(exercisedHoldings.map((h) => h.id));
+      }
+
+      // Collect holding IDs issued directly in this round
+      final roundHoldings = await (select(
+        holdings,
+      )..where((h) => h.roundId.equals(id))).get();
+      holdingsToDelete.addAll(roundHoldings.map((h) => h.id));
+
+      // Clear sourceHoldingId on any transfers that reference these holdings
+      for (final holdingId in holdingsToDelete) {
+        await (update(transfers)
+              ..where((t) => t.sourceHoldingId.equals(holdingId)))
+            .write(const TransfersCompanion(sourceHoldingId: Value(null)));
+      }
+
+      // Delete holdings created from exercising warrants in this round
+      for (final warrant in roundWarrants) {
+        await (delete(
+          holdings,
+        )..where((h) => h.sourceWarrantId.equals(warrant.id))).go();
+      }
+
+      // Delete holdings created from exercising options in this round
+      for (final option in roundOptions) {
+        await (delete(
+          holdings,
+        )..where((h) => h.sourceOptionGrantId.equals(option.id))).go();
+      }
+
       // Delete holdings that were issued in this round
       await (delete(holdings)..where((h) => h.roundId.equals(id))).go();
 
-      // Clear roundId references in option grants
-      await (update(optionGrants)..where((o) => o.roundId.equals(id))).write(
-        const OptionGrantsCompanion(roundId: Value(null)),
-      );
+      // Delete warrants that were created as part of this round
+      await (delete(warrants)..where((w) => w.roundId.equals(id))).go();
 
-      // Clear roundId references in warrants
-      await (update(warrants)..where((w) => w.roundId.equals(id))).write(
-        const WarrantsCompanion(roundId: Value(null)),
-      );
+      // Delete option grants that were created as part of this round
+      await (delete(optionGrants)..where((o) => o.roundId.equals(id))).go();
 
       // Clear roundId references in ESOP pools
       await (update(esopPools)..where((p) => p.roundId.equals(id))).write(
@@ -291,6 +358,22 @@ class AppDatabase extends _$AppDatabase {
       // Clear roundId references in capitalization events
       await (update(capitalizationEvents)..where((e) => e.roundId.equals(id)))
           .write(const CapitalizationEventsCompanion(roundId: Value(null)));
+
+      // Clear roundId references in convertibles (round they were issued in)
+      await (update(convertibles)..where((c) => c.roundId.equals(id))).write(
+        const ConvertiblesCompanion(roundId: Value(null)),
+      );
+
+      // Revert convertibles that were converted in this round back to outstanding
+      await (update(
+        convertibles,
+      )..where((c) => c.conversionEventId.equals(id))).write(
+        const ConvertiblesCompanion(
+          status: Value('outstanding'),
+          conversionEventId: Value(null),
+          sharesReceived: Value(null),
+        ),
+      );
 
       // Now delete the round
       await (delete(rounds)..where((r) => r.id.equals(id))).go();
@@ -342,6 +425,20 @@ class AppDatabase extends _$AppDatabase {
   /// Delete all holdings for a specific round (for reopening rounds).
   Future<int> deleteHoldingsByRound(String roundId) async {
     return (delete(holdings)..where((h) => h.roundId.equals(roundId))).go();
+  }
+
+  /// Delete holdings created from exercising a specific option grant.
+  Future<int> deleteHoldingsByOptionGrant(String optionGrantId) async {
+    return (delete(
+      holdings,
+    )..where((h) => h.sourceOptionGrantId.equals(optionGrantId))).go();
+  }
+
+  /// Delete holdings created from exercising a specific warrant.
+  Future<int> deleteHoldingsByWarrant(String warrantId) async {
+    return (delete(
+      holdings,
+    )..where((h) => h.sourceWarrantId.equals(warrantId))).go();
   }
 
   /// Delete orphan holdings (those without a roundId).
@@ -421,19 +518,17 @@ class AppDatabase extends _$AppDatabase {
 
   /// Activate pending convertibles for a round (pending → outstanding).
   Future<void> activatePendingConvertibles(String roundId) async {
-    await (update(convertibles)
-          ..where(
-            (c) => c.roundId.equals(roundId) & c.status.equals('pending'),
-          ))
+    await (update(
+          convertibles,
+        )..where((c) => c.roundId.equals(roundId) & c.status.equals('pending')))
         .write(const ConvertiblesCompanion(status: Value('outstanding')));
   }
 
   /// Set convertibles back to pending for a round (outstanding → pending).
   Future<void> deactivateConvertiblesForRound(String roundId) async {
-    await (update(convertibles)
-          ..where(
-            (c) => c.roundId.equals(roundId) & c.status.equals('outstanding'),
-          ))
+    await (update(convertibles)..where(
+          (c) => c.roundId.equals(roundId) & c.status.equals('outstanding'),
+        ))
         .write(const ConvertiblesCompanion(status: Value('pending')));
   }
 
@@ -677,10 +772,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Activate pending warrants for a round (pending → active).
   Future<void> activatePendingWarrants(String roundId) async {
-    await (update(warrants)
-          ..where(
-            (w) => w.roundId.equals(roundId) & w.status.equals('pending'),
-          ))
+    await (update(
+          warrants,
+        )..where((w) => w.roundId.equals(roundId) & w.status.equals('pending')))
         .write(const WarrantsCompanion(status: Value('active')));
   }
 

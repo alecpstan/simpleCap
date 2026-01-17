@@ -249,6 +249,7 @@ class HoldingsPage extends ConsumerWidget {
               isParticipating: false,
               dividendRate: 0,
               seniority: 0,
+              antiDilutionType: 'none',
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
             ),

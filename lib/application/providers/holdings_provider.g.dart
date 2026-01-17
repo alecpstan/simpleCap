@@ -224,7 +224,7 @@ final draftRoundIdsProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef DraftRoundIdsRef = AutoDisposeFutureProviderRef<Map<String, bool>>;
-String _$holdingMutationsHash() => r'6827be8bb3c81de0fbec7cc8724a197727584465';
+String _$holdingMutationsHash() => r'2e3130d5749cc777ccbd5c659866c0a2872fcb5b';
 
 /// Notifier for holding mutations.
 ///

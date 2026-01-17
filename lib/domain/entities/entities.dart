@@ -8,5 +8,4 @@ export 'round.dart';
 export 'share_class.dart';
 export 'stakeholder.dart';
 export 'valuation.dart';
-export 'vesting_schedule.dart';
 export 'warrant.dart';

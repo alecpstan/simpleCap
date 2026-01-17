@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../domain/entities/vesting_schedule.dart' as domain;
+import '../../domain/constants/constants.dart';
+import '../../domain/services/vesting_calculator.dart';
 import '../../infrastructure/database/database.dart';
 import 'database_provider.dart';
 import 'company_provider.dart';
@@ -56,15 +57,17 @@ VestingStatus calculateVestingStatus(
     );
   }
 
-  // Convert DB data to domain entity for calculations
-  final vestingSchedule = _toVestingScheduleEntity(schedule);
-
-  // Calculate vesting
-  final percent = vestingSchedule.vestingPercentAt(grantDate, now);
-  final vestedQty = vestingSchedule.unitsVestedAt(
-    totalQuantity,
-    grantDate,
-    now,
+  // Use VestingCalculator directly with Drift types
+  final percent = VestingCalculator.vestingPercentAt(
+    schedule: schedule,
+    startDate: grantDate,
+    asOfDate: now,
+  );
+  final vestedQty = VestingCalculator.unitsVestedAt(
+    schedule: schedule,
+    totalUnits: totalQuantity,
+    startDate: grantDate,
+    asOfDate: now,
   );
   final unvestedQty = totalQuantity - vestedQty;
   final isFullyVested = percent >= 100;
@@ -92,19 +95,21 @@ VestingStatus calculateVestingStatus(
   int nextVestingQuantity = 0;
 
   if (!isFullyVested) {
-    final frequency = _parseFrequency(schedule.frequency);
-    final monthsPerTranche = frequency?.monthsPerTranche ?? 1;
+    final monthsPerTranche = VestingFrequency.monthsPerTranche(
+      schedule.frequency ?? VestingFrequency.monthly,
+    );
 
     // Calculate months since grant
     final monthsElapsed = _monthsBetween(grantDate, now);
 
-    if (!isCliffMet && cliffDate != null) {
+    if (!isCliffMet) {
       // Next vest is at cliff
       nextVestingDate = cliffDate;
-      nextVestingQuantity = vestingSchedule.unitsVestedAt(
-        totalQuantity,
-        grantDate,
-        cliffDate,
+      nextVestingQuantity = VestingCalculator.unitsVestedAt(
+        schedule: schedule,
+        totalUnits: totalQuantity,
+        startDate: grantDate,
+        asOfDate: cliffDate,
       );
     } else {
       // Next vest is at next tranche
@@ -116,10 +121,11 @@ VestingStatus calculateVestingStatus(
           grantDate.month + nextTranche,
           grantDate.day,
         );
-        final nextVestedTotal = vestingSchedule.unitsVestedAt(
-          totalQuantity,
-          grantDate,
-          nextVestingDate,
+        final nextVestedTotal = VestingCalculator.unitsVestedAt(
+          schedule: schedule,
+          totalUnits: totalQuantity,
+          startDate: grantDate,
+          asOfDate: nextVestingDate,
         );
         nextVestingQuantity = nextVestedTotal - vestedQty;
       }
@@ -191,10 +197,10 @@ class VestingScheduleMutations extends _$VestingScheduleMutations {
   Future<String> create({
     required String companyId,
     required String name,
-    required domain.VestingType type,
+    required String type,
     int? totalMonths,
     int cliffMonths = 0,
-    domain.VestingFrequency? frequency,
+    String? frequency,
     String? milestonesJson,
     int? totalHours,
     String? notes,
@@ -208,10 +214,10 @@ class VestingScheduleMutations extends _$VestingScheduleMutations {
         id: id,
         companyId: companyId,
         name: name,
-        type: type.name,
+        type: type,
         totalMonths: Value(totalMonths),
         cliffMonths: Value(cliffMonths),
-        frequency: Value(frequency?.name),
+        frequency: Value(frequency),
         milestonesJson: Value(milestonesJson),
         totalHours: Value(totalHours),
         notes: Value(notes),
@@ -228,10 +234,10 @@ class VestingScheduleMutations extends _$VestingScheduleMutations {
     return create(
       companyId: companyId,
       name: '4 Year / 1 Year Cliff',
-      type: domain.VestingType.timeBased,
+      type: VestingType.timeBased,
       totalMonths: 48,
       cliffMonths: 12,
-      frequency: domain.VestingFrequency.monthly,
+      frequency: VestingFrequency.monthly,
     );
   }
 
@@ -240,10 +246,10 @@ class VestingScheduleMutations extends _$VestingScheduleMutations {
     return create(
       companyId: companyId,
       name: '3 Year / Monthly',
-      type: domain.VestingType.timeBased,
+      type: VestingType.timeBased,
       totalMonths: 36,
       cliffMonths: 0,
-      frequency: domain.VestingFrequency.monthly,
+      frequency: VestingFrequency.monthly,
     );
   }
 
@@ -251,10 +257,10 @@ class VestingScheduleMutations extends _$VestingScheduleMutations {
   Future<void> updateSchedule({
     required String id,
     String? name,
-    domain.VestingType? type,
+    String? type,
     int? totalMonths,
     int? cliffMonths,
-    domain.VestingFrequency? frequency,
+    String? frequency,
     String? notes,
   }) async {
     final db = ref.read(databaseProvider);
@@ -269,10 +275,10 @@ class VestingScheduleMutations extends _$VestingScheduleMutations {
         id: Value(id),
         companyId: Value(existing.companyId),
         name: Value(name ?? existing.name),
-        type: Value(type?.name ?? existing.type),
+        type: Value(type ?? existing.type),
         totalMonths: Value(totalMonths ?? existing.totalMonths),
         cliffMonths: Value(cliffMonths ?? existing.cliffMonths),
-        frequency: Value(frequency?.name ?? existing.frequency),
+        frequency: Value(frequency ?? existing.frequency),
         milestonesJson: Value(existing.milestonesJson),
         totalHours: Value(existing.totalHours),
         notes: Value(notes ?? existing.notes),
@@ -287,39 +293,6 @@ class VestingScheduleMutations extends _$VestingScheduleMutations {
     final db = ref.read(databaseProvider);
     await db.deleteVestingSchedule(id);
   }
-}
-
-// Helper to convert DB row to domain entity
-domain.VestingSchedule _toVestingScheduleEntity(VestingSchedule data) {
-  return domain.VestingSchedule(
-    id: data.id,
-    companyId: data.companyId,
-    name: data.name,
-    type: _parseVestingType(data.type),
-    totalMonths: data.totalMonths,
-    cliffMonths: data.cliffMonths,
-    frequency: _parseFrequency(data.frequency),
-    milestonesJson: data.milestonesJson,
-    totalHours: data.totalHours,
-    notes: data.notes,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-  );
-}
-
-domain.VestingType _parseVestingType(String type) {
-  return domain.VestingType.values.firstWhere(
-    (t) => t.name == type,
-    orElse: () => domain.VestingType.timeBased,
-  );
-}
-
-domain.VestingFrequency? _parseFrequency(String? frequency) {
-  if (frequency == null) return null;
-  return domain.VestingFrequency.values.firstWhere(
-    (f) => f.name == frequency,
-    orElse: () => domain.VestingFrequency.monthly,
-  );
 }
 
 int _monthsBetween(DateTime from, DateTime to) {

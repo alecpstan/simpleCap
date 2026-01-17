@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../domain/entities/vesting_schedule.dart' as domain;
+import 'package:uuid/uuid.dart';
+import '../../domain/services/vesting_calculator.dart';
 import '../../infrastructure/database/database.dart';
 import 'database_provider.dart';
 import 'company_provider.dart';
@@ -83,12 +84,12 @@ Future<OptionsSummary> optionsSummary(OptionsSummaryRef ref) async {
           : null;
 
       if (schedule != null) {
-        final vestingEntity = _toVestingScheduleEntity(schedule);
         final outstanding = o.quantity - o.exercisedCount - o.cancelledCount;
-        final vested = vestingEntity.unitsVestedAt(
-          outstanding,
-          o.grantDate,
-          now,
+        final vested = VestingCalculator.unitsVestedAt(
+          schedule: schedule,
+          totalUnits: outstanding,
+          startDate: o.grantDate,
+          asOfDate: now,
         );
         totalVested += vested;
         totalUnvested += outstanding - vested;
@@ -111,32 +112,6 @@ Future<OptionsSummary> optionsSummary(OptionsSummaryRef ref) async {
     outstandingOptions: outstandingOptions,
     activeGrants: activeGrants,
     totalGrants: options.length,
-  );
-}
-
-// Helper to convert DB row to domain entity
-domain.VestingSchedule _toVestingScheduleEntity(VestingSchedule data) {
-  return domain.VestingSchedule(
-    id: data.id,
-    companyId: data.companyId,
-    name: data.name,
-    type: domain.VestingType.values.firstWhere(
-      (t) => t.name == data.type,
-      orElse: () => domain.VestingType.timeBased,
-    ),
-    totalMonths: data.totalMonths,
-    cliffMonths: data.cliffMonths,
-    frequency: data.frequency != null
-        ? domain.VestingFrequency.values.firstWhere(
-            (f) => f.name == data.frequency,
-            orElse: () => domain.VestingFrequency.monthly,
-          )
-        : null,
-    milestonesJson: data.milestonesJson,
-    totalHours: data.totalHours,
-    notes: data.notes,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
   );
 }
 
@@ -178,6 +153,7 @@ class OptionGrantMutations extends _$OptionGrantMutations {
     required DateTime grantDate,
     required DateTime expiryDate,
     String? vestingScheduleId,
+    String? esopPoolId,
     String? roundId,
     bool allowsEarlyExercise = false,
     String? notes,
@@ -197,6 +173,7 @@ class OptionGrantMutations extends _$OptionGrantMutations {
         grantDate: grantDate,
         expiryDate: expiryDate,
         vestingScheduleId: Value(vestingScheduleId),
+        esopPoolId: Value(esopPoolId),
         roundId: Value(roundId),
         allowsEarlyExercise: Value(allowsEarlyExercise),
         notes: Value(notes),
@@ -216,6 +193,7 @@ class OptionGrantMutations extends _$OptionGrantMutations {
     DateTime? grantDate,
     DateTime? expiryDate,
     String? vestingScheduleId,
+    String? esopPoolId,
     String? roundId,
     bool? allowsEarlyExercise,
     String? notes,
@@ -240,6 +218,7 @@ class OptionGrantMutations extends _$OptionGrantMutations {
         vestingScheduleId: Value(
           vestingScheduleId ?? existing.vestingScheduleId,
         ),
+        esopPoolId: Value(esopPoolId ?? existing.esopPoolId),
         roundId: Value(roundId ?? existing.roundId),
         allowsEarlyExercise: Value(
           allowsEarlyExercise ?? existing.allowsEarlyExercise,
@@ -269,6 +248,7 @@ class OptionGrantMutations extends _$OptionGrantMutations {
     final isFullyExercised =
         newExercisedCount >= existing.quantity - existing.cancelledCount;
 
+    // Update the option grant's exercised count
     await db.upsertOptionGrant(
       OptionGrantsCompanion(
         id: Value(id),
@@ -290,9 +270,27 @@ class OptionGrantMutations extends _$OptionGrantMutations {
         updatedAt: Value(DateTime.now()),
       ),
     );
+
+    // Create a holding record for the exercised shares
+    final holdingId = const Uuid().v4();
+    final costBasis = sharesToExercise * existing.strikePrice;
+    await db.upsertHolding(
+      HoldingsCompanion(
+        id: Value(holdingId),
+        companyId: Value(existing.companyId),
+        stakeholderId: Value(existing.stakeholderId),
+        shareClassId: Value(existing.shareClassId),
+        shareCount: Value(sharesToExercise),
+        costBasis: Value(costBasis),
+        acquiredDate: Value(DateTime.now()),
+        sourceOptionGrantId: Value(id),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Undo exercise (revert exercised options back to outstanding).
+  /// Note: This will delete holdings created from exercising this option.
   Future<void> unexercise({
     required String id,
     required int sharesToUnexercise,
@@ -328,6 +326,9 @@ class OptionGrantMutations extends _$OptionGrantMutations {
         updatedAt: Value(DateTime.now()),
       ),
     );
+
+    // Delete holdings that were created from exercising this option
+    await db.deleteHoldingsByOptionGrant(id);
   }
 
   Future<void> cancel({required String id, required int sharesToCancel}) async {

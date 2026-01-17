@@ -46,24 +46,36 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
               final hasDraft = rounds.any((r) => r.status == 'draft');
 
               // Calculate which round can be reopened
-              final closedRounds = rounds.where((r) => r.status == 'closed').toList();
+              final closedRounds = rounds
+                  .where((r) => r.status == 'closed')
+                  .toList();
               closedRounds.sort((a, b) => b.date.compareTo(a.date));
-              final mostRecentClosed = closedRounds.isNotEmpty ? closedRounds.first : null;
-              final hasDraftMoreRecent = mostRecentClosed != null &&
-                  rounds.any((r) => r.status == 'draft' && r.date.isAfter(mostRecentClosed.date));
-              final reopenableId = (mostRecentClosed != null && !hasDraftMoreRecent)
+              final mostRecentClosed = closedRounds.isNotEmpty
+                  ? closedRounds.first
+                  : null;
+              final hasDraftMoreRecent =
+                  mostRecentClosed != null &&
+                  rounds.any(
+                    (r) =>
+                        r.status == 'draft' &&
+                        r.date.isAfter(mostRecentClosed.date),
+                  );
+              final reopenableId =
+                  (mostRecentClosed != null && !hasDraftMoreRecent)
                   ? mostRecentClosed.id
                   : null;
 
               return SliverList(
                 delegate: SliverChildListDelegate([
                   if (hasDraft) _buildDraftNotice(context),
-                  ...rounds.map((round) => _buildRoundCard(
-                    context,
-                    round,
-                    canReopen: round.id == reopenableId,
-                    key: ValueKey(round.id),
-                  )),
+                  ...rounds.map(
+                    (round) => _buildRoundCard(
+                      context,
+                      round,
+                      canReopen: round.id == reopenableId,
+                      key: ValueKey(round.id),
+                    ),
+                  ),
                   const SizedBox(height: 80),
                 ]),
               );
@@ -163,7 +175,12 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     );
   }
 
-  Widget _buildRoundCard(BuildContext context, Round round, {required bool canReopen, Key? key}) {
+  Widget _buildRoundCard(
+    BuildContext context,
+    Round round, {
+    required bool canReopen,
+    Key? key,
+  }) {
     final theme = Theme.of(context);
 
     return ExpandableCard(
@@ -231,7 +248,13 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
               value: Formatters.currency(round.pricePerShare!),
             ),
           // Holdings in this round
-          _buildRoundHoldingsSection(context, round.id, isDraft: round.status == 'draft'),
+          _buildRoundHoldingsSection(
+            context,
+            round.id,
+            isDraft: round.status == 'draft',
+          ),
+          // Warrants issued in this round
+          _buildRoundWarrantsSection(context, round.id),
           // Convertibles converted in this round
           _buildRoundConvertiblesSection(context, round.id),
           if (round.notes != null && round.notes!.isNotEmpty) ...[
@@ -346,9 +369,9 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
           Expanded(
             child: Text(
               'Close the current draft round before creating a new one.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.orange.shade900,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.orange.shade900),
             ),
           ),
         ],
@@ -356,14 +379,20 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     );
   }
 
-  Widget _buildRoundHoldingsSection(BuildContext context, String roundId, {bool isDraft = false}) {
+  Widget _buildRoundHoldingsSection(
+    BuildContext context,
+    String roundId, {
+    bool isDraft = false,
+  }) {
     final holdingsAsync = ref.watch(holdingsStreamProvider);
     final stakeholdersAsync = ref.watch(stakeholdersStreamProvider);
     final shareClassesAsync = ref.watch(shareClassesStreamProvider);
 
     return holdingsAsync.when(
       data: (allHoldings) {
-        final holdings = allHoldings.where((h) => h.roundId == roundId).toList();
+        final holdings = allHoldings
+            .where((h) => h.roundId == roundId)
+            .toList();
         if (holdings.isEmpty) return const SizedBox.shrink();
 
         return Column(
@@ -372,17 +401,19 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
             const Divider(height: 24),
             Text(
               'Investments',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             ...holdings.map((h) {
               final stakeholderName = stakeholdersAsync.whenOrNull(
-                data: (s) => s.where((x) => x.id == h.stakeholderId).firstOrNull?.name,
+                data: (s) =>
+                    s.where((x) => x.id == h.stakeholderId).firstOrNull?.name,
               );
               final shareClassName = shareClassesAsync.whenOrNull(
-                data: (c) => c.where((x) => x.id == h.shareClassId).firstOrNull?.name,
+                data: (c) =>
+                    c.where((x) => x.id == h.shareClassId).firstOrNull?.name,
               );
 
               return HoldingItem(
@@ -391,7 +422,8 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                 shareClassName: shareClassName ?? 'Unknown',
                 costBasis: h.costBasis,
                 acquiredDate: h.acquiredDate,
-                roundName: stakeholderName, // Show investor name in round context
+                roundName:
+                    stakeholderName, // Show investor name in round context
                 hasVesting: h.vestingScheduleId != null,
                 isDraft: isDraft,
                 onTap: () => HoldingDetailDialog.show(
@@ -404,9 +436,79 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                       itemName: 'holding',
                     );
                     if (confirmed && mounted) {
-                      await ref.read(holdingMutationsProvider.notifier).delete(h.id);
+                      await ref
+                          .read(holdingMutationsProvider.notifier)
+                          .delete(h.id);
                     }
                   },
+                ),
+              );
+            }),
+          ],
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildRoundWarrantsSection(BuildContext context, String roundId) {
+    final warrantsAsync = ref.watch(warrantsStreamProvider);
+    final stakeholdersAsync = ref.watch(stakeholdersStreamProvider);
+
+    return warrantsAsync.when(
+      data: (allWarrants) {
+        // Show warrants that were issued in this round
+        final roundWarrants = allWarrants
+            .where((w) => w.roundId == roundId)
+            .toList();
+        if (roundWarrants.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Divider(height: 24),
+            Text(
+              'Warrants Issued',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            ...roundWarrants.map((w) {
+              final stakeholderName = stakeholdersAsync.whenOrNull(
+                data: (s) =>
+                    s.where((x) => x.id == w.stakeholderId).firstOrNull?.name,
+              );
+
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.receipt,
+                    color: Colors.indigo,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  '${Formatters.number(w.quantity)} warrants',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                ),
+                subtitle: Text(
+                  '${stakeholderName ?? "Unknown"} • Strike: ${Formatters.currency(w.strikePrice)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                trailing: StatusBadge(
+                  label: w.status[0].toUpperCase() + w.status.substring(1),
+                  color: w.status == 'active' ? Colors.green : Colors.orange,
                 ),
               );
             }),
@@ -426,7 +528,9 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
       data: (allConvertibles) {
         // Show convertibles that were converted in this round
         final convertibles = allConvertibles
-            .where((c) => c.conversionEventId == roundId && c.status == 'converted')
+            .where(
+              (c) => c.conversionEventId == roundId && c.status == 'converted',
+            )
             .toList();
         if (convertibles.isEmpty) return const SizedBox.shrink();
 
@@ -436,14 +540,15 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
             const Divider(height: 24),
             Text(
               'Converted Instruments',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             ...convertibles.map((c) {
               final stakeholderName = stakeholdersAsync.whenOrNull(
-                data: (s) => s.where((x) => x.id == c.stakeholderId).firstOrNull?.name,
+                data: (s) =>
+                    s.where((x) => x.id == c.stakeholderId).firstOrNull?.name,
               );
 
               return ConvertibleItem(
@@ -539,7 +644,20 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     );
 
     if (confirmed && mounted) {
-      await ref.read(roundMutationsProvider.notifier).delete(round.id);
+      try {
+        await ref.read(roundMutationsProvider.notifier).delete(round.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('${round.name} deleted')));
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error deleting round: $e')));
+        }
+      }
     }
   }
 }

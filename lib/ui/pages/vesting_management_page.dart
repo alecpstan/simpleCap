@@ -62,10 +62,12 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
     List<Stakeholder> stakeholders,
   ) {
     // Filter to only items with vesting schedules
-    final vestingHoldings =
-        holdings.where((h) => h.vestingScheduleId != null).toList();
-    final vestingOptions =
-        options.where((o) => o.vestingScheduleId != null).toList();
+    final vestingHoldings = holdings
+        .where((h) => h.vestingScheduleId != null)
+        .toList();
+    final vestingOptions = options
+        .where((o) => o.vestingScheduleId != null)
+        .toList();
 
     if (vestingHoldings.isEmpty && vestingOptions.isEmpty) {
       return _buildEmptyState(context);
@@ -75,41 +77,49 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
     final items = <_VestingItem>[];
 
     for (final holding in vestingHoldings) {
-      final schedule =
-          schedules.where((s) => s.id == holding.vestingScheduleId).firstOrNull;
-      final stakeholder =
-          stakeholders.where((s) => s.id == holding.stakeholderId).firstOrNull;
+      final schedule = schedules
+          .where((s) => s.id == holding.vestingScheduleId)
+          .firstOrNull;
+      final stakeholder = stakeholders
+          .where((s) => s.id == holding.stakeholderId)
+          .firstOrNull;
       if (schedule != null) {
-        items.add(_VestingItem(
-          type: _ItemType.holding,
-          id: holding.id,
-          stakeholderName: stakeholder?.name ?? 'Unknown',
-          vestingSchedule: schedule,
-          totalQuantity: holding.shareCount,
-          startDate: holding.acquiredDate,
-          vestedCount: holding.vestedCount,
-          holding: holding,
-        ));
+        items.add(
+          _VestingItem(
+            type: _ItemType.holding,
+            id: holding.id,
+            stakeholderName: stakeholder?.name ?? 'Unknown',
+            vestingSchedule: schedule,
+            totalQuantity: holding.shareCount,
+            startDate: holding.acquiredDate,
+            vestedCount: holding.vestedCount,
+            holding: holding,
+          ),
+        );
       }
     }
 
     for (final option in vestingOptions) {
-      final schedule =
-          schedules.where((s) => s.id == option.vestingScheduleId).firstOrNull;
-      final stakeholder =
-          stakeholders.where((s) => s.id == option.stakeholderId).firstOrNull;
+      final schedule = schedules
+          .where((s) => s.id == option.vestingScheduleId)
+          .firstOrNull;
+      final stakeholder = stakeholders
+          .where((s) => s.id == option.stakeholderId)
+          .firstOrNull;
       if (schedule != null) {
-        items.add(_VestingItem(
-          type: _ItemType.option,
-          id: option.id,
-          stakeholderName: stakeholder?.name ?? 'Unknown',
-          vestingSchedule: schedule,
-          totalQuantity: option.quantity,
-          startDate: option.grantDate,
-          exercisedCount: option.exercisedCount,
-          cancelledCount: option.cancelledCount,
-          optionGrant: option,
-        ));
+        items.add(
+          _VestingItem(
+            type: _ItemType.option,
+            id: option.id,
+            stakeholderName: stakeholder?.name ?? 'Unknown',
+            vestingSchedule: schedule,
+            totalQuantity: option.quantity,
+            startDate: option.grantDate,
+            exercisedCount: option.exercisedCount,
+            cancelledCount: option.cancelledCount,
+            optionGrant: option,
+          ),
+        );
       }
     }
 
@@ -138,8 +148,8 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
             child: Text(
               'Manage vesting for ${items.length} items across holdings and options.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
+                color: Theme.of(context).colorScheme.outline,
+              ),
             ),
           );
         }
@@ -172,8 +182,8 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
             Text(
               'Holdings and option grants with vesting schedules will appear here.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
+                color: Theme.of(context).colorScheme.outline,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -197,11 +207,7 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
           padding: const EdgeInsets.only(bottom: 8, top: 8),
           child: Row(
             children: [
-              Icon(
-                _getTypeIcon(type),
-                size: 20,
-                color: _getTypeColor(type),
-              ),
+              Icon(_getTypeIcon(type), size: 20, color: _getTypeColor(type)),
               const SizedBox(width: 8),
               Text(
                 _formatType(type),
@@ -238,7 +244,6 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
   }
 
   Widget _buildVestingCard(BuildContext context, _VestingItem item) {
-    final theme = Theme.of(context);
     final schedule = item.vestingSchedule;
     final now = DateTime.now();
 
@@ -277,185 +282,115 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
           )
         : null;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: item.type == _ItemType.holding
-              ? Colors.green.withValues(alpha: 0.2)
-              : Colors.orange.withValues(alpha: 0.2),
-          child: Icon(
-            item.type == _ItemType.holding
-                ? Icons.pie_chart
-                : Icons.card_giftcard,
-            color:
-                item.type == _ItemType.holding ? Colors.green : Colors.orange,
-          ),
+    return ExpandableCard(
+      leading: EntityAvatar(
+        name: item.stakeholderName,
+        type: EntityAvatarType.person,
+        size: 40,
+      ),
+      title: item.stakeholderName,
+      subtitle: item.type == _ItemType.holding ? 'Holding' : 'Option Grant',
+      badges: [
+        StatusBadge(
+          label: item.type == _ItemType.holding ? 'Shares' : 'Options',
+          color: item.type == _ItemType.holding ? Colors.green : Colors.orange,
         ),
-        title: Text(
-          item.stakeholderName,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+      ],
+      chips: [
+        VestingChip(vestedPercent: vestedPercent, isCliffMet: !isInCliff),
+        MetricChip(
+          label: 'Vested',
+          value:
+              '${Formatters.compactNumber(vestedQuantity)} / ${Formatters.compactNumber(item.totalQuantity)}',
+          color: isFullyVested ? Colors.green : Colors.blue,
         ),
-        subtitle: Row(
-          children: [
-            Text(
-              item.type == _ItemType.holding ? 'Holding' : 'Option Grant',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-              ),
-            ),
-            const SizedBox(width: 8),
-            VestingChip(
-              vestedPercent: vestedPercent,
-              isCliffMet: !isInCliff,
-            ),
-          ],
-        ),
-        trailing: Text(
-          '${Formatters.compactNumber(vestedQuantity)} / ${Formatters.compactNumber(item.totalQuantity)}',
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+      ],
+      expandedContent: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Vesting progress bar
-                VestingProgressBar(
-                  vestedPercent: vestedPercent,
-                  vestedQuantity: vestedQuantity,
-                  totalQuantity: item.totalQuantity,
-                  cliffDate: cliffDate,
-                  isCliffMet: !isInCliff,
-                  vestingEndDate: vestingEndDate,
-                ),
-
-                const SizedBox(height: 16),
-
-                // Schedule details
-                _buildDetailRow(
-                  context,
-                  'Schedule',
-                  schedule.name,
-                  Icons.calendar_month,
-                ),
-                const SizedBox(height: 4),
-                _buildDetailRow(
-                  context,
-                  'Start Date',
-                  Formatters.shortDate(item.startDate),
-                  Icons.play_arrow,
-                ),
-                if (cliffDate != null) ...[
-                  const SizedBox(height: 4),
-                  _buildDetailRow(
-                    context,
-                    'Cliff',
-                    '${Formatters.shortDate(cliffDate)} (${schedule.cliffMonths} months)',
-                    Icons.vertical_align_top,
-                  ),
-                ],
-                if (vestingEndDate != null) ...[
-                  const SizedBox(height: 4),
-                  _buildDetailRow(
-                    context,
-                    'End Date',
-                    Formatters.shortDate(vestingEndDate),
-                    Icons.flag,
-                  ),
-                ],
-
-                // Manual vested count for holdings
-                if (item.type == _ItemType.holding && item.vestedCount != null)
-                  ...[
-                    const SizedBox(height: 4),
-                    _buildDetailRow(
-                      context,
-                      'Manual Vested',
-                      Formatters.number(item.vestedCount!),
-                      Icons.check_circle,
-                    ),
-                  ],
-
-                // Exercised/cancelled for options
-                if (item.type == _ItemType.option) ...[
-                  if (item.exercisedCount != null && item.exercisedCount! > 0)
-                    ...[
-                      const SizedBox(height: 4),
-                      _buildDetailRow(
-                        context,
-                        'Exercised',
-                        Formatters.number(item.exercisedCount!),
-                        Icons.check_circle,
-                      ),
-                    ],
-                  if (item.cancelledCount != null && item.cancelledCount! > 0)
-                    ...[
-                      const SizedBox(height: 4),
-                      _buildDetailRow(
-                        context,
-                        'Cancelled',
-                        Formatters.number(item.cancelledCount!),
-                        Icons.cancel,
-                      ),
-                    ],
-                ],
-
-                const SizedBox(height: 16),
-
-                // Action buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (!isFullyVested)
-                      TextButton.icon(
-                        onPressed: () => _showVestDialog(context, item),
-                        icon: const Icon(Icons.update, size: 18),
-                        label: const Text('Update Vesting'),
-                      ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: () => _editItem(context, item),
-                      icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Edit'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          // Vesting progress bar
+          VestingProgressBar(
+            vestedPercent: vestedPercent,
+            vestedQuantity: vestedQuantity,
+            totalQuantity: item.totalQuantity,
+            cliffDate: cliffDate,
+            isCliffMet: !isInCliff,
+            vestingEndDate: vestingEndDate,
           ),
+
+          const SizedBox(height: 16),
+
+          // Schedule details
+          _buildSimpleDetailRow('Schedule', schedule.name),
+          _buildSimpleDetailRow(
+            'Start Date',
+            Formatters.shortDate(item.startDate),
+          ),
+          if (cliffDate != null)
+            _buildSimpleDetailRow(
+              'Cliff',
+              '${Formatters.shortDate(cliffDate)} (${schedule.cliffMonths} months)',
+            ),
+          if (vestingEndDate != null)
+            _buildSimpleDetailRow(
+              'End Date',
+              Formatters.shortDate(vestingEndDate),
+            ),
+
+          // Manual vested count for holdings
+          if (item.type == _ItemType.holding && item.vestedCount != null)
+            _buildSimpleDetailRow(
+              'Manual Vested',
+              Formatters.number(item.vestedCount!),
+            ),
+
+          // Exercised/cancelled for options
+          if (item.type == _ItemType.option) ...[
+            if (item.exercisedCount != null && item.exercisedCount! > 0)
+              _buildSimpleDetailRow(
+                'Exercised',
+                Formatters.number(item.exercisedCount!),
+              ),
+            if (item.cancelledCount != null && item.cancelledCount! > 0)
+              _buildSimpleDetailRow(
+                'Cancelled',
+                Formatters.number(item.cancelledCount!),
+              ),
+          ],
         ],
       ),
+      actions: [
+        if (!isFullyVested)
+          IconButton(
+            icon: const Icon(Icons.update_outlined),
+            onPressed: () => _showVestDialog(context, item),
+            tooltip: 'Update Vesting',
+          ),
+        IconButton(
+          icon: const Icon(Icons.edit_outlined),
+          onPressed: () => _editItem(context, item),
+          tooltip: 'Edit',
+        ),
+      ],
     );
   }
 
-  Widget _buildDetailRow(
-    BuildContext context,
-    String label,
-    String value,
-    IconData icon,
-  ) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: theme.colorScheme.outline),
-        const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.outline,
+  Widget _buildSimpleDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
           ),
-        ),
-        Text(
-          value,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
+          Expanded(child: Text(value)),
+        ],
+      ),
     );
   }
 
@@ -561,9 +496,7 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest
                         .withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -635,8 +568,8 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
               Text(
                 'Edit the vesting schedule to add milestones.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+                  color: Theme.of(context).colorScheme.outline,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -670,14 +603,16 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
                 const SizedBox(height: 16),
                 const Text('Mark completed milestones:'),
                 const SizedBox(height: 8),
-                ...milestones.map((m) => CheckboxListTile(
-                      title: Text(m.name),
-                      subtitle: Text('${m.percentage.toStringAsFixed(0)}%'),
-                      value: m.completed,
-                      onChanged: (value) {
-                        setDialogState(() => m.completed = value ?? false);
-                      },
-                    )),
+                ...milestones.map(
+                  (m) => CheckboxListTile(
+                    title: Text(m.name),
+                    subtitle: Text('${m.percentage.toStringAsFixed(0)}%'),
+                    value: m.completed,
+                    onChanged: (value) {
+                      setDialogState(() => m.completed = value ?? false);
+                    },
+                  ),
+                ),
                 const Divider(),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -702,8 +637,8 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
                   final totalPercent = milestones
                       .where((m) => m.completed)
                       .fold(0.0, (sum, m) => sum + m.percentage);
-                  final vestedCount =
-                      (item.totalQuantity * totalPercent / 100).floor();
+                  final vestedCount = (item.totalQuantity * totalPercent / 100)
+                      .floor();
 
                   if (item.type == _ItemType.holding && item.holding != null) {
                     await _updateHoldingVested(item.holding!, vestedCount);
@@ -786,7 +721,8 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
                           final parsed = int.tryParse(value);
                           if (parsed != null) {
                             setDialogState(
-                                () => hoursWorked = parsed.clamp(0, totalHours));
+                              () => hoursWorked = parsed.clamp(0, totalHours),
+                            );
                           }
                         },
                       ),
@@ -811,8 +747,8 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
                 Text(
                   '${(hoursWorked / totalHours * 100).toStringAsFixed(1)}% complete',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
                   textAlign: TextAlign.center,
                 ),
 
@@ -822,9 +758,7 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest
                         .withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -917,28 +851,28 @@ class _VestingManagementPageState extends ConsumerState<VestingManagementPage> {
   }
 
   String _formatType(String type) => switch (type) {
-        'timeBased' => 'Time-Based',
-        'milestone' => 'Milestone',
-        'hours' => 'Hours-Based',
-        'immediate' => 'Immediate',
-        _ => type,
-      };
+    'timeBased' => 'Time-Based',
+    'milestone' => 'Milestone',
+    'hours' => 'Hours-Based',
+    'immediate' => 'Immediate',
+    _ => type,
+  };
 
   IconData _getTypeIcon(String type) => switch (type) {
-        'timeBased' => Icons.schedule,
-        'milestone' => Icons.flag,
-        'hours' => Icons.timer,
-        'immediate' => Icons.bolt,
-        _ => Icons.help_outline,
-      };
+    'timeBased' => Icons.schedule,
+    'milestone' => Icons.flag,
+    'hours' => Icons.timer,
+    'immediate' => Icons.bolt,
+    _ => Icons.help_outline,
+  };
 
   Color _getTypeColor(String type) => switch (type) {
-        'timeBased' => Colors.blue,
-        'milestone' => Colors.purple,
-        'hours' => Colors.teal,
-        'immediate' => Colors.green,
-        _ => Colors.grey,
-      };
+    'timeBased' => Colors.blue,
+    'milestone' => Colors.purple,
+    'hours' => Colors.teal,
+    'immediate' => Colors.green,
+    _ => Colors.grey,
+  };
 }
 
 enum _ItemType { holding, option }

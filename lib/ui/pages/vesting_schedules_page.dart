@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers/providers.dart';
-import '../../domain/entities/vesting_schedule.dart' as domain;
+import '../../domain/constants/constants.dart';
 import '../../infrastructure/database/database.dart';
 import '../components/components.dart';
 
@@ -211,18 +211,20 @@ class VestingSchedulesPage extends ConsumerWidget {
   }
 
   String _buildDescription(VestingSchedule schedule) {
-    final type = _parseVestingType(schedule.type);
+    final type = schedule.type;
 
-    if (type == domain.VestingType.immediate) return 'Immediate vesting';
-    if (type == domain.VestingType.milestone) return 'Milestone-based';
-    if (type == domain.VestingType.hours) {
+    if (type == VestingType.immediate) return 'Immediate vesting';
+    if (type == VestingType.milestone) return 'Milestone-based';
+    if (type == VestingType.hours) {
       return '${schedule.totalHours ?? 0} hours';
     }
 
     final total = schedule.totalMonths ?? 0;
     final years = total ~/ 12;
     final remainingMonths = total % 12;
-    final freq = _parseFrequency(schedule.frequency)?.displayName.toLowerCase();
+    final freq = schedule.frequency != null
+        ? VestingFrequency.displayName(schedule.frequency!).toLowerCase()
+        : null;
 
     final parts = <String>[];
 
@@ -249,14 +251,10 @@ class VestingSchedulesPage extends ConsumerWidget {
     final nameController = TextEditingController(text: existing?.name);
     final notesController = TextEditingController(text: existing?.notes);
 
-    domain.VestingType selectedType = existing != null
-        ? _parseVestingType(existing.type)
-        : domain.VestingType.timeBased;
+    String selectedType = existing?.type ?? VestingType.timeBased;
     int totalMonths = existing?.totalMonths ?? 48;
     int cliffMonths = existing?.cliffMonths ?? 12;
-    domain.VestingFrequency? frequency = existing != null
-        ? _parseFrequency(existing.frequency)
-        : domain.VestingFrequency.monthly;
+    String? frequency = existing?.frequency ?? VestingFrequency.monthly;
     int totalHours = existing?.totalHours ?? 0;
 
     showDialog(
@@ -277,27 +275,27 @@ class VestingSchedulesPage extends ConsumerWidget {
                   decoration: const InputDecoration(labelText: 'Name'),
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<domain.VestingType>(
-                  initialValue: selectedType,
+                DropdownButtonFormField<String>(
+                  value: selectedType,
                   decoration: const InputDecoration(labelText: 'Type'),
-                  items: domain.VestingType.values
+                  items: VestingType.all
                       .map(
                         (t) => DropdownMenuItem(
                           value: t,
-                          child: Text(t.displayName),
+                          child: Text(VestingType.displayName(t)),
                         ),
                       )
                       .toList(),
                   onChanged: (v) {
                     setDialogState(
-                      () => selectedType = v ?? domain.VestingType.timeBased,
+                      () => selectedType = v ?? VestingType.timeBased,
                     );
                   },
                 ),
                 const SizedBox(height: 24),
 
                 // Time-based options
-                if (selectedType == domain.VestingType.timeBased) ...[
+                if (selectedType == VestingType.timeBased) ...[
                   Text(
                     'Vesting Period',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -382,16 +380,16 @@ class VestingSchedulesPage extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<domain.VestingFrequency>(
-                    initialValue: frequency,
+                  DropdownButtonFormField<String>(
+                    value: frequency,
                     decoration: const InputDecoration(
                       labelText: 'Vesting Frequency',
                     ),
-                    items: domain.VestingFrequency.values
+                    items: VestingFrequency.all
                         .map(
                           (f) => DropdownMenuItem(
                             value: f,
-                            child: Text(f.displayName),
+                            child: Text(VestingFrequency.displayName(f)),
                           ),
                         )
                         .toList(),
@@ -402,7 +400,7 @@ class VestingSchedulesPage extends ConsumerWidget {
                 ],
 
                 // Hours-based options
-                if (selectedType == domain.VestingType.hours) ...[
+                if (selectedType == VestingType.hours) ...[
                   const SizedBox(height: 16),
                   TextField(
                     decoration: const InputDecoration(
@@ -420,7 +418,7 @@ class VestingSchedulesPage extends ConsumerWidget {
                 ],
 
                 // Milestone-based placeholder
-                if (selectedType == domain.VestingType.milestone) ...[
+                if (selectedType == VestingType.milestone) ...[
                   const SizedBox(height: 16),
                   InfoBox(
                     message:
@@ -430,7 +428,7 @@ class VestingSchedulesPage extends ConsumerWidget {
                 ],
 
                 // Immediate placeholder
-                if (selectedType == domain.VestingType.immediate) ...[
+                if (selectedType == VestingType.immediate) ...[
                   const SizedBox(height: 16),
                   InfoBox(
                     message:
@@ -466,13 +464,13 @@ class VestingSchedulesPage extends ConsumerWidget {
                     id: existing.id,
                     name: name,
                     type: selectedType,
-                    totalMonths: selectedType == domain.VestingType.timeBased
+                    totalMonths: selectedType == VestingType.timeBased
                         ? totalMonths
                         : null,
-                    cliffMonths: selectedType == domain.VestingType.timeBased
+                    cliffMonths: selectedType == VestingType.timeBased
                         ? cliffMonths
                         : 0,
-                    frequency: selectedType == domain.VestingType.timeBased
+                    frequency: selectedType == VestingType.timeBased
                         ? frequency
                         : null,
                     notes: notesController.text.trim().isEmpty
@@ -484,16 +482,16 @@ class VestingSchedulesPage extends ConsumerWidget {
                     companyId: companyId,
                     name: name,
                     type: selectedType,
-                    totalMonths: selectedType == domain.VestingType.timeBased
+                    totalMonths: selectedType == VestingType.timeBased
                         ? totalMonths
                         : null,
-                    cliffMonths: selectedType == domain.VestingType.timeBased
+                    cliffMonths: selectedType == VestingType.timeBased
                         ? cliffMonths
                         : 0,
-                    frequency: selectedType == domain.VestingType.timeBased
+                    frequency: selectedType == VestingType.timeBased
                         ? frequency
                         : null,
-                    totalHours: selectedType == domain.VestingType.hours
+                    totalHours: selectedType == VestingType.hours
                         ? totalHours
                         : null,
                     notes: notesController.text.trim().isEmpty
@@ -542,45 +540,32 @@ class VestingSchedulesPage extends ConsumerWidget {
   }
 
   Color _getTypeColor(String type) {
-    final vestingType = _parseVestingType(type);
-    switch (vestingType) {
-      case domain.VestingType.timeBased:
+    switch (type) {
+      case VestingType.timeBased:
         return Colors.blue;
-      case domain.VestingType.milestone:
+      case VestingType.milestone:
         return Colors.purple;
-      case domain.VestingType.hours:
+      case VestingType.hours:
         return Colors.teal;
-      case domain.VestingType.immediate:
+      case VestingType.immediate:
         return Colors.green;
+      default:
+        return Colors.blue;
     }
   }
 
   IconData _getTypeIcon(String type) {
-    final vestingType = _parseVestingType(type);
-    switch (vestingType) {
-      case domain.VestingType.timeBased:
+    switch (type) {
+      case VestingType.timeBased:
         return Icons.schedule;
-      case domain.VestingType.milestone:
+      case VestingType.milestone:
         return Icons.flag;
-      case domain.VestingType.hours:
+      case VestingType.hours:
         return Icons.timer;
-      case domain.VestingType.immediate:
+      case VestingType.immediate:
         return Icons.flash_on;
+      default:
+        return Icons.schedule;
     }
-  }
-
-  domain.VestingType _parseVestingType(String type) {
-    return domain.VestingType.values.firstWhere(
-      (t) => t.name == type,
-      orElse: () => domain.VestingType.timeBased,
-    );
-  }
-
-  domain.VestingFrequency? _parseFrequency(String? frequency) {
-    if (frequency == null) return null;
-    return domain.VestingFrequency.values.firstWhere(
-      (f) => f.name == frequency,
-      orElse: () => domain.VestingFrequency.monthly,
-    );
   }
 }

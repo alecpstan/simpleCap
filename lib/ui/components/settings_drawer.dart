@@ -27,7 +27,7 @@ class SettingsDrawer extends ConsumerWidget {
             const Divider(),
             _buildTemplatesSection(context),
             const Divider(),
-            _buildPreferencesSection(context),
+            _buildPreferencesSection(context, ref),
             const Divider(),
             _buildDataSection(context, ref),
             const Divider(),
@@ -171,7 +171,10 @@ class SettingsDrawer extends ConsumerWidget {
     );
   }
 
-  Widget _buildPreferencesSection(BuildContext context) {
+  Widget _buildPreferencesSection(BuildContext context, WidgetRef ref) {
+    final isDarkAsync = ref.watch(themeModeNotifierProvider);
+    final isDark = isDarkAsync.valueOrNull ?? false;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -196,14 +199,12 @@ class SettingsDrawer extends ConsumerWidget {
           },
         ),
         SwitchListTile(
-          secondary: const Icon(Icons.dark_mode),
+          secondary: Icon(isDark ? Icons.dark_mode : Icons.light_mode),
           title: const Text('Dark Mode'),
-          subtitle: const Text('Use system theme'),
-          value: Theme.of(context).brightness == Brightness.dark,
+          subtitle: Text(isDark ? 'Dark theme enabled' : 'Light theme enabled'),
+          value: isDark,
           onChanged: (value) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Theme settings coming soon')),
-            );
+            ref.read(themeModeNotifierProvider.notifier).setDarkMode(value);
           },
         ),
         ListTile(

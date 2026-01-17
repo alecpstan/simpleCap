@@ -46,7 +46,7 @@ final latestValuationProvider = AutoDisposeFutureProvider<Valuation?>.internal(
 // ignore: unused_element
 typedef LatestValuationRef = AutoDisposeFutureProviderRef<Valuation?>;
 String _$effectiveValuationHash() =>
-    r'5d0ab740dbc1023cd908123b435c5d59d7df0d18';
+    r'ffa1e3adb0c269be40262d645522b7387be824ac';
 
 /// Gets the effective current valuation.
 ///

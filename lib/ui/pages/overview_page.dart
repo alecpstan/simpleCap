@@ -215,152 +215,144 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
     final theme = Theme.of(context);
     final optionsSummaryAsync = ref.watch(optionsSummaryProvider);
     final convertiblesSummaryAsync = ref.watch(convertiblesSummaryProvider);
+    final toolOrderAsync = ref.watch(toolOrderNotifierProvider);
+
+    // Build tool data with dynamic subtitles
+    final optionsSummary = optionsSummaryAsync.valueOrNull;
+    final convertiblesSummary = convertiblesSummaryAsync.valueOrNull;
+
+    final tools = <ToolCardData>[
+      ToolCardData(
+        id: 'valuations',
+        icon: Icons.assessment,
+        label: 'Valuations',
+        subtitle: 'Track value',
+        color: Colors.blue,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ValuationsPage()),
+        ),
+      ),
+      ToolCardData(
+        id: 'scenarios',
+        icon: Icons.calculate,
+        label: 'Scenarios',
+        subtitle: 'Model exits',
+        color: Colors.purple,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ScenariosPage()),
+        ),
+      ),
+      ToolCardData(
+        id: 'options',
+        icon: Icons.card_giftcard,
+        label: 'Options',
+        subtitle: optionsSummary != null && optionsSummary.totalGrants > 0
+            ? '${optionsSummary.activeGrants} active'
+            : 'Equity plans',
+        color: Colors.orange,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const OptionsPage()),
+        ),
+      ),
+      ToolCardData(
+        id: 'esop_pools',
+        icon: Icons.account_balance_wallet,
+        label: 'ESOP Pools',
+        subtitle: 'Manage pools',
+        color: Colors.deepOrange,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const EsopPoolsPage()),
+        ),
+      ),
+      ToolCardData(
+        id: 'vesting',
+        icon: Icons.schedule,
+        label: 'Vesting',
+        subtitle: 'Manage vesting',
+        color: Colors.indigo,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const VestingManagementPage()),
+        ),
+      ),
+      ToolCardData(
+        id: 'convertibles',
+        icon: Icons.receipt_long,
+        label: 'Convertibles',
+        subtitle:
+            convertiblesSummary != null && convertiblesSummary.totalCount > 0
+            ? '${convertiblesSummary.outstandingCount} outstanding'
+            : 'SAFEs & notes',
+        color: Colors.teal,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ConvertiblesPage()),
+        ),
+      ),
+      ToolCardData(
+        id: 'warrants',
+        icon: Icons.receipt,
+        label: 'Warrants',
+        subtitle: 'View warrants',
+        color: Colors.indigo,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const WarrantsPage()),
+        ),
+      ),
+      ToolCardData(
+        id: 'transfers',
+        icon: Icons.swap_horiz,
+        label: 'Transfers',
+        subtitle: 'Share transfers',
+        color: Colors.cyan,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const TransfersPage()),
+        ),
+      ),
+    ];
+
+    final order = toolOrderAsync.valueOrNull ?? defaultToolOrder;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 12),
-          child: Text(
-            'TOOLS',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.outline,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-            ),
+          child: Row(
+            children: [
+              Text(
+                'TOOLS',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Hold & drag to reorder',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.6),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ),
         ),
-        QuickAccessGrid(
-          cards: [
-            QuickAccessCard(
-              icon: Icons.assessment,
-              label: 'Valuations',
-              subtitle: 'Track value',
-              color: Colors.blue,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ValuationsPage()),
-              ),
-            ),
-            QuickAccessCard(
-              icon: Icons.calculate,
-              label: 'Scenarios',
-              subtitle: 'Model exits',
-              color: Colors.purple,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ScenariosPage()),
-              ),
-            ),
-            optionsSummaryAsync.when(
-              data: (summary) => QuickAccessCard(
-                icon: Icons.card_giftcard,
-                label: 'Options',
-                subtitle: summary.totalGrants > 0
-                    ? '${summary.activeGrants} active'
-                    : 'Equity plans',
-                color: Colors.orange,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const OptionsPage()),
-                ),
-              ),
-              loading: () => QuickAccessCard(
-                icon: Icons.card_giftcard,
-                label: 'Options',
-                subtitle: 'Equity plans',
-                color: Colors.orange,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const OptionsPage()),
-                ),
-              ),
-              error: (_, __) => QuickAccessCard(
-                icon: Icons.card_giftcard,
-                label: 'Options',
-                subtitle: 'Equity plans',
-                color: Colors.orange,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const OptionsPage()),
-                ),
-              ),
-            ),
-            QuickAccessCard(
-              icon: Icons.account_balance_wallet,
-              label: 'ESOP Pools',
-              subtitle: 'Manage pools',
-              color: Colors.deepOrange,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const EsopPoolsPage()),
-              ),
-            ),
-            QuickAccessCard(
-              icon: Icons.schedule,
-              label: 'Vesting',
-              subtitle: 'Manage vesting',
-              color: Colors.indigo,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const VestingManagementPage()),
-              ),
-            ),
-            convertiblesSummaryAsync.when(
-              data: (summary) => QuickAccessCard(
-                icon: Icons.receipt_long,
-                label: 'Convertibles',
-                subtitle: summary.totalCount > 0
-                    ? '${summary.outstandingCount} outstanding'
-                    : 'SAFEs & notes',
-                color: Colors.teal,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ConvertiblesPage()),
-                ),
-              ),
-              loading: () => QuickAccessCard(
-                icon: Icons.receipt_long,
-                label: 'Convertibles',
-                subtitle: 'SAFEs & notes',
-                color: Colors.teal,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ConvertiblesPage()),
-                ),
-              ),
-              error: (_, __) => QuickAccessCard(
-                icon: Icons.receipt_long,
-                label: 'Convertibles',
-                subtitle: 'SAFEs & notes',
-                color: Colors.teal,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ConvertiblesPage()),
-                ),
-              ),
-            ),
-            QuickAccessCard(
-              icon: Icons.receipt,
-              label: 'Warrants',
-              subtitle: 'View warrants',
-              color: Colors.indigo,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const WarrantsPage()),
-              ),
-            ),
-            QuickAccessCard(
-              icon: Icons.swap_horiz,
-              label: 'Transfers',
-              subtitle: 'Share transfers',
-              color: Colors.cyan,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TransfersPage()),
-              ),
-            ),
-          ],
+        ReorderableQuickAccessGrid(
+          tools: tools,
+          order: order,
+          onReorder: (oldIndex, newIndex) {
+            ref
+                .read(toolOrderNotifierProvider.notifier)
+                .reorder(oldIndex, newIndex);
+          },
         ),
       ],
     );

@@ -47,11 +47,15 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
 
   // Step 4: Convertibles
   final Set<String> _selectedConvertibleIds = {};
-  final Set<String> _newlyCreatedConvertibleIds = {}; // Track IDs created in this builder
+  final Set<String> _newlyCreatedConvertibleIds =
+      {}; // Track IDs created in this builder
+  // Warrant coverage: convertibleId -> coverage percentage (e.g., 20 for 20%)
+  final Map<String, double> _warrantCoveragePercents = {};
 
   // Step 5: Warrants
   final Set<String> _selectedWarrantIds = {};
-  final Set<String> _newlyCreatedWarrantIds = {}; // Track IDs created in this builder
+  final Set<String> _newlyCreatedWarrantIds =
+      {}; // Track IDs created in this builder
 
   // Step 6: Summary
   final _notesController = TextEditingController();
@@ -134,7 +138,9 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
     final latestValuation = relevantValuations.first;
 
     setState(() {
-      _preMoneyController.text = latestValuation.preMoneyValue.toStringAsFixed(0);
+      _preMoneyController.text = latestValuation.preMoneyValue.toStringAsFixed(
+        0,
+      );
       _valuationSourceNote =
           '${_formatValuationMethod(latestValuation.method)} on ${Formatters.shortDate(latestValuation.date)}';
     });
@@ -584,6 +590,14 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
           ),
           const SizedBox(height: 24),
 
+          // Pro-Rata Rights Section
+          _buildProRataSection(
+            theme,
+            stakeholders,
+            holdingsAsync.valueOrNull ?? [],
+            totalShares,
+          ),
+
           // Pending investments list with inline editing
           if (_pendingInvestments.isNotEmpty) ...[
             Text(
@@ -759,6 +773,222 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds the pro-rata rights section showing investors entitled to participate.
+  /// Pro-rata right = right to maintain ownership % by purchasing proportional shares.
+  Widget _buildProRataSection(
+    ThemeData theme,
+    List<Stakeholder> stakeholders,
+    List<Holding> holdings,
+    int totalShares,
+  ) {
+    // Find stakeholders with pro-rata rights
+    final proRataHolders = stakeholders
+        .where((s) => s.hasProRataRights)
+        .toList();
+
+    if (proRataHolders.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Calculate each holder's ownership percentage and pro-rata allocation
+    final roundAmount = _pendingInvestments.fold<double>(
+      0,
+      (sum, inv) => sum + inv.amount,
+    );
+
+    // Build pro-rata data for each eligible holder
+    final proRataData = <_ProRataData>[];
+    for (final holder in proRataHolders) {
+      // Get their current holdings
+      final holderHoldings = holdings.where(
+        (h) => h.stakeholderId == holder.id,
+      );
+      final holderShares = holderHoldings.fold<int>(
+        0,
+        (sum, h) => sum + h.shareCount,
+      );
+
+      if (totalShares == 0 || holderShares == 0) continue;
+
+      final ownershipPercent = (holderShares / totalShares) * 100;
+      final proRataAmount = roundAmount * (ownershipPercent / 100);
+
+      // Check if they're already participating
+      final isParticipating = _pendingInvestments.any(
+        (inv) => inv.stakeholderId == holder.id,
+      );
+      final participationAmount = _pendingInvestments
+          .where((inv) => inv.stakeholderId == holder.id)
+          .fold<double>(0, (sum, inv) => sum + inv.amount);
+
+      proRataData.add(
+        _ProRataData(
+          stakeholder: holder,
+          ownershipPercent: ownershipPercent,
+          proRataAmount: proRataAmount,
+          isParticipating: isParticipating,
+          participationAmount: participationAmount,
+        ),
+      );
+    }
+
+    if (proRataData.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.verified_user,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Pro-Rata Rights',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'These investors have contractual rights to maintain their ownership percentage.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: [
+              for (int i = 0; i < proRataData.length; i++) ...[
+                if (i > 0)
+                  Divider(height: 1, color: theme.colorScheme.outlineVariant),
+                _buildProRataRow(theme, proRataData[i]),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildProRataRow(ThemeData theme, _ProRataData data) {
+    final fulfillmentPercent = data.proRataAmount > 0
+        ? (data.participationAmount / data.proRataAmount * 100).clamp(0, 100)
+        : 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      data.stakeholder.name,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '${data.ownershipPercent.toStringAsFixed(1)}% ownership',
+                        style: theme.textTheme.labelSmall,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Pro-rata: ${Formatters.currency(data.proRataAmount)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (data.isParticipating) ...[
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      fulfillmentPercent >= 100
+                          ? Icons.check_circle
+                          : Icons.pending,
+                      size: 16,
+                      color: fulfillmentPercent >= 100
+                          ? Colors.green
+                          : theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      Formatters.currency(data.participationAmount),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: fulfillmentPercent >= 100
+                            ? Colors.green
+                            : theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  '${fulfillmentPercent.toStringAsFixed(0)}% of pro-rata',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'Not participating',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.amber.shade800,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -988,7 +1218,217 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
                 ],
               ),
             ),
+
+            // Warrant Coverage Section
+            const SizedBox(height: 24),
+            _buildWarrantCoverageSection(
+              theme,
+              outstanding
+                  .where((c) => _selectedConvertibleIds.contains(c.id))
+                  .toList(),
+              stakeholders,
+            ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Build warrant coverage section for selected convertibles.
+  /// Allows specifying coverage % to auto-create warrants.
+  Widget _buildWarrantCoverageSection(
+    ThemeData theme,
+    List<Convertible> selectedConvertibles,
+    List<Stakeholder> stakeholders,
+  ) {
+    if (selectedConvertibles.isEmpty) return const SizedBox.shrink();
+
+    // Get implied price for calculations
+    final preMoneyVal = double.tryParse(_preMoneyController.text) ?? 0;
+    final holdingsAsync = ref.watch(holdingsStreamProvider);
+    final totalShares =
+        holdingsAsync.valueOrNull?.fold<int>(
+          0,
+          (sum, h) => sum + h.shareCount,
+        ) ??
+        0;
+    final impliedPrice = totalShares > 0 ? preMoneyVal / totalShares : 0.0;
+
+    // Calculate total coverage warrants
+    int totalWarrantShares = 0;
+    for (final conv in selectedConvertibles) {
+      final coverage = _warrantCoveragePercents[conv.id] ?? 0;
+      if (coverage > 0 && impliedPrice > 0) {
+        final convShares = (conv.principal / impliedPrice).floor();
+        totalWarrantShares += (convShares * coverage / 100).floor();
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.receipt_long,
+              size: 18,
+              color: theme.colorScheme.secondary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Warrant Coverage',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Optionally add warrant coverage to convertibles. Warrants give holders the right to purchase additional shares at the round price.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: [
+              for (int i = 0; i < selectedConvertibles.length; i++) ...[
+                if (i > 0)
+                  Divider(height: 1, color: theme.colorScheme.outlineVariant),
+                _buildCoverageRow(
+                  theme,
+                  selectedConvertibles[i],
+                  stakeholders,
+                  impliedPrice,
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (totalWarrantShares > 0) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Total warrant shares to issue',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSecondaryContainer,
+                  ),
+                ),
+                Text(
+                  Formatters.compactNumber(totalWarrantShares),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSecondaryContainer,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCoverageRow(
+    ThemeData theme,
+    Convertible conv,
+    List<Stakeholder> stakeholders,
+    double impliedPrice,
+  ) {
+    final stakeholder = stakeholders
+        .where((s) => s.id == conv.stakeholderId)
+        .firstOrNull;
+    final coverage = _warrantCoveragePercents[conv.id] ?? 0;
+
+    // Calculate warrant shares
+    final convShares = impliedPrice > 0
+        ? (conv.principal / impliedPrice).floor()
+        : 0;
+    final warrantShares = (convShares * coverage / 100).floor();
+
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  stakeholder?.name ?? 'Unknown',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  '${Formatters.currency(conv.principal)} → ~${Formatters.compactNumber(convShares)} shares',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 80,
+            child: TextField(
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+                border: const OutlineInputBorder(),
+                suffixText: '%',
+                hintText: '0',
+              ),
+              controller: TextEditingController(
+                text: coverage > 0 ? coverage.toStringAsFixed(0) : '',
+              ),
+              onChanged: (value) {
+                final percent = double.tryParse(value) ?? 0;
+                setState(() {
+                  if (percent > 0) {
+                    _warrantCoveragePercents[conv.id] = percent;
+                  } else {
+                    _warrantCoveragePercents.remove(conv.id);
+                  }
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 70,
+            child: Text(
+              warrantShares > 0
+                  ? '${Formatters.compactNumber(warrantShares)} sh'
+                  : '-',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: warrantShares > 0
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outline,
+              ),
+              textAlign: TextAlign.end,
+            ),
+          ),
         ],
       ),
     );
@@ -1142,7 +1582,12 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
 
     // Filter to warrants that can be attached to a round (pending, outstanding, or active)
     final outstanding = warrants
-        .where((w) => w.status == 'pending' || w.status == 'outstanding' || w.status == 'active')
+        .where(
+          (w) =>
+              w.status == 'pending' ||
+              w.status == 'outstanding' ||
+              w.status == 'active',
+        )
         .toList();
 
     if (outstanding.isEmpty) {
@@ -1689,21 +2134,34 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
       final pps =
           pricePerShare ?? (totalShares > 0 ? preMoneyVal / totalShares : 1.0);
 
-      // Create holdings only for NEW investments (skip existing ones)
+      // Create or update holdings
       for (final inv in _pendingInvestments) {
-        if (inv.isExisting) continue; // Skip existing holdings
-
-        await holdingMutations.issueShares(
-          companyId: companyId,
-          stakeholderId: inv.stakeholderId,
-          shareClassId: inv.shareClassId,
-          shareCount: inv.shares,
-          costBasis: pps,
-          acquiredDate: _roundDate,
-          vestingScheduleId: inv.vestingScheduleId,
-          vestedCount: inv.vestingScheduleId == null ? inv.shares : 0,
-          roundId: roundId,
-        );
+        if (inv.isExisting) {
+          // Update existing holding
+          await holdingMutations.updateHolding(
+            id: inv.existingId!,
+            shareClassId: inv.shareClassId,
+            shareCount: inv.shares,
+            costBasis: pps,
+            acquiredDate: _roundDate,
+            vestingScheduleId: inv.vestingScheduleId,
+            vestedCount: inv.vestingScheduleId == null ? inv.shares : 0,
+            roundId: roundId,
+          );
+        } else {
+          // Create new holding
+          await holdingMutations.issueShares(
+            companyId: companyId,
+            stakeholderId: inv.stakeholderId,
+            shareClassId: inv.shareClassId,
+            shareCount: inv.shares,
+            costBasis: pps,
+            acquiredDate: _roundDate,
+            vestingScheduleId: inv.vestingScheduleId,
+            vestedCount: inv.vestingScheduleId == null ? inv.shares : 0,
+            roundId: roundId,
+          );
+        }
       }
 
       // Link newly created convertibles to the round
@@ -1717,18 +2175,49 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
       // Link newly created warrants to the round
       final warrantMutations = ref.read(warrantMutationsProvider.notifier);
       for (final warrantId in _newlyCreatedWarrantIds) {
-        await warrantMutations.updateWarrant(
-          id: warrantId,
-          roundId: roundId,
-        );
+        await warrantMutations.updateWarrant(id: warrantId, roundId: roundId);
       }
 
-      // Convert selected convertibles
+      // Get share classes for warrant creation and conversions
       final shareClasses = shareClassesAsync.valueOrNull ?? [];
       final defaultShareClassId = shareClasses.isNotEmpty
           ? shareClasses.first.id
           : null;
 
+      // Create warrants from warrant coverage on convertibles
+      final convertiblesAsync = ref.read(convertiblesStreamProvider);
+      final convertibles = convertiblesAsync.valueOrNull ?? [];
+      for (final entry in _warrantCoveragePercents.entries) {
+        final convId = entry.key;
+        final coveragePercent = entry.value;
+        if (coveragePercent <= 0) continue;
+
+        final conv = convertibles.where((c) => c.id == convId).firstOrNull;
+        if (conv == null) continue;
+
+        // Calculate warrant shares: (principal / price) * coverage%
+        final convShares = pps > 0 ? (conv.principal / pps).floor() : 0;
+        final warrantShares = (convShares * coveragePercent / 100).floor();
+
+        if (warrantShares > 0 && defaultShareClassId != null) {
+          await warrantMutations.create(
+            companyId: companyId,
+            stakeholderId: conv.stakeholderId,
+            shareClassId: defaultShareClassId,
+            quantity: warrantShares,
+            strikePrice: pps,
+            issueDate: _roundDate,
+            expiryDate: _roundDate.add(const Duration(days: 365 * 10)),
+            status: 'pending',
+            sourceConvertibleId: convId,
+            roundId: roundId,
+            notes:
+                'Warrant coverage (${coveragePercent.toStringAsFixed(0)}%) from convertible',
+          );
+        }
+      }
+
+      // Convert selected convertibles
       if (defaultShareClassId != null) {
         for (final convId in _selectedConvertibleIds) {
           // Convert the instrument and link it to this round
@@ -2210,6 +2699,23 @@ class _PendingInvestment {
   });
 
   bool get isExisting => existingId != null;
+}
+
+/// Helper class for pro-rata rights display
+class _ProRataData {
+  final Stakeholder stakeholder;
+  final double ownershipPercent;
+  final double proRataAmount;
+  final bool isParticipating;
+  final double participationAmount;
+
+  const _ProRataData({
+    required this.stakeholder,
+    required this.ownershipPercent,
+    required this.proRataAmount,
+    required this.isParticipating,
+    required this.participationAmount,
+  });
 }
 
 /// Summary row widget for the final step

@@ -1080,6 +1080,18 @@ class $ShareClassesTable extends ShareClasses
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _antiDilutionTypeMeta = const VerificationMeta(
+    'antiDilutionType',
+  );
+  @override
+  late final GeneratedColumn<String> antiDilutionType = GeneratedColumn<String>(
+    'anti_dilution_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('none'),
+  );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
@@ -1122,6 +1134,7 @@ class $ShareClassesTable extends ShareClasses
     isParticipating,
     dividendRate,
     seniority,
+    antiDilutionType,
     notes,
     createdAt,
     updatedAt,
@@ -1209,6 +1222,15 @@ class $ShareClassesTable extends ShareClasses
         seniority.isAcceptableOrUnknown(data['seniority']!, _seniorityMeta),
       );
     }
+    if (data.containsKey('anti_dilution_type')) {
+      context.handle(
+        _antiDilutionTypeMeta,
+        antiDilutionType.isAcceptableOrUnknown(
+          data['anti_dilution_type']!,
+          _antiDilutionTypeMeta,
+        ),
+      );
+    }
     if (data.containsKey('notes')) {
       context.handle(
         _notesMeta,
@@ -1276,6 +1298,10 @@ class $ShareClassesTable extends ShareClasses
         DriftSqlType.int,
         data['${effectivePrefix}seniority'],
       )!,
+      antiDilutionType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}anti_dilution_type'],
+      )!,
       notes: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
@@ -1308,6 +1334,9 @@ class ShareClassesData extends DataClass
   final bool isParticipating;
   final double dividendRate;
   final int seniority;
+
+  /// Anti-dilution protection type: 'none', 'fullRatchet', 'broadBasedWeightedAverage', 'narrowBasedWeightedAverage'
+  final String antiDilutionType;
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -1321,6 +1350,7 @@ class ShareClassesData extends DataClass
     required this.isParticipating,
     required this.dividendRate,
     required this.seniority,
+    required this.antiDilutionType,
     this.notes,
     required this.createdAt,
     required this.updatedAt,
@@ -1337,6 +1367,7 @@ class ShareClassesData extends DataClass
     map['is_participating'] = Variable<bool>(isParticipating);
     map['dividend_rate'] = Variable<double>(dividendRate);
     map['seniority'] = Variable<int>(seniority);
+    map['anti_dilution_type'] = Variable<String>(antiDilutionType);
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
@@ -1356,6 +1387,7 @@ class ShareClassesData extends DataClass
       isParticipating: Value(isParticipating),
       dividendRate: Value(dividendRate),
       seniority: Value(seniority),
+      antiDilutionType: Value(antiDilutionType),
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
@@ -1381,6 +1413,7 @@ class ShareClassesData extends DataClass
       isParticipating: serializer.fromJson<bool>(json['isParticipating']),
       dividendRate: serializer.fromJson<double>(json['dividendRate']),
       seniority: serializer.fromJson<int>(json['seniority']),
+      antiDilutionType: serializer.fromJson<String>(json['antiDilutionType']),
       notes: serializer.fromJson<String?>(json['notes']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -1399,6 +1432,7 @@ class ShareClassesData extends DataClass
       'isParticipating': serializer.toJson<bool>(isParticipating),
       'dividendRate': serializer.toJson<double>(dividendRate),
       'seniority': serializer.toJson<int>(seniority),
+      'antiDilutionType': serializer.toJson<String>(antiDilutionType),
       'notes': serializer.toJson<String?>(notes),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -1415,6 +1449,7 @@ class ShareClassesData extends DataClass
     bool? isParticipating,
     double? dividendRate,
     int? seniority,
+    String? antiDilutionType,
     Value<String?> notes = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -1428,6 +1463,7 @@ class ShareClassesData extends DataClass
     isParticipating: isParticipating ?? this.isParticipating,
     dividendRate: dividendRate ?? this.dividendRate,
     seniority: seniority ?? this.seniority,
+    antiDilutionType: antiDilutionType ?? this.antiDilutionType,
     notes: notes.present ? notes.value : this.notes,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -1451,6 +1487,9 @@ class ShareClassesData extends DataClass
           ? data.dividendRate.value
           : this.dividendRate,
       seniority: data.seniority.present ? data.seniority.value : this.seniority,
+      antiDilutionType: data.antiDilutionType.present
+          ? data.antiDilutionType.value
+          : this.antiDilutionType,
       notes: data.notes.present ? data.notes.value : this.notes,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -1469,6 +1508,7 @@ class ShareClassesData extends DataClass
           ..write('isParticipating: $isParticipating, ')
           ..write('dividendRate: $dividendRate, ')
           ..write('seniority: $seniority, ')
+          ..write('antiDilutionType: $antiDilutionType, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -1487,6 +1527,7 @@ class ShareClassesData extends DataClass
     isParticipating,
     dividendRate,
     seniority,
+    antiDilutionType,
     notes,
     createdAt,
     updatedAt,
@@ -1504,6 +1545,7 @@ class ShareClassesData extends DataClass
           other.isParticipating == this.isParticipating &&
           other.dividendRate == this.dividendRate &&
           other.seniority == this.seniority &&
+          other.antiDilutionType == this.antiDilutionType &&
           other.notes == this.notes &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -1519,6 +1561,7 @@ class ShareClassesCompanion extends UpdateCompanion<ShareClassesData> {
   final Value<bool> isParticipating;
   final Value<double> dividendRate;
   final Value<int> seniority;
+  final Value<String> antiDilutionType;
   final Value<String?> notes;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -1533,6 +1576,7 @@ class ShareClassesCompanion extends UpdateCompanion<ShareClassesData> {
     this.isParticipating = const Value.absent(),
     this.dividendRate = const Value.absent(),
     this.seniority = const Value.absent(),
+    this.antiDilutionType = const Value.absent(),
     this.notes = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1548,6 +1592,7 @@ class ShareClassesCompanion extends UpdateCompanion<ShareClassesData> {
     this.isParticipating = const Value.absent(),
     this.dividendRate = const Value.absent(),
     this.seniority = const Value.absent(),
+    this.antiDilutionType = const Value.absent(),
     this.notes = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -1568,6 +1613,7 @@ class ShareClassesCompanion extends UpdateCompanion<ShareClassesData> {
     Expression<bool>? isParticipating,
     Expression<double>? dividendRate,
     Expression<int>? seniority,
+    Expression<String>? antiDilutionType,
     Expression<String>? notes,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -1584,6 +1630,7 @@ class ShareClassesCompanion extends UpdateCompanion<ShareClassesData> {
       if (isParticipating != null) 'is_participating': isParticipating,
       if (dividendRate != null) 'dividend_rate': dividendRate,
       if (seniority != null) 'seniority': seniority,
+      if (antiDilutionType != null) 'anti_dilution_type': antiDilutionType,
       if (notes != null) 'notes': notes,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1601,6 +1648,7 @@ class ShareClassesCompanion extends UpdateCompanion<ShareClassesData> {
     Value<bool>? isParticipating,
     Value<double>? dividendRate,
     Value<int>? seniority,
+    Value<String>? antiDilutionType,
     Value<String?>? notes,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -1617,6 +1665,7 @@ class ShareClassesCompanion extends UpdateCompanion<ShareClassesData> {
       isParticipating: isParticipating ?? this.isParticipating,
       dividendRate: dividendRate ?? this.dividendRate,
       seniority: seniority ?? this.seniority,
+      antiDilutionType: antiDilutionType ?? this.antiDilutionType,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1656,6 +1705,9 @@ class ShareClassesCompanion extends UpdateCompanion<ShareClassesData> {
     if (seniority.present) {
       map['seniority'] = Variable<int>(seniority.value);
     }
+    if (antiDilutionType.present) {
+      map['anti_dilution_type'] = Variable<String>(antiDilutionType.value);
+    }
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
@@ -1683,6 +1735,7 @@ class ShareClassesCompanion extends UpdateCompanion<ShareClassesData> {
           ..write('isParticipating: $isParticipating, ')
           ..write('dividendRate: $dividendRate, ')
           ..write('seniority: $seniority, ')
+          ..write('antiDilutionType: $antiDilutionType, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -2647,6 +2700,28 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
       'REFERENCES rounds (id)',
     ),
   );
+  static const VerificationMeta _sourceOptionGrantIdMeta =
+      const VerificationMeta('sourceOptionGrantId');
+  @override
+  late final GeneratedColumn<String> sourceOptionGrantId =
+      GeneratedColumn<String>(
+        'source_option_grant_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _sourceWarrantIdMeta = const VerificationMeta(
+    'sourceWarrantId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceWarrantId = GeneratedColumn<String>(
+    'source_warrant_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -2670,6 +2745,8 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
     vestingScheduleId,
     vestedCount,
     roundId,
+    sourceOptionGrantId,
+    sourceWarrantId,
     updatedAt,
   ];
   @override
@@ -2770,6 +2847,24 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
         roundId.isAcceptableOrUnknown(data['round_id']!, _roundIdMeta),
       );
     }
+    if (data.containsKey('source_option_grant_id')) {
+      context.handle(
+        _sourceOptionGrantIdMeta,
+        sourceOptionGrantId.isAcceptableOrUnknown(
+          data['source_option_grant_id']!,
+          _sourceOptionGrantIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('source_warrant_id')) {
+      context.handle(
+        _sourceWarrantIdMeta,
+        sourceWarrantId.isAcceptableOrUnknown(
+          data['source_warrant_id']!,
+          _sourceWarrantIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -2827,6 +2922,14 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
         DriftSqlType.string,
         data['${effectivePrefix}round_id'],
       ),
+      sourceOptionGrantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_option_grant_id'],
+      ),
+      sourceWarrantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_warrant_id'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -2851,6 +2954,12 @@ class Holding extends DataClass implements Insertable<Holding> {
   final String? vestingScheduleId;
   final int? vestedCount;
   final String? roundId;
+
+  /// Source option grant ID if this holding came from exercising options.
+  final String? sourceOptionGrantId;
+
+  /// Source warrant ID if this holding came from exercising warrants.
+  final String? sourceWarrantId;
   final DateTime updatedAt;
   const Holding({
     required this.id,
@@ -2863,6 +2972,8 @@ class Holding extends DataClass implements Insertable<Holding> {
     this.vestingScheduleId,
     this.vestedCount,
     this.roundId,
+    this.sourceOptionGrantId,
+    this.sourceWarrantId,
     required this.updatedAt,
   });
   @override
@@ -2883,6 +2994,12 @@ class Holding extends DataClass implements Insertable<Holding> {
     }
     if (!nullToAbsent || roundId != null) {
       map['round_id'] = Variable<String>(roundId);
+    }
+    if (!nullToAbsent || sourceOptionGrantId != null) {
+      map['source_option_grant_id'] = Variable<String>(sourceOptionGrantId);
+    }
+    if (!nullToAbsent || sourceWarrantId != null) {
+      map['source_warrant_id'] = Variable<String>(sourceWarrantId);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -2906,6 +3023,12 @@ class Holding extends DataClass implements Insertable<Holding> {
       roundId: roundId == null && nullToAbsent
           ? const Value.absent()
           : Value(roundId),
+      sourceOptionGrantId: sourceOptionGrantId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceOptionGrantId),
+      sourceWarrantId: sourceWarrantId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceWarrantId),
       updatedAt: Value(updatedAt),
     );
   }
@@ -2928,6 +3051,10 @@ class Holding extends DataClass implements Insertable<Holding> {
       ),
       vestedCount: serializer.fromJson<int?>(json['vestedCount']),
       roundId: serializer.fromJson<String?>(json['roundId']),
+      sourceOptionGrantId: serializer.fromJson<String?>(
+        json['sourceOptionGrantId'],
+      ),
+      sourceWarrantId: serializer.fromJson<String?>(json['sourceWarrantId']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -2945,6 +3072,8 @@ class Holding extends DataClass implements Insertable<Holding> {
       'vestingScheduleId': serializer.toJson<String?>(vestingScheduleId),
       'vestedCount': serializer.toJson<int?>(vestedCount),
       'roundId': serializer.toJson<String?>(roundId),
+      'sourceOptionGrantId': serializer.toJson<String?>(sourceOptionGrantId),
+      'sourceWarrantId': serializer.toJson<String?>(sourceWarrantId),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -2960,6 +3089,8 @@ class Holding extends DataClass implements Insertable<Holding> {
     Value<String?> vestingScheduleId = const Value.absent(),
     Value<int?> vestedCount = const Value.absent(),
     Value<String?> roundId = const Value.absent(),
+    Value<String?> sourceOptionGrantId = const Value.absent(),
+    Value<String?> sourceWarrantId = const Value.absent(),
     DateTime? updatedAt,
   }) => Holding(
     id: id ?? this.id,
@@ -2974,6 +3105,12 @@ class Holding extends DataClass implements Insertable<Holding> {
         : this.vestingScheduleId,
     vestedCount: vestedCount.present ? vestedCount.value : this.vestedCount,
     roundId: roundId.present ? roundId.value : this.roundId,
+    sourceOptionGrantId: sourceOptionGrantId.present
+        ? sourceOptionGrantId.value
+        : this.sourceOptionGrantId,
+    sourceWarrantId: sourceWarrantId.present
+        ? sourceWarrantId.value
+        : this.sourceWarrantId,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   Holding copyWithCompanion(HoldingsCompanion data) {
@@ -3000,6 +3137,12 @@ class Holding extends DataClass implements Insertable<Holding> {
           ? data.vestedCount.value
           : this.vestedCount,
       roundId: data.roundId.present ? data.roundId.value : this.roundId,
+      sourceOptionGrantId: data.sourceOptionGrantId.present
+          ? data.sourceOptionGrantId.value
+          : this.sourceOptionGrantId,
+      sourceWarrantId: data.sourceWarrantId.present
+          ? data.sourceWarrantId.value
+          : this.sourceWarrantId,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -3017,6 +3160,8 @@ class Holding extends DataClass implements Insertable<Holding> {
           ..write('vestingScheduleId: $vestingScheduleId, ')
           ..write('vestedCount: $vestedCount, ')
           ..write('roundId: $roundId, ')
+          ..write('sourceOptionGrantId: $sourceOptionGrantId, ')
+          ..write('sourceWarrantId: $sourceWarrantId, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -3034,6 +3179,8 @@ class Holding extends DataClass implements Insertable<Holding> {
     vestingScheduleId,
     vestedCount,
     roundId,
+    sourceOptionGrantId,
+    sourceWarrantId,
     updatedAt,
   );
   @override
@@ -3050,6 +3197,8 @@ class Holding extends DataClass implements Insertable<Holding> {
           other.vestingScheduleId == this.vestingScheduleId &&
           other.vestedCount == this.vestedCount &&
           other.roundId == this.roundId &&
+          other.sourceOptionGrantId == this.sourceOptionGrantId &&
+          other.sourceWarrantId == this.sourceWarrantId &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -3064,6 +3213,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
   final Value<String?> vestingScheduleId;
   final Value<int?> vestedCount;
   final Value<String?> roundId;
+  final Value<String?> sourceOptionGrantId;
+  final Value<String?> sourceWarrantId;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const HoldingsCompanion({
@@ -3077,6 +3228,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     this.vestingScheduleId = const Value.absent(),
     this.vestedCount = const Value.absent(),
     this.roundId = const Value.absent(),
+    this.sourceOptionGrantId = const Value.absent(),
+    this.sourceWarrantId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -3091,6 +3244,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     this.vestingScheduleId = const Value.absent(),
     this.vestedCount = const Value.absent(),
     this.roundId = const Value.absent(),
+    this.sourceOptionGrantId = const Value.absent(),
+    this.sourceWarrantId = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -3112,6 +3267,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     Expression<String>? vestingScheduleId,
     Expression<int>? vestedCount,
     Expression<String>? roundId,
+    Expression<String>? sourceOptionGrantId,
+    Expression<String>? sourceWarrantId,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -3126,6 +3283,9 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
       if (vestingScheduleId != null) 'vesting_schedule_id': vestingScheduleId,
       if (vestedCount != null) 'vested_count': vestedCount,
       if (roundId != null) 'round_id': roundId,
+      if (sourceOptionGrantId != null)
+        'source_option_grant_id': sourceOptionGrantId,
+      if (sourceWarrantId != null) 'source_warrant_id': sourceWarrantId,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -3142,6 +3302,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     Value<String?>? vestingScheduleId,
     Value<int?>? vestedCount,
     Value<String?>? roundId,
+    Value<String?>? sourceOptionGrantId,
+    Value<String?>? sourceWarrantId,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -3156,6 +3318,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
       vestingScheduleId: vestingScheduleId ?? this.vestingScheduleId,
       vestedCount: vestedCount ?? this.vestedCount,
       roundId: roundId ?? this.roundId,
+      sourceOptionGrantId: sourceOptionGrantId ?? this.sourceOptionGrantId,
+      sourceWarrantId: sourceWarrantId ?? this.sourceWarrantId,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -3194,6 +3358,14 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     if (roundId.present) {
       map['round_id'] = Variable<String>(roundId.value);
     }
+    if (sourceOptionGrantId.present) {
+      map['source_option_grant_id'] = Variable<String>(
+        sourceOptionGrantId.value,
+      );
+    }
+    if (sourceWarrantId.present) {
+      map['source_warrant_id'] = Variable<String>(sourceWarrantId.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -3216,6 +3388,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
           ..write('vestingScheduleId: $vestingScheduleId, ')
           ..write('vestedCount: $vestedCount, ')
           ..write('roundId: $roundId, ')
+          ..write('sourceOptionGrantId: $sourceOptionGrantId, ')
+          ..write('sourceWarrantId: $sourceWarrantId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -14857,6 +15031,7 @@ typedef $$ShareClassesTableCreateCompanionBuilder =
       Value<bool> isParticipating,
       Value<double> dividendRate,
       Value<int> seniority,
+      Value<String> antiDilutionType,
       Value<String?> notes,
       required DateTime createdAt,
       required DateTime updatedAt,
@@ -14873,6 +15048,7 @@ typedef $$ShareClassesTableUpdateCompanionBuilder =
       Value<bool> isParticipating,
       Value<double> dividendRate,
       Value<int> seniority,
+      Value<String> antiDilutionType,
       Value<String?> notes,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -15057,6 +15233,11 @@ class $$ShareClassesTableFilterComposer
 
   ColumnFilters<int> get seniority => $composableBuilder(
     column: $table.seniority,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get antiDilutionType => $composableBuilder(
+    column: $table.antiDilutionType,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15273,6 +15454,11 @@ class $$ShareClassesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get antiDilutionType => $composableBuilder(
+    column: $table.antiDilutionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get notes => $composableBuilder(
     column: $table.notes,
     builder: (column) => ColumnOrderings(column),
@@ -15352,6 +15538,11 @@ class $$ShareClassesTableAnnotationComposer
 
   GeneratedColumn<int> get seniority =>
       $composableBuilder(column: $table.seniority, builder: (column) => column);
+
+  GeneratedColumn<String> get antiDilutionType => $composableBuilder(
+    column: $table.antiDilutionType,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
@@ -15555,6 +15746,7 @@ class $$ShareClassesTableTableManager
                 Value<bool> isParticipating = const Value.absent(),
                 Value<double> dividendRate = const Value.absent(),
                 Value<int> seniority = const Value.absent(),
+                Value<String> antiDilutionType = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -15569,6 +15761,7 @@ class $$ShareClassesTableTableManager
                 isParticipating: isParticipating,
                 dividendRate: dividendRate,
                 seniority: seniority,
+                antiDilutionType: antiDilutionType,
                 notes: notes,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -15585,6 +15778,7 @@ class $$ShareClassesTableTableManager
                 Value<bool> isParticipating = const Value.absent(),
                 Value<double> dividendRate = const Value.absent(),
                 Value<int> seniority = const Value.absent(),
+                Value<String> antiDilutionType = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
@@ -15599,6 +15793,7 @@ class $$ShareClassesTableTableManager
                 isParticipating: isParticipating,
                 dividendRate: dividendRate,
                 seniority: seniority,
+                antiDilutionType: antiDilutionType,
                 notes: notes,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -16969,6 +17164,8 @@ typedef $$HoldingsTableCreateCompanionBuilder =
       Value<String?> vestingScheduleId,
       Value<int?> vestedCount,
       Value<String?> roundId,
+      Value<String?> sourceOptionGrantId,
+      Value<String?> sourceWarrantId,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -16984,6 +17181,8 @@ typedef $$HoldingsTableUpdateCompanionBuilder =
       Value<String?> vestingScheduleId,
       Value<int?> vestedCount,
       Value<String?> roundId,
+      Value<String?> sourceOptionGrantId,
+      Value<String?> sourceWarrantId,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -17124,6 +17323,16 @@ class $$HoldingsTableFilterComposer
 
   ColumnFilters<int> get vestedCount => $composableBuilder(
     column: $table.vestedCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceOptionGrantId => $composableBuilder(
+    column: $table.sourceOptionGrantId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceWarrantId => $composableBuilder(
+    column: $table.sourceWarrantId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17289,6 +17498,16 @@ class $$HoldingsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get sourceOptionGrantId => $composableBuilder(
+    column: $table.sourceOptionGrantId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceWarrantId => $composableBuilder(
+    column: $table.sourceWarrantId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -17419,6 +17638,16 @@ class $$HoldingsTableAnnotationComposer
 
   GeneratedColumn<int> get vestedCount => $composableBuilder(
     column: $table.vestedCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceOptionGrantId => $composableBuilder(
+    column: $table.sourceOptionGrantId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceWarrantId => $composableBuilder(
+    column: $table.sourceWarrantId,
     builder: (column) => column,
   );
 
@@ -17587,6 +17816,8 @@ class $$HoldingsTableTableManager
                 Value<String?> vestingScheduleId = const Value.absent(),
                 Value<int?> vestedCount = const Value.absent(),
                 Value<String?> roundId = const Value.absent(),
+                Value<String?> sourceOptionGrantId = const Value.absent(),
+                Value<String?> sourceWarrantId = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HoldingsCompanion(
@@ -17600,6 +17831,8 @@ class $$HoldingsTableTableManager
                 vestingScheduleId: vestingScheduleId,
                 vestedCount: vestedCount,
                 roundId: roundId,
+                sourceOptionGrantId: sourceOptionGrantId,
+                sourceWarrantId: sourceWarrantId,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -17615,6 +17848,8 @@ class $$HoldingsTableTableManager
                 Value<String?> vestingScheduleId = const Value.absent(),
                 Value<int?> vestedCount = const Value.absent(),
                 Value<String?> roundId = const Value.absent(),
+                Value<String?> sourceOptionGrantId = const Value.absent(),
+                Value<String?> sourceWarrantId = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => HoldingsCompanion.insert(
@@ -17628,6 +17863,8 @@ class $$HoldingsTableTableManager
                 vestingScheduleId: vestingScheduleId,
                 vestedCount: vestedCount,
                 roundId: roundId,
+                sourceOptionGrantId: sourceOptionGrantId,
+                sourceWarrantId: sourceWarrantId,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

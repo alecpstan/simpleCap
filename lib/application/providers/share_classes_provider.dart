@@ -42,6 +42,7 @@ class ShareClassMutations extends _$ShareClassMutations {
     bool isParticipating = false,
     double votingMultiplier = 1.0,
     double dividendRate = 0.0,
+    String antiDilutionType = 'none',
     String? notes,
   }) async {
     final db = ref.read(databaseProvider);
@@ -59,6 +60,7 @@ class ShareClassMutations extends _$ShareClassMutations {
         isParticipating: Value(isParticipating),
         votingMultiplier: Value(votingMultiplier),
         dividendRate: Value(dividendRate),
+        antiDilutionType: Value(antiDilutionType),
         notes: Value(notes),
         createdAt: now,
         updatedAt: now,
