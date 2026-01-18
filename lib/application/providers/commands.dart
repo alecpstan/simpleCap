@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../domain/events/cap_table_event.dart';
 import '../../infrastructure/database/database.dart';
 import 'database_provider.dart';
+import 'esop_pools_provider.dart';
 import 'event_providers.dart';
 import 'company_provider.dart';
 
@@ -71,6 +72,109 @@ class CompanyCommands extends _$CompanyCommands {
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Initialize default share classes and vesting schedules for a new company.
+  ///
+  /// This creates common share classes (Ordinary, ESOP, Preference A) and
+  /// vesting schedules (4yr/1yr cliff, Immediate, 2yr/6mo cliff) that are
+  /// useful for most startup scenarios.
+  Future<void> initializeCompanyDefaults({required String companyId}) async {
+    final now = DateTime.now();
+
+    // Create default share classes
+    final shareClassEvents = <CapTableEvent>[
+      // Ordinary Shares - Standard voting shares for founders/employees
+      ShareClassCreated(
+        companyId: companyId,
+        shareClassId: _uuid.v4(),
+        name: 'Ordinary Shares',
+        shareClassType: 'ordinary',
+        votingMultiplier: 1.0,
+        liquidationPreference: 1.0,
+        isParticipating: false,
+        dividendRate: 0.0,
+        seniority: 0,
+        antiDilutionType: 'none',
+        notes: 'Standard voting shares for founders and employees',
+        timestamp: now,
+      ),
+      // ESOP Pool - For employee stock options
+      ShareClassCreated(
+        companyId: companyId,
+        shareClassId: _uuid.v4(),
+        name: 'ESOP Pool',
+        shareClassType: 'esop',
+        votingMultiplier: 1.0,
+        liquidationPreference: 1.0,
+        isParticipating: false,
+        dividendRate: 0.0,
+        seniority: 0,
+        antiDilutionType: 'none',
+        notes: 'Employee Stock Option Pool for option grants',
+        timestamp: now,
+      ),
+      // Preference A - First preference round for early investors
+      ShareClassCreated(
+        companyId: companyId,
+        shareClassId: _uuid.v4(),
+        name: 'Preference A',
+        shareClassType: 'preferenceA',
+        votingMultiplier: 1.0,
+        liquidationPreference: 1.0,
+        isParticipating: false,
+        dividendRate: 0.0,
+        seniority: 1,
+        antiDilutionType: 'broadBased',
+        notes: 'First preference round shares (Seed/Series A)',
+        timestamp: now,
+      ),
+    ];
+
+    // Create default vesting schedules
+    final vestingEvents = <CapTableEvent>[
+      // Standard 4 Year / 1 Year Cliff
+      VestingScheduleCreated(
+        companyId: companyId,
+        scheduleId: _uuid.v4(),
+        name: '4 Year / 1 Year Cliff',
+        scheduleType: 'timeBased',
+        totalMonths: 48,
+        cliffMonths: 12,
+        frequency: 'monthly',
+        notes: 'Standard employee vesting schedule',
+        timestamp: now,
+      ),
+      // Immediate Vesting
+      VestingScheduleCreated(
+        companyId: companyId,
+        scheduleId: _uuid.v4(),
+        name: 'Immediate',
+        scheduleType: 'immediate',
+        totalMonths: 0,
+        cliffMonths: 0,
+        notes: 'Immediate vesting for advisors or one-time grants',
+        timestamp: now,
+      ),
+      // 2 Year / 6 Month Cliff (accelerated)
+      VestingScheduleCreated(
+        companyId: companyId,
+        scheduleId: _uuid.v4(),
+        name: '2 Year / 6 Month Cliff',
+        scheduleType: 'timeBased',
+        totalMonths: 24,
+        cliffMonths: 6,
+        frequency: 'monthly',
+        notes: 'Accelerated vesting for contractors or consultants',
+        timestamp: now,
+      ),
+    ];
+
+    // Append all events
+    await ref.read(eventLedgerProvider.notifier).appendForCompany(companyId, [
+      ...shareClassEvents,
+      ...vestingEvents,
+    ]);
   }
 }
 
@@ -154,7 +258,7 @@ class StakeholderCommands extends _$StakeholderCommands {
     await ref.read(eventLedgerProvider.notifier).append([event]);
   }
 
-  /// Remove a stakeholder.
+  /// Remove a stakeholder (soft delete - creates StakeholderRemoved event).
   Future<void> removeStakeholder({
     required String stakeholderId,
     String? actorId,
@@ -172,6 +276,19 @@ class StakeholderCommands extends _$StakeholderCommands {
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Permanently delete a stakeholder and all related entities.
+  /// This cascade deletes: holdings, options, warrants, convertibles.
+  Future<List<String>> deleteStakeholder({
+    required String stakeholderId,
+  }) async {
+    return ref
+        .read(eventLedgerProvider.notifier)
+        .cascadeDeleteEntity(
+          entityId: stakeholderId,
+          entityType: EntityType.stakeholder,
+        );
   }
 }
 
@@ -262,6 +379,16 @@ class ShareClassCommands extends _$ShareClassCommands {
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
   }
+
+  /// Permanently delete a share class and cascade delete related holdings.
+  Future<List<String>> deleteShareClass({required String shareClassId}) async {
+    return ref
+        .read(eventLedgerProvider.notifier)
+        .cascadeDeleteEntity(
+          entityId: shareClassId,
+          entityType: EntityType.shareClass,
+        );
+  }
 }
 
 // ============================================================
@@ -293,7 +420,10 @@ class RoundCommands extends _$RoundCommands {
     final id = _uuid.v4();
     final now = DateTime.now();
 
-    final event = RoundOpened(
+    final events = <CapTableEvent>[];
+
+    // Create the round opened event
+    final roundEvent = RoundOpened(
       companyId: companyId,
       roundId: id,
       name: name,
@@ -307,15 +437,38 @@ class RoundCommands extends _$RoundCommands {
       timestamp: now,
       actorId: actorId,
     );
+    events.add(roundEvent);
 
-    await ref.read(eventLedgerProvider.notifier).append([event]);
+    // If pre-money valuation is provided, also create a valuation event
+    if (preMoneyValuation != null && preMoneyValuation > 0) {
+      final valuationEvent = ValuationRecorded(
+        companyId: companyId,
+        valuationId: _uuid.v4(),
+        date: date,
+        preMoneyValue: preMoneyValuation,
+        method: 'round',
+        methodParamsJson: '{"roundId": "$id", "roundName": "$name"}',
+        notes: 'Pre-money valuation from $name round',
+        timestamp: now,
+        actorId: actorId,
+      );
+      events.add(valuationEvent);
+    }
+
+    await ref.read(eventLedgerProvider.notifier).append(events);
     return id;
   }
 
   /// Close a round with final terms.
+  ///
+  /// This also creates a post-money ValuationRecorded event if the round
+  /// has a pre-money valuation set.
   Future<void> closeRound({
     required String roundId,
     required double amountRaised,
+    String? roundName,
+    double? preMoneyValuation,
+    DateTime? roundDate,
     String? actorId,
   }) async {
     final companyId = ref.read(currentCompanyIdProvider);
@@ -323,15 +476,50 @@ class RoundCommands extends _$RoundCommands {
       throw StateError('No company selected');
     }
 
-    final event = RoundClosed(
+    final now = DateTime.now();
+    final events = <CapTableEvent>[];
+
+    // Create the round closed event
+    final closeEvent = RoundClosed(
       companyId: companyId,
       roundId: roundId,
       amountRaised: amountRaised,
-      timestamp: DateTime.now(),
+      timestamp: now,
       actorId: actorId,
     );
+    events.add(closeEvent);
 
-    await ref.read(eventLedgerProvider.notifier).append([event]);
+    // If pre-money valuation is provided, create a post-money valuation event
+    if (preMoneyValuation != null && preMoneyValuation > 0) {
+      final postMoneyValue = preMoneyValuation + amountRaised;
+      final valuationEvent = ValuationRecorded(
+        companyId: companyId,
+        valuationId: _uuid.v4(),
+        date: roundDate ?? now,
+        preMoneyValue: postMoneyValue,
+        method: 'round_post_money',
+        methodParamsJson: '{"roundId": "$roundId", "roundName": "$roundName", "isPostMoney": true}',
+        notes: 'Post-money valuation from ${roundName ?? 'round'} (\$${preMoneyValuation.toStringAsFixed(0)} pre-money + \$${amountRaised.toStringAsFixed(0)} raised)',
+        timestamp: now,
+        actorId: actorId,
+      );
+      events.add(valuationEvent);
+    }
+
+    // Auto-activate ESOP pools tied to this round
+    final pools = await ref.read(esopPoolsStreamProvider.future);
+    for (final pool in pools) {
+      if (pool.roundId == roundId && pool.status == 'draft') {
+        events.add(EsopPoolActivated(
+          companyId: companyId,
+          poolId: pool.id,
+          timestamp: now,
+          actorId: actorId,
+        ));
+      }
+    }
+
+    await ref.read(eventLedgerProvider.notifier).append(events);
   }
 
   /// Amend round terms.
@@ -351,7 +539,10 @@ class RoundCommands extends _$RoundCommands {
       throw StateError('No company selected');
     }
 
-    final event = RoundAmended(
+    final now = DateTime.now();
+    final events = <CapTableEvent>[];
+
+    final amendEvent = RoundAmended(
       companyId: companyId,
       roundId: roundId,
       name: name,
@@ -361,11 +552,29 @@ class RoundCommands extends _$RoundCommands {
       pricePerShare: pricePerShare,
       leadInvestorId: leadInvestorId,
       notes: notes,
-      timestamp: DateTime.now(),
+      timestamp: now,
       actorId: actorId,
     );
+    events.add(amendEvent);
 
-    await ref.read(eventLedgerProvider.notifier).append([event]);
+    // If pre-money valuation is being updated, also create a valuation event
+    if (preMoneyValuation != null && preMoneyValuation > 0) {
+      final valuationEvent = ValuationRecorded(
+        companyId: companyId,
+        valuationId: _uuid.v4(),
+        date: date ?? now,
+        preMoneyValue: preMoneyValuation,
+        method: 'round',
+        methodParamsJson: '{"roundId": "$roundId", "amended": true}',
+        notes:
+            'Updated pre-money valuation${name != null ? ' from $name round' : ''}',
+        timestamp: now,
+        actorId: actorId,
+      );
+      events.add(valuationEvent);
+    }
+
+    await ref.read(eventLedgerProvider.notifier).append(events);
   }
 
   /// Reopen a closed round.
@@ -385,8 +594,11 @@ class RoundCommands extends _$RoundCommands {
     await ref.read(eventLedgerProvider.notifier).append([event]);
   }
 
-  /// Delete a round.
-  Future<void> deleteRound({required String roundId, String? actorId}) async {
+  /// Delete a round (soft delete - creates RoundDeleted event).
+  Future<void> softDeleteRound({
+    required String roundId,
+    String? actorId,
+  }) async {
     final companyId = ref.read(currentCompanyIdProvider);
     if (companyId == null) {
       throw StateError('No company selected');
@@ -400,6 +612,14 @@ class RoundCommands extends _$RoundCommands {
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Permanently delete a round and cascade delete related entities.
+  /// Only entities CREATED in this round are deleted (not exercised in it).
+  Future<List<String>> deleteRound({required String roundId}) async {
+    return ref
+        .read(eventLedgerProvider.notifier)
+        .cascadeDeleteEntity(entityId: roundId, entityType: EntityType.round);
   }
 }
 
@@ -526,6 +746,47 @@ class HoldingCommands extends _$HoldingCommands {
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
   }
+
+  /// Delete a holding permanently.
+  /// Holdings don't have a soft delete - they are either transferred or deleted.
+  Future<List<String>> deleteHolding({required String holdingId}) async {
+    return ref
+        .read(eventLedgerProvider.notifier)
+        .cascadeDeleteEntity(
+          entityId: holdingId,
+          entityType: EntityType.holding,
+        );
+  }
+
+  /// Update an existing holding.
+  Future<void> updateHolding({
+    required String holdingId,
+    int? shareCount,
+    double? costBasis,
+    DateTime? acquiredDate,
+    String? shareClassId,
+    String? vestingScheduleId,
+    String? actorId,
+  }) async {
+    final companyId = ref.read(currentCompanyIdProvider);
+    if (companyId == null) {
+      throw StateError('No company selected');
+    }
+
+    final event = HoldingUpdated(
+      companyId: companyId,
+      holdingId: holdingId,
+      shareCount: shareCount,
+      costBasis: costBasis,
+      acquiredDate: acquiredDate,
+      shareClassId: shareClassId,
+      vestingScheduleId: vestingScheduleId,
+      timestamp: DateTime.now(),
+      actorId: actorId,
+    );
+
+    await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
 }
 
 // ============================================================
@@ -551,6 +812,14 @@ class ConvertibleCommands extends _$ConvertibleCommands {
     bool hasProRata = false,
     String? roundId,
     String? notes,
+    // Advanced terms
+    String? maturityBehavior,
+    bool allowsVoluntaryConversion = false,
+    String? liquidityEventBehavior,
+    double? liquidityPayoutMultiple,
+    String? dissolutionBehavior,
+    String? preferredShareClassId,
+    double? qualifiedFinancingThreshold,
     String? actorId,
   }) async {
     final companyId = ref.read(currentCompanyIdProvider);
@@ -576,6 +845,13 @@ class ConvertibleCommands extends _$ConvertibleCommands {
       hasProRata: hasProRata,
       roundId: roundId,
       notes: notes,
+      maturityBehavior: maturityBehavior,
+      allowsVoluntaryConversion: allowsVoluntaryConversion,
+      liquidityEventBehavior: liquidityEventBehavior,
+      liquidityPayoutMultiple: liquidityPayoutMultiple,
+      dissolutionBehavior: dissolutionBehavior,
+      preferredShareClassId: preferredShareClassId,
+      qualifiedFinancingThreshold: qualifiedFinancingThreshold,
       timestamp: now,
       actorId: actorId,
     );
@@ -625,7 +901,7 @@ class ConvertibleCommands extends _$ConvertibleCommands {
   /// Convert a convertible to shares.
   Future<void> convertConvertible({
     required String convertibleId,
-    required String roundId,
+    String? roundId, // Optional for voluntary conversions
     required String toShareClassId,
     required int sharesReceived,
     required double conversionPrice,
@@ -650,7 +926,8 @@ class ConvertibleCommands extends _$ConvertibleCommands {
     await ref.read(eventLedgerProvider.notifier).append([event]);
   }
 
-  /// Cancel a convertible.
+  /// Cancel a convertible (soft cancel - creates ConvertibleCancelled event).
+  /// This marks the convertible as cancelled but keeps the history.
   Future<void> cancelConvertible({
     required String convertibleId,
     String? reason,
@@ -671,6 +948,75 @@ class ConvertibleCommands extends _$ConvertibleCommands {
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
   }
+
+  /// Permanently delete a convertible and cascade delete related entities.
+  /// This removes all events and any warrants issued from this convertible.
+  Future<List<String>> deleteConvertible({
+    required String convertibleId,
+  }) async {
+    return ref
+        .read(eventLedgerProvider.notifier)
+        .cascadeDeleteEntity(
+          entityId: convertibleId,
+          entityType: EntityType.convertible,
+        );
+  }
+
+  /// Update an existing convertible's properties.
+  /// Only non-null fields will be updated.
+  Future<void> updateConvertible({
+    required String convertibleId,
+    double? principal,
+    double? valuationCap,
+    double? discountPercent,
+    double? interestRate,
+    DateTime? issueDate,
+    DateTime? maturityDate,
+    bool? hasMfn,
+    bool? hasProRata,
+    String? roundId,
+    String? notes,
+    // Advanced terms
+    String? maturityBehavior,
+    bool? allowsVoluntaryConversion,
+    String? liquidityEventBehavior,
+    double? liquidityPayoutMultiple,
+    String? dissolutionBehavior,
+    String? preferredShareClassId,
+    double? qualifiedFinancingThreshold,
+    String? actorId,
+  }) async {
+    final companyId = ref.read(currentCompanyIdProvider);
+    if (companyId == null) {
+      throw StateError('No company selected');
+    }
+
+    final event = ConvertibleUpdated(
+      companyId: companyId,
+      convertibleId: convertibleId,
+      principal: principal,
+      valuationCap: valuationCap,
+      discountPercent: discountPercent,
+      interestRate: interestRate,
+      issueDate: issueDate,
+      maturityDate: maturityDate,
+      hasMfn: hasMfn,
+      hasProRata: hasProRata,
+      roundId: roundId,
+      notes: notes,
+      maturityBehavior: maturityBehavior,
+      allowsVoluntaryConversion: allowsVoluntaryConversion,
+      liquidityEventBehavior: liquidityEventBehavior,
+      liquidityPayoutMultiple: liquidityPayoutMultiple,
+      dissolutionBehavior: dissolutionBehavior,
+      preferredShareClassId: preferredShareClassId,
+      qualifiedFinancingThreshold: qualifiedFinancingThreshold,
+      timestamp: DateTime.now(),
+      actorId: actorId,
+    );
+
+    await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
 }
 
 // ============================================================
@@ -685,7 +1031,6 @@ class EsopPoolCommands extends _$EsopPoolCommands {
   /// Create a new ESOP pool.
   Future<String> createPool({
     required String name,
-    required String shareClassId,
     required int poolSize,
     double? targetPercentage,
     required DateTime establishedDate,
@@ -710,7 +1055,6 @@ class EsopPoolCommands extends _$EsopPoolCommands {
       companyId: companyId,
       poolId: id,
       name: name,
-      shareClassId: shareClassId,
       poolSize: poolSize,
       targetPercentage: targetPercentage,
       establishedDate: establishedDate,
@@ -763,6 +1107,112 @@ class EsopPoolCommands extends _$EsopPoolCommands {
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
     return expansionId;
+  }
+
+  /// Update an ESOP pool's settings.
+  Future<void> updatePool({
+    required String poolId,
+    String? name,
+    double? targetPercentage,
+    String? defaultVestingScheduleId,
+    String? strikePriceMethod,
+    double? defaultStrikePrice,
+    int? defaultExpiryYears,
+    String? notes,
+    String? actorId,
+  }) async {
+    final companyId = ref.read(currentCompanyIdProvider);
+    if (companyId == null) {
+      throw StateError('No company selected');
+    }
+
+    final event = EsopPoolUpdated(
+      companyId: companyId,
+      poolId: poolId,
+      name: name,
+      targetPercentage: targetPercentage,
+      defaultVestingScheduleId: defaultVestingScheduleId,
+      strikePriceMethod: strikePriceMethod,
+      defaultStrikePrice: defaultStrikePrice,
+      defaultExpiryYears: defaultExpiryYears,
+      notes: notes,
+      timestamp: DateTime.now(),
+      actorId: actorId,
+    );
+
+    await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Activate a draft ESOP pool (changes status from draft to active).
+  /// Typically called when a round closes that created this pool.
+  Future<void> activatePool({required String poolId, String? actorId}) async {
+    final companyId = ref.read(currentCompanyIdProvider);
+    if (companyId == null) {
+      throw StateError('No company selected');
+    }
+
+    final event = EsopPoolActivated(
+      companyId: companyId,
+      poolId: poolId,
+      timestamp: DateTime.now(),
+      actorId: actorId,
+    );
+
+    await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Soft delete an ESOP pool (creates EsopPoolDeleted event).
+  /// This marks the pool as deleted but keeps the history.
+  Future<void> softDeletePool({required String poolId, String? actorId}) async {
+    final companyId = ref.read(currentCompanyIdProvider);
+    if (companyId == null) {
+      throw StateError('No company selected');
+    }
+
+    final event = EsopPoolDeleted(
+      companyId: companyId,
+      poolId: poolId,
+      timestamp: DateTime.now(),
+      actorId: actorId,
+    );
+
+    await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Permanently delete an ESOP pool and cascade delete all grants.
+  /// This removes all events including any option grants from this pool
+  /// and any holdings from exercised options.
+  Future<List<String>> deletePool({required String poolId}) async {
+    return ref
+        .read(eventLedgerProvider.notifier)
+        .cascadeDeleteEntity(entityId: poolId, entityType: EntityType.esopPool);
+  }
+
+  /// Revert an ESOP pool expansion.
+  Future<void> revertExpansion({
+    required String expansionId,
+    required String poolId,
+    required int previousSize,
+    required int sharesRemoved,
+    String? actorId,
+  }) async {
+    final companyId = ref.read(currentCompanyIdProvider);
+    if (companyId == null) {
+      throw StateError('No company selected');
+    }
+
+    final event = EsopPoolExpansionReverted(
+      companyId: companyId,
+      expansionId: expansionId,
+      poolId: poolId,
+      previousSize: previousSize,
+      revertedSize: previousSize - sharesRemoved,
+      sharesRemoved: sharesRemoved,
+      timestamp: DateTime.now(),
+      actorId: actorId,
+    );
+
+    await ref.read(eventLedgerProvider.notifier).append([event]);
   }
 }
 
@@ -821,11 +1271,23 @@ class OptionGrantCommands extends _$OptionGrantCommands {
   }
 
   /// Exercise options.
+  ///
+  /// Supports different exercise types:
+  /// - Cash: Pay strike price in cash, receive all shares
+  /// - Cashless: Shares sold at FMV to cover costs, receive cash proceeds
+  /// - Net: Shares withheld to cover strike price, receive net shares
+  /// - NetWithTax: Shares withheld for strike + taxes, receive net shares
   Future<void> exerciseOptions({
     required String grantId,
     required int exercisedCount,
     required double exercisePrice,
     required DateTime exerciseDate,
+    String exerciseType = 'cash',
+    int? sharesWithheldForStrike,
+    int? sharesWithheldForTax,
+    int? netSharesReceived,
+    double? fairMarketValue,
+    double? proceedsReceived,
     String? actorId,
   }) async {
     final companyId = ref.read(currentCompanyIdProvider);
@@ -844,12 +1306,19 @@ class OptionGrantCommands extends _$OptionGrantCommands {
       resultingHoldingId: resultingHoldingId,
       timestamp: DateTime.now(),
       actorId: actorId,
+      exerciseType: exerciseType,
+      sharesWithheldForStrike: sharesWithheldForStrike,
+      sharesWithheldForTax: sharesWithheldForTax,
+      netSharesReceived: netSharesReceived,
+      fairMarketValue: fairMarketValue,
+      proceedsReceived: proceedsReceived,
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
   }
 
-  /// Cancel options.
+  /// Cancel options (soft cancel - creates OptionsCancelled event).
+  /// This records a cancellation event but keeps the grant history.
   Future<void> cancelOptions({
     required String grantId,
     required int cancelledCount,
@@ -871,6 +1340,57 @@ class OptionGrantCommands extends _$OptionGrantCommands {
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Update an existing option grant.
+  Future<void> updateOptionGrant({
+    required String grantId,
+    String? shareClassId,
+    String? esopPoolId,
+    int? quantity,
+    double? strikePrice,
+    DateTime? grantDate,
+    DateTime? expiryDate,
+    String? vestingScheduleId,
+    String? roundId,
+    bool? allowsEarlyExercise,
+    String? notes,
+    String? actorId,
+  }) async {
+    final companyId = ref.read(currentCompanyIdProvider);
+    if (companyId == null) {
+      throw StateError('No company selected');
+    }
+
+    final event = OptionGrantUpdated(
+      companyId: companyId,
+      grantId: grantId,
+      shareClassId: shareClassId,
+      esopPoolId: esopPoolId,
+      quantity: quantity,
+      strikePrice: strikePrice,
+      grantDate: grantDate,
+      expiryDate: expiryDate,
+      vestingScheduleId: vestingScheduleId,
+      roundId: roundId,
+      allowsEarlyExercise: allowsEarlyExercise,
+      notes: notes,
+      timestamp: DateTime.now(),
+      actorId: actorId,
+    );
+
+    await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Permanently delete an option grant and cascade delete related holdings.
+  /// This removes all events including any holdings from exercising this option.
+  Future<List<String>> deleteOptionGrant({required String grantId}) async {
+    return ref
+        .read(eventLedgerProvider.notifier)
+        .cascadeDeleteEntity(
+          entityId: grantId,
+          entityType: EntityType.optionGrant,
+        );
   }
 }
 
@@ -925,11 +1445,23 @@ class WarrantCommands extends _$WarrantCommands {
   }
 
   /// Exercise warrants.
+  ///
+  /// Supports different exercise types:
+  /// - Cash: Pay strike price in cash, receive all shares
+  /// - Cashless: Shares sold at FMV to cover costs, receive cash proceeds
+  /// - Net: Shares withheld to cover strike price, receive net shares
+  /// - NetWithTax: Shares withheld for strike + taxes, receive net shares
   Future<void> exerciseWarrants({
     required String warrantId,
     required int exercisedCount,
     required double exercisePrice,
     required DateTime exerciseDate,
+    String exerciseType = 'cash',
+    int? sharesWithheldForStrike,
+    int? sharesWithheldForTax,
+    int? netSharesReceived,
+    double? fairMarketValue,
+    double? proceedsReceived,
     String? actorId,
   }) async {
     final companyId = ref.read(currentCompanyIdProvider);
@@ -948,12 +1480,19 @@ class WarrantCommands extends _$WarrantCommands {
       resultingHoldingId: resultingHoldingId,
       timestamp: DateTime.now(),
       actorId: actorId,
+      exerciseType: exerciseType,
+      sharesWithheldForStrike: sharesWithheldForStrike,
+      sharesWithheldForTax: sharesWithheldForTax,
+      netSharesReceived: netSharesReceived,
+      fairMarketValue: fairMarketValue,
+      proceedsReceived: proceedsReceived,
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
   }
 
-  /// Cancel warrants.
+  /// Cancel warrants (soft cancel - creates WarrantCancelled event).
+  /// This records a cancellation event but keeps the warrant history.
   Future<void> cancelWarrants({
     required String warrantId,
     required int cancelledCount,
@@ -975,6 +1514,17 @@ class WarrantCommands extends _$WarrantCommands {
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Permanently delete a warrant and cascade delete related holdings.
+  /// This removes all events including any holdings from exercising this warrant.
+  Future<List<String>> deleteWarrant({required String warrantId}) async {
+    return ref
+        .read(eventLedgerProvider.notifier)
+        .cascadeDeleteEntity(
+          entityId: warrantId,
+          entityType: EntityType.warrant,
+        );
   }
 
   /// Update a warrant.
@@ -1142,8 +1692,8 @@ class VestingScheduleCommands extends _$VestingScheduleCommands {
     );
   }
 
-  /// Delete a vesting schedule.
-  Future<void> deleteVestingSchedule({
+  /// Soft delete a vesting schedule (creates VestingScheduleDeleted event).
+  Future<void> softDeleteVestingSchedule({
     required String scheduleId,
     String? actorId,
   }) async {
@@ -1160,6 +1710,18 @@ class VestingScheduleCommands extends _$VestingScheduleCommands {
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Permanently delete a vesting schedule.
+  Future<List<String>> deleteVestingSchedule({
+    required String scheduleId,
+  }) async {
+    return ref
+        .read(eventLedgerProvider.notifier)
+        .cascadeDeleteEntity(
+          entityId: scheduleId,
+          entityType: EntityType.vestingSchedule,
+        );
   }
 }
 
@@ -1203,6 +1765,14 @@ class ValuationCommands extends _$ValuationCommands {
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
     return id;
+  }
+
+  /// Permanently delete a valuation.
+  /// Valuations are leaf entities, so use permanentDeleteEntity.
+  Future<void> deleteValuation({required String valuationId}) async {
+    await ref
+        .read(eventLedgerProvider.notifier)
+        .permanentDeleteEntity(valuationId);
   }
 }
 
@@ -1304,7 +1874,7 @@ class TransferCommands extends _$TransferCommands {
     await ref.read(eventLedgerProvider.notifier).append([event]);
   }
 
-  /// Cancel a pending transfer.
+  /// Cancel a pending transfer (soft cancel - creates TransferCancelled event).
   Future<void> cancelTransfer({
     required String transferId,
     String? reason,
@@ -1324,6 +1894,13 @@ class TransferCommands extends _$TransferCommands {
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Permanently delete a transfer.
+  Future<void> deleteTransfer({required String transferId}) async {
+    await ref
+        .read(eventLedgerProvider.notifier)
+        .permanentDeleteEntity(transferId);
   }
 }
 
@@ -1434,8 +2011,8 @@ class ScenarioCommands extends _$ScenarioCommands {
     return scenarioId;
   }
 
-  /// Delete a scenario.
-  Future<void> deleteScenario({
+  /// Soft delete a scenario (creates ScenarioDeleted event).
+  Future<void> softDeleteScenario({
     required String scenarioId,
     String? actorId,
   }) async {
@@ -1452,5 +2029,12 @@ class ScenarioCommands extends _$ScenarioCommands {
     );
 
     await ref.read(eventLedgerProvider.notifier).append([event]);
+  }
+
+  /// Permanently delete a scenario.
+  Future<void> deleteScenario({required String scenarioId}) async {
+    await ref
+        .read(eventLedgerProvider.notifier)
+        .permanentDeleteEntity(scenarioId);
   }
 }

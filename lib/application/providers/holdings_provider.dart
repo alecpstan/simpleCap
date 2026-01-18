@@ -1,5 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../infrastructure/database/database.dart';
+import 'esop_pools_provider.dart';
+import 'permanent_delete_provider.dart';
 import 'rounds_provider.dart';
 import 'projection_adapters.dart';
 
@@ -23,9 +25,14 @@ Stream<List<Holding>> stakeholderHoldings(
 }
 
 /// Calculates ownership summary for the cap table.
+/// Respects the showDraft toggle - if off, draft holdings are excluded.
+/// Includes ESOP pool reserved shares in fully diluted calculation.
 @riverpod
 Future<OwnershipSummary> ownershipSummary(OwnershipSummaryRef ref) async {
   final holdings = await ref.watch(holdingsStreamProvider.future);
+  final showDraft = await ref.watch(showDraftProvider.future);
+  final draftRounds = await ref.watch(draftRoundIdsProvider.future);
+  final esopPoolsSummary = await ref.watch(allEsopPoolsSummaryProvider.future);
 
   int totalShares = 0;
   int fullyDilutedShares = 0;
@@ -33,6 +40,11 @@ Future<OwnershipSummary> ownershipSummary(OwnershipSummaryRef ref) async {
   final byShareClass = <String, int>{};
 
   for (final holding in holdings) {
+    // Skip draft holdings if showDraft is off
+    final isDraft =
+        holding.roundId != null && (draftRounds[holding.roundId] ?? false);
+    if (!showDraft && isDraft) continue;
+
     totalShares += holding.shareCount;
     fullyDilutedShares += holding.shareCount;
 
@@ -49,12 +61,17 @@ Future<OwnershipSummary> ownershipSummary(OwnershipSummaryRef ref) async {
     );
   }
 
+  // Add ESOP pool reserved shares to fully diluted count
+  // (pool size minus already exercised options = remaining reserved)
+  final esopReserved = esopPoolsSummary.totalPoolSize - esopPoolsSummary.totalExercised;
+
   return OwnershipSummary(
     totalIssuedShares: totalShares,
-    fullyDilutedShares: fullyDilutedShares,
+    fullyDilutedShares: fullyDilutedShares + esopReserved,
     sharesByStakeholder: byStakeholder,
     sharesByClass: byShareClass,
     stakeholderCount: byStakeholder.length,
+    esopReservedShares: esopReserved,
   );
 }
 
@@ -73,12 +90,16 @@ class OwnershipSummary {
   final Map<String, int> sharesByClass;
   final int stakeholderCount;
 
+  /// Reserved shares in ESOP pools (not yet exercised).
+  final int esopReservedShares;
+
   const OwnershipSummary({
     required this.totalIssuedShares,
     required this.fullyDilutedShares,
     required this.sharesByStakeholder,
     required this.sharesByClass,
     required this.stakeholderCount,
+    this.esopReservedShares = 0,
   });
 
   double getOwnershipPercent(String stakeholderId) {

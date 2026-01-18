@@ -11,7 +11,6 @@ _$EsopPoolImpl _$$EsopPoolImplFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       companyId: json['companyId'] as String,
       name: json['name'] as String,
-      shareClassId: json['shareClassId'] as String,
       status:
           $enumDecodeNullable(_$EsopPoolStatusEnumMap, json['status']) ??
           EsopPoolStatus.draft,
@@ -34,7 +33,6 @@ Map<String, dynamic> _$$EsopPoolImplToJson(_$EsopPoolImpl instance) =>
       'id': instance.id,
       'companyId': instance.companyId,
       'name': instance.name,
-      'shareClassId': instance.shareClassId,
       'status': _$EsopPoolStatusEnumMap[instance.status]!,
       'poolSize': instance.poolSize,
       'targetPercentage': instance.targetPercentage,
@@ -61,7 +59,6 @@ _$EsopPoolCreationDataImpl _$$EsopPoolCreationDataImplFromJson(
   Map<String, dynamic> json,
 ) => _$EsopPoolCreationDataImpl(
   poolId: json['poolId'] as String,
-  shareClassId: json['shareClassId'] as String,
   poolSize: (json['poolSize'] as num).toInt(),
   targetPercentage: (json['targetPercentage'] as num?)?.toDouble(),
   resolutionReference: json['resolutionReference'] as String?,
@@ -71,7 +68,6 @@ Map<String, dynamic> _$$EsopPoolCreationDataImplToJson(
   _$EsopPoolCreationDataImpl instance,
 ) => <String, dynamic>{
   'poolId': instance.poolId,
-  'shareClassId': instance.shareClassId,
   'poolSize': instance.poolSize,
   'targetPercentage': instance.targetPercentage,
   'resolutionReference': instance.resolutionReference,

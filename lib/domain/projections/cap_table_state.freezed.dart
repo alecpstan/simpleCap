@@ -2265,7 +2265,15 @@ mixin _$ConvertibleState {
   String? get conversionRoundId => throw _privateConstructorUsedError;
   String? get convertedToShareClassId => throw _privateConstructorUsedError;
   int? get sharesReceived => throw _privateConstructorUsedError;
-  String? get notes => throw _privateConstructorUsedError;
+  String? get notes =>
+      throw _privateConstructorUsedError; // Advanced conversion terms
+  String? get maturityBehavior => throw _privateConstructorUsedError;
+  bool get allowsVoluntaryConversion => throw _privateConstructorUsedError;
+  String? get liquidityEventBehavior => throw _privateConstructorUsedError;
+  double? get liquidityPayoutMultiple => throw _privateConstructorUsedError;
+  String? get dissolutionBehavior => throw _privateConstructorUsedError;
+  String? get preferredShareClassId => throw _privateConstructorUsedError;
+  double? get qualifiedFinancingThreshold => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
   DateTime get updatedAt => throw _privateConstructorUsedError;
 
@@ -2304,6 +2312,13 @@ abstract class $ConvertibleStateCopyWith<$Res> {
     String? convertedToShareClassId,
     int? sharesReceived,
     String? notes,
+    String? maturityBehavior,
+    bool allowsVoluntaryConversion,
+    String? liquidityEventBehavior,
+    double? liquidityPayoutMultiple,
+    String? dissolutionBehavior,
+    String? preferredShareClassId,
+    double? qualifiedFinancingThreshold,
     DateTime createdAt,
     DateTime updatedAt,
   });
@@ -2341,6 +2356,13 @@ class _$ConvertibleStateCopyWithImpl<$Res, $Val extends ConvertibleState>
     Object? convertedToShareClassId = freezed,
     Object? sharesReceived = freezed,
     Object? notes = freezed,
+    Object? maturityBehavior = freezed,
+    Object? allowsVoluntaryConversion = null,
+    Object? liquidityEventBehavior = freezed,
+    Object? liquidityPayoutMultiple = freezed,
+    Object? dissolutionBehavior = freezed,
+    Object? preferredShareClassId = freezed,
+    Object? qualifiedFinancingThreshold = freezed,
     Object? createdAt = null,
     Object? updatedAt = null,
   }) {
@@ -2414,6 +2436,34 @@ class _$ConvertibleStateCopyWithImpl<$Res, $Val extends ConvertibleState>
                 ? _value.notes
                 : notes // ignore: cast_nullable_to_non_nullable
                       as String?,
+            maturityBehavior: freezed == maturityBehavior
+                ? _value.maturityBehavior
+                : maturityBehavior // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            allowsVoluntaryConversion: null == allowsVoluntaryConversion
+                ? _value.allowsVoluntaryConversion
+                : allowsVoluntaryConversion // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            liquidityEventBehavior: freezed == liquidityEventBehavior
+                ? _value.liquidityEventBehavior
+                : liquidityEventBehavior // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            liquidityPayoutMultiple: freezed == liquidityPayoutMultiple
+                ? _value.liquidityPayoutMultiple
+                : liquidityPayoutMultiple // ignore: cast_nullable_to_non_nullable
+                      as double?,
+            dissolutionBehavior: freezed == dissolutionBehavior
+                ? _value.dissolutionBehavior
+                : dissolutionBehavior // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            preferredShareClassId: freezed == preferredShareClassId
+                ? _value.preferredShareClassId
+                : preferredShareClassId // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            qualifiedFinancingThreshold: freezed == qualifiedFinancingThreshold
+                ? _value.qualifiedFinancingThreshold
+                : qualifiedFinancingThreshold // ignore: cast_nullable_to_non_nullable
+                      as double?,
             createdAt: null == createdAt
                 ? _value.createdAt
                 : createdAt // ignore: cast_nullable_to_non_nullable
@@ -2455,6 +2505,13 @@ abstract class _$$ConvertibleStateImplCopyWith<$Res>
     String? convertedToShareClassId,
     int? sharesReceived,
     String? notes,
+    String? maturityBehavior,
+    bool allowsVoluntaryConversion,
+    String? liquidityEventBehavior,
+    double? liquidityPayoutMultiple,
+    String? dissolutionBehavior,
+    String? preferredShareClassId,
+    double? qualifiedFinancingThreshold,
     DateTime createdAt,
     DateTime updatedAt,
   });
@@ -2491,6 +2548,13 @@ class __$$ConvertibleStateImplCopyWithImpl<$Res>
     Object? convertedToShareClassId = freezed,
     Object? sharesReceived = freezed,
     Object? notes = freezed,
+    Object? maturityBehavior = freezed,
+    Object? allowsVoluntaryConversion = null,
+    Object? liquidityEventBehavior = freezed,
+    Object? liquidityPayoutMultiple = freezed,
+    Object? dissolutionBehavior = freezed,
+    Object? preferredShareClassId = freezed,
+    Object? qualifiedFinancingThreshold = freezed,
     Object? createdAt = null,
     Object? updatedAt = null,
   }) {
@@ -2564,6 +2628,34 @@ class __$$ConvertibleStateImplCopyWithImpl<$Res>
             ? _value.notes
             : notes // ignore: cast_nullable_to_non_nullable
                   as String?,
+        maturityBehavior: freezed == maturityBehavior
+            ? _value.maturityBehavior
+            : maturityBehavior // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        allowsVoluntaryConversion: null == allowsVoluntaryConversion
+            ? _value.allowsVoluntaryConversion
+            : allowsVoluntaryConversion // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        liquidityEventBehavior: freezed == liquidityEventBehavior
+            ? _value.liquidityEventBehavior
+            : liquidityEventBehavior // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        liquidityPayoutMultiple: freezed == liquidityPayoutMultiple
+            ? _value.liquidityPayoutMultiple
+            : liquidityPayoutMultiple // ignore: cast_nullable_to_non_nullable
+                  as double?,
+        dissolutionBehavior: freezed == dissolutionBehavior
+            ? _value.dissolutionBehavior
+            : dissolutionBehavior // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        preferredShareClassId: freezed == preferredShareClassId
+            ? _value.preferredShareClassId
+            : preferredShareClassId // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        qualifiedFinancingThreshold: freezed == qualifiedFinancingThreshold
+            ? _value.qualifiedFinancingThreshold
+            : qualifiedFinancingThreshold // ignore: cast_nullable_to_non_nullable
+                  as double?,
         createdAt: null == createdAt
             ? _value.createdAt
             : createdAt // ignore: cast_nullable_to_non_nullable
@@ -2598,6 +2690,13 @@ class _$ConvertibleStateImpl implements _ConvertibleState {
     this.convertedToShareClassId,
     this.sharesReceived,
     this.notes,
+    this.maturityBehavior,
+    this.allowsVoluntaryConversion = false,
+    this.liquidityEventBehavior,
+    this.liquidityPayoutMultiple,
+    this.dissolutionBehavior,
+    this.preferredShareClassId,
+    this.qualifiedFinancingThreshold,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -2641,6 +2740,22 @@ class _$ConvertibleStateImpl implements _ConvertibleState {
   final int? sharesReceived;
   @override
   final String? notes;
+  // Advanced conversion terms
+  @override
+  final String? maturityBehavior;
+  @override
+  @JsonKey()
+  final bool allowsVoluntaryConversion;
+  @override
+  final String? liquidityEventBehavior;
+  @override
+  final double? liquidityPayoutMultiple;
+  @override
+  final String? dissolutionBehavior;
+  @override
+  final String? preferredShareClassId;
+  @override
+  final double? qualifiedFinancingThreshold;
   @override
   final DateTime createdAt;
   @override
@@ -2648,7 +2763,7 @@ class _$ConvertibleStateImpl implements _ConvertibleState {
 
   @override
   String toString() {
-    return 'ConvertibleState(id: $id, stakeholderId: $stakeholderId, type: $type, status: $status, principal: $principal, valuationCap: $valuationCap, discountPercent: $discountPercent, interestRate: $interestRate, maturityDate: $maturityDate, issueDate: $issueDate, hasMfn: $hasMfn, hasProRata: $hasProRata, roundId: $roundId, conversionRoundId: $conversionRoundId, convertedToShareClassId: $convertedToShareClassId, sharesReceived: $sharesReceived, notes: $notes, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'ConvertibleState(id: $id, stakeholderId: $stakeholderId, type: $type, status: $status, principal: $principal, valuationCap: $valuationCap, discountPercent: $discountPercent, interestRate: $interestRate, maturityDate: $maturityDate, issueDate: $issueDate, hasMfn: $hasMfn, hasProRata: $hasProRata, roundId: $roundId, conversionRoundId: $conversionRoundId, convertedToShareClassId: $convertedToShareClassId, sharesReceived: $sharesReceived, notes: $notes, maturityBehavior: $maturityBehavior, allowsVoluntaryConversion: $allowsVoluntaryConversion, liquidityEventBehavior: $liquidityEventBehavior, liquidityPayoutMultiple: $liquidityPayoutMultiple, dissolutionBehavior: $dissolutionBehavior, preferredShareClassId: $preferredShareClassId, qualifiedFinancingThreshold: $qualifiedFinancingThreshold, createdAt: $createdAt, updatedAt: $updatedAt)';
   }
 
   @override
@@ -2687,6 +2802,30 @@ class _$ConvertibleStateImpl implements _ConvertibleState {
             (identical(other.sharesReceived, sharesReceived) ||
                 other.sharesReceived == sharesReceived) &&
             (identical(other.notes, notes) || other.notes == notes) &&
+            (identical(other.maturityBehavior, maturityBehavior) ||
+                other.maturityBehavior == maturityBehavior) &&
+            (identical(
+                  other.allowsVoluntaryConversion,
+                  allowsVoluntaryConversion,
+                ) ||
+                other.allowsVoluntaryConversion == allowsVoluntaryConversion) &&
+            (identical(other.liquidityEventBehavior, liquidityEventBehavior) ||
+                other.liquidityEventBehavior == liquidityEventBehavior) &&
+            (identical(
+                  other.liquidityPayoutMultiple,
+                  liquidityPayoutMultiple,
+                ) ||
+                other.liquidityPayoutMultiple == liquidityPayoutMultiple) &&
+            (identical(other.dissolutionBehavior, dissolutionBehavior) ||
+                other.dissolutionBehavior == dissolutionBehavior) &&
+            (identical(other.preferredShareClassId, preferredShareClassId) ||
+                other.preferredShareClassId == preferredShareClassId) &&
+            (identical(
+                  other.qualifiedFinancingThreshold,
+                  qualifiedFinancingThreshold,
+                ) ||
+                other.qualifiedFinancingThreshold ==
+                    qualifiedFinancingThreshold) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
             (identical(other.updatedAt, updatedAt) ||
@@ -2714,6 +2853,13 @@ class _$ConvertibleStateImpl implements _ConvertibleState {
     convertedToShareClassId,
     sharesReceived,
     notes,
+    maturityBehavior,
+    allowsVoluntaryConversion,
+    liquidityEventBehavior,
+    liquidityPayoutMultiple,
+    dissolutionBehavior,
+    preferredShareClassId,
+    qualifiedFinancingThreshold,
     createdAt,
     updatedAt,
   ]);
@@ -2754,6 +2900,13 @@ abstract class _ConvertibleState implements ConvertibleState {
     final String? convertedToShareClassId,
     final int? sharesReceived,
     final String? notes,
+    final String? maturityBehavior,
+    final bool allowsVoluntaryConversion,
+    final String? liquidityEventBehavior,
+    final double? liquidityPayoutMultiple,
+    final String? dissolutionBehavior,
+    final String? preferredShareClassId,
+    final double? qualifiedFinancingThreshold,
     required final DateTime createdAt,
     required final DateTime updatedAt,
   }) = _$ConvertibleStateImpl;
@@ -2794,7 +2947,21 @@ abstract class _ConvertibleState implements ConvertibleState {
   @override
   int? get sharesReceived;
   @override
-  String? get notes;
+  String? get notes; // Advanced conversion terms
+  @override
+  String? get maturityBehavior;
+  @override
+  bool get allowsVoluntaryConversion;
+  @override
+  String? get liquidityEventBehavior;
+  @override
+  double? get liquidityPayoutMultiple;
+  @override
+  String? get dissolutionBehavior;
+  @override
+  String? get preferredShareClassId;
+  @override
+  double? get qualifiedFinancingThreshold;
   @override
   DateTime get createdAt;
   @override
@@ -2816,7 +2983,6 @@ EsopPoolState _$EsopPoolStateFromJson(Map<String, dynamic> json) {
 mixin _$EsopPoolState {
   String get id => throw _privateConstructorUsedError;
   String get name => throw _privateConstructorUsedError;
-  String get shareClassId => throw _privateConstructorUsedError;
   String get status => throw _privateConstructorUsedError;
   int get poolSize => throw _privateConstructorUsedError;
   double? get targetPercentage => throw _privateConstructorUsedError;
@@ -2851,7 +3017,6 @@ abstract class $EsopPoolStateCopyWith<$Res> {
   $Res call({
     String id,
     String name,
-    String shareClassId,
     String status,
     int poolSize,
     double? targetPercentage,
@@ -2885,7 +3050,6 @@ class _$EsopPoolStateCopyWithImpl<$Res, $Val extends EsopPoolState>
   $Res call({
     Object? id = null,
     Object? name = null,
-    Object? shareClassId = null,
     Object? status = null,
     Object? poolSize = null,
     Object? targetPercentage = freezed,
@@ -2909,10 +3073,6 @@ class _$EsopPoolStateCopyWithImpl<$Res, $Val extends EsopPoolState>
             name: null == name
                 ? _value.name
                 : name // ignore: cast_nullable_to_non_nullable
-                      as String,
-            shareClassId: null == shareClassId
-                ? _value.shareClassId
-                : shareClassId // ignore: cast_nullable_to_non_nullable
                       as String,
             status: null == status
                 ? _value.status
@@ -2984,7 +3144,6 @@ abstract class _$$EsopPoolStateImplCopyWith<$Res>
   $Res call({
     String id,
     String name,
-    String shareClassId,
     String status,
     int poolSize,
     double? targetPercentage,
@@ -3017,7 +3176,6 @@ class __$$EsopPoolStateImplCopyWithImpl<$Res>
   $Res call({
     Object? id = null,
     Object? name = null,
-    Object? shareClassId = null,
     Object? status = null,
     Object? poolSize = null,
     Object? targetPercentage = freezed,
@@ -3041,10 +3199,6 @@ class __$$EsopPoolStateImplCopyWithImpl<$Res>
         name: null == name
             ? _value.name
             : name // ignore: cast_nullable_to_non_nullable
-                  as String,
-        shareClassId: null == shareClassId
-            ? _value.shareClassId
-            : shareClassId // ignore: cast_nullable_to_non_nullable
                   as String,
         status: null == status
             ? _value.status
@@ -3109,7 +3263,6 @@ class _$EsopPoolStateImpl implements _EsopPoolState {
   const _$EsopPoolStateImpl({
     required this.id,
     required this.name,
-    required this.shareClassId,
     required this.status,
     required this.poolSize,
     this.targetPercentage,
@@ -3132,8 +3285,6 @@ class _$EsopPoolStateImpl implements _EsopPoolState {
   final String id;
   @override
   final String name;
-  @override
-  final String shareClassId;
   @override
   final String status;
   @override
@@ -3165,7 +3316,7 @@ class _$EsopPoolStateImpl implements _EsopPoolState {
 
   @override
   String toString() {
-    return 'EsopPoolState(id: $id, name: $name, shareClassId: $shareClassId, status: $status, poolSize: $poolSize, targetPercentage: $targetPercentage, establishedDate: $establishedDate, resolutionReference: $resolutionReference, roundId: $roundId, defaultVestingScheduleId: $defaultVestingScheduleId, strikePriceMethod: $strikePriceMethod, defaultStrikePrice: $defaultStrikePrice, defaultExpiryYears: $defaultExpiryYears, notes: $notes, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'EsopPoolState(id: $id, name: $name, status: $status, poolSize: $poolSize, targetPercentage: $targetPercentage, establishedDate: $establishedDate, resolutionReference: $resolutionReference, roundId: $roundId, defaultVestingScheduleId: $defaultVestingScheduleId, strikePriceMethod: $strikePriceMethod, defaultStrikePrice: $defaultStrikePrice, defaultExpiryYears: $defaultExpiryYears, notes: $notes, createdAt: $createdAt, updatedAt: $updatedAt)';
   }
 
   @override
@@ -3175,8 +3326,6 @@ class _$EsopPoolStateImpl implements _EsopPoolState {
             other is _$EsopPoolStateImpl &&
             (identical(other.id, id) || other.id == id) &&
             (identical(other.name, name) || other.name == name) &&
-            (identical(other.shareClassId, shareClassId) ||
-                other.shareClassId == shareClassId) &&
             (identical(other.status, status) || other.status == status) &&
             (identical(other.poolSize, poolSize) ||
                 other.poolSize == poolSize) &&
@@ -3211,7 +3360,6 @@ class _$EsopPoolStateImpl implements _EsopPoolState {
     runtimeType,
     id,
     name,
-    shareClassId,
     status,
     poolSize,
     targetPercentage,
@@ -3245,7 +3393,6 @@ abstract class _EsopPoolState implements EsopPoolState {
   const factory _EsopPoolState({
     required final String id,
     required final String name,
-    required final String shareClassId,
     required final String status,
     required final int poolSize,
     final double? targetPercentage,
@@ -3268,8 +3415,6 @@ abstract class _EsopPoolState implements EsopPoolState {
   String get id;
   @override
   String get name;
-  @override
-  String get shareClassId;
   @override
   String get status;
   @override

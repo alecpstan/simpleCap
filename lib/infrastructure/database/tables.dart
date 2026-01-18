@@ -124,6 +124,33 @@ class Convertibles extends Table {
   TextColumn get convertedToShareClassId => text().nullable()();
   IntColumn get sharesReceived => integer().nullable()();
   TextColumn get notes => text().nullable()();
+
+  // ===========================================================================
+  // Advanced Terms - Conversion Triggers & Behaviors
+  // ===========================================================================
+
+  /// What happens at maturity (for notes): convertAtCap, convertAtDiscount, repay, extend, negotiate
+  TextColumn get maturityBehavior => text().nullable()();
+
+  /// Whether voluntary conversion (by board/investor agreement) is allowed
+  BoolColumn get allowsVoluntaryConversion =>
+      boolean().withDefault(const Constant(false))();
+
+  /// Behavior on liquidity event: convertAtCap, cashPayout, greaterOf, negotiate
+  TextColumn get liquidityEventBehavior => text().nullable()();
+
+  /// Cash payout multiplier for liquidity events (e.g., 1.0 = 1x principal)
+  RealColumn get liquidityPayoutMultiple => real().nullable()();
+
+  /// Behavior on dissolution: pariPassu, principalFirst, fullAmount, nothing
+  TextColumn get dissolutionBehavior => text().nullable()();
+
+  /// Preferred share class for conversion (if specified upfront)
+  TextColumn get preferredShareClassId => text().nullable()();
+
+  /// Qualified financing threshold amount (minimum raise to trigger auto-convert)
+  RealColumn get qualifiedFinancingThreshold => real().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -220,7 +247,6 @@ class EsopPools extends Table {
   TextColumn get id => text()();
   TextColumn get companyId => text().references(Companies, #id)();
   TextColumn get name => text()();
-  TextColumn get shareClassId => text().references(ShareClasses, #id)();
   TextColumn get status =>
       text().withDefault(const Constant('draft'))(); // EsopPoolStatus
   IntColumn get poolSize => integer()();

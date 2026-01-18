@@ -66,7 +66,7 @@ final eventCountProvider = AutoDisposeFutureProvider<int>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef EventCountRef = AutoDisposeFutureProviderRef<int>;
-String _$eventLedgerHash() => r'27d0e52e8a2c7a6a729aa4d69fa59b749bcfcacb';
+String _$eventLedgerHash() => r'650f1dd8c036e34f1ba378188ca07f475225e130';
 
 /// Event ledger for appending new events.
 ///

@@ -259,6 +259,16 @@ _$ConvertibleStateImpl _$$ConvertibleStateImplFromJson(
   convertedToShareClassId: json['convertedToShareClassId'] as String?,
   sharesReceived: (json['sharesReceived'] as num?)?.toInt(),
   notes: json['notes'] as String?,
+  maturityBehavior: json['maturityBehavior'] as String?,
+  allowsVoluntaryConversion:
+      json['allowsVoluntaryConversion'] as bool? ?? false,
+  liquidityEventBehavior: json['liquidityEventBehavior'] as String?,
+  liquidityPayoutMultiple: (json['liquidityPayoutMultiple'] as num?)
+      ?.toDouble(),
+  dissolutionBehavior: json['dissolutionBehavior'] as String?,
+  preferredShareClassId: json['preferredShareClassId'] as String?,
+  qualifiedFinancingThreshold: (json['qualifiedFinancingThreshold'] as num?)
+      ?.toDouble(),
   createdAt: DateTime.parse(json['createdAt'] as String),
   updatedAt: DateTime.parse(json['updatedAt'] as String),
 );
@@ -283,6 +293,13 @@ Map<String, dynamic> _$$ConvertibleStateImplToJson(
   'convertedToShareClassId': instance.convertedToShareClassId,
   'sharesReceived': instance.sharesReceived,
   'notes': instance.notes,
+  'maturityBehavior': instance.maturityBehavior,
+  'allowsVoluntaryConversion': instance.allowsVoluntaryConversion,
+  'liquidityEventBehavior': instance.liquidityEventBehavior,
+  'liquidityPayoutMultiple': instance.liquidityPayoutMultiple,
+  'dissolutionBehavior': instance.dissolutionBehavior,
+  'preferredShareClassId': instance.preferredShareClassId,
+  'qualifiedFinancingThreshold': instance.qualifiedFinancingThreshold,
   'createdAt': instance.createdAt.toIso8601String(),
   'updatedAt': instance.updatedAt.toIso8601String(),
 };
@@ -291,7 +308,6 @@ _$EsopPoolStateImpl _$$EsopPoolStateImplFromJson(Map<String, dynamic> json) =>
     _$EsopPoolStateImpl(
       id: json['id'] as String,
       name: json['name'] as String,
-      shareClassId: json['shareClassId'] as String,
       status: json['status'] as String,
       poolSize: (json['poolSize'] as num).toInt(),
       targetPercentage: (json['targetPercentage'] as num?)?.toDouble(),
@@ -311,7 +327,6 @@ Map<String, dynamic> _$$EsopPoolStateImplToJson(_$EsopPoolStateImpl instance) =>
     <String, dynamic>{
       'id': instance.id,
       'name': instance.name,
-      'shareClassId': instance.shareClassId,
       'status': instance.status,
       'poolSize': instance.poolSize,
       'targetPercentage': instance.targetPercentage,

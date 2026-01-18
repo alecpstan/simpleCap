@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 /// A styled card for quick access tools in the dashboard.
 ///
 /// Displays an icon, label, and subtitle in a compact format.
+/// Supports locked state with a lock icon overlay.
 class QuickAccessCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final String? subtitle;
   final Color color;
   final VoidCallback onTap;
+  final bool isLocked;
 
   const QuickAccessCard({
     super.key,
@@ -17,52 +19,76 @@ class QuickAccessCard extends StatelessWidget {
     this.subtitle,
     required this.color,
     required this.onTap,
+    this.isLocked = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final effectiveColor = isLocked ? theme.colorScheme.outline : color;
 
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 22),
+        onTap: isLocked ? null : onTap,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: effectiveColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: effectiveColor, size: 22),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    label,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: isLocked ? theme.colorScheme.outline : null,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                label,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  subtitle!,
-                  style: theme.textTheme.bodySmall?.copyWith(
+            ),
+            if (isLocked)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Icon(
+                    Icons.lock,
+                    size: 14,
                     color: theme.colorScheme.outline,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -106,6 +132,7 @@ class ToolCardData {
   final String? subtitle;
   final Color color;
   final VoidCallback onTap;
+  final bool isLocked;
 
   const ToolCardData({
     required this.id,
@@ -114,6 +141,7 @@ class ToolCardData {
     this.subtitle,
     required this.color,
     required this.onTap,
+    this.isLocked = false,
   });
 
   QuickAccessCard toCard() => QuickAccessCard(
@@ -122,6 +150,7 @@ class ToolCardData {
     subtitle: subtitle,
     color: color,
     onTap: onTap,
+    isLocked: isLocked,
   );
 }
 

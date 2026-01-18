@@ -49,10 +49,6 @@ class EsopPool with _$EsopPool {
     /// Name of the pool (e.g., "2024 ESOP", "Employee Option Pool").
     required String name,
 
-    /// Share class that pool options convert into upon exercise.
-    /// Typically an ordinary share class.
-    required String shareClassId,
-
     /// Current status of the pool.
     @Default(EsopPoolStatus.draft) EsopPoolStatus status,
 
@@ -122,7 +118,6 @@ class EsopPool with _$EsopPool {
 class EsopPoolCreationData with _$EsopPoolCreationData {
   const factory EsopPoolCreationData({
     required String poolId,
-    required String shareClassId,
     required int poolSize,
     double? targetPercentage,
     String? resolutionReference,

@@ -443,6 +443,56 @@ Map<String, dynamic> _$$SharesRepurchasedImplToJson(
   'type': instance.$type,
 };
 
+_$HoldingDeletedImpl _$$HoldingDeletedImplFromJson(Map<String, dynamic> json) =>
+    _$HoldingDeletedImpl(
+      companyId: json['companyId'] as String,
+      holdingId: json['holdingId'] as String,
+      timestamp: DateTime.parse(json['timestamp'] as String),
+      actorId: json['actorId'] as String?,
+      $type: json['type'] as String?,
+    );
+
+Map<String, dynamic> _$$HoldingDeletedImplToJson(
+  _$HoldingDeletedImpl instance,
+) => <String, dynamic>{
+  'companyId': instance.companyId,
+  'holdingId': instance.holdingId,
+  'timestamp': instance.timestamp.toIso8601String(),
+  'actorId': instance.actorId,
+  'type': instance.$type,
+};
+
+_$HoldingUpdatedImpl _$$HoldingUpdatedImplFromJson(Map<String, dynamic> json) =>
+    _$HoldingUpdatedImpl(
+      companyId: json['companyId'] as String,
+      holdingId: json['holdingId'] as String,
+      shareCount: (json['shareCount'] as num?)?.toInt(),
+      costBasis: (json['costBasis'] as num?)?.toDouble(),
+      acquiredDate: json['acquiredDate'] == null
+          ? null
+          : DateTime.parse(json['acquiredDate'] as String),
+      shareClassId: json['shareClassId'] as String?,
+      vestingScheduleId: json['vestingScheduleId'] as String?,
+      timestamp: DateTime.parse(json['timestamp'] as String),
+      actorId: json['actorId'] as String?,
+      $type: json['type'] as String?,
+    );
+
+Map<String, dynamic> _$$HoldingUpdatedImplToJson(
+  _$HoldingUpdatedImpl instance,
+) => <String, dynamic>{
+  'companyId': instance.companyId,
+  'holdingId': instance.holdingId,
+  'shareCount': instance.shareCount,
+  'costBasis': instance.costBasis,
+  'acquiredDate': instance.acquiredDate?.toIso8601String(),
+  'shareClassId': instance.shareClassId,
+  'vestingScheduleId': instance.vestingScheduleId,
+  'timestamp': instance.timestamp.toIso8601String(),
+  'actorId': instance.actorId,
+  'type': instance.$type,
+};
+
 _$HoldingVestingUpdatedImpl _$$HoldingVestingUpdatedImplFromJson(
   Map<String, dynamic> json,
 ) => _$HoldingVestingUpdatedImpl(
@@ -484,6 +534,16 @@ _$ConvertibleIssuedImpl _$$ConvertibleIssuedImplFromJson(
   hasProRata: json['hasProRata'] as bool? ?? false,
   roundId: json['roundId'] as String?,
   notes: json['notes'] as String?,
+  maturityBehavior: json['maturityBehavior'] as String?,
+  allowsVoluntaryConversion:
+      json['allowsVoluntaryConversion'] as bool? ?? false,
+  liquidityEventBehavior: json['liquidityEventBehavior'] as String?,
+  liquidityPayoutMultiple: (json['liquidityPayoutMultiple'] as num?)
+      ?.toDouble(),
+  dissolutionBehavior: json['dissolutionBehavior'] as String?,
+  preferredShareClassId: json['preferredShareClassId'] as String?,
+  qualifiedFinancingThreshold: (json['qualifiedFinancingThreshold'] as num?)
+      ?.toDouble(),
   timestamp: DateTime.parse(json['timestamp'] as String),
   actorId: json['actorId'] as String?,
   $type: json['type'] as String?,
@@ -506,6 +566,13 @@ Map<String, dynamic> _$$ConvertibleIssuedImplToJson(
   'hasProRata': instance.hasProRata,
   'roundId': instance.roundId,
   'notes': instance.notes,
+  'maturityBehavior': instance.maturityBehavior,
+  'allowsVoluntaryConversion': instance.allowsVoluntaryConversion,
+  'liquidityEventBehavior': instance.liquidityEventBehavior,
+  'liquidityPayoutMultiple': instance.liquidityPayoutMultiple,
+  'dissolutionBehavior': instance.dissolutionBehavior,
+  'preferredShareClassId': instance.preferredShareClassId,
+  'qualifiedFinancingThreshold': instance.qualifiedFinancingThreshold,
   'timestamp': instance.timestamp.toIso8601String(),
   'actorId': instance.actorId,
   'type': instance.$type,
@@ -553,7 +620,7 @@ _$ConvertibleConvertedImpl _$$ConvertibleConvertedImplFromJson(
 ) => _$ConvertibleConvertedImpl(
   companyId: json['companyId'] as String,
   convertibleId: json['convertibleId'] as String,
-  roundId: json['roundId'] as String,
+  roundId: json['roundId'] as String?,
   toShareClassId: json['toShareClassId'] as String,
   sharesReceived: (json['sharesReceived'] as num).toInt(),
   conversionPrice: (json['conversionPrice'] as num).toDouble(),
@@ -598,13 +665,72 @@ Map<String, dynamic> _$$ConvertibleCancelledImplToJson(
   'type': instance.$type,
 };
 
+_$ConvertibleUpdatedImpl _$$ConvertibleUpdatedImplFromJson(
+  Map<String, dynamic> json,
+) => _$ConvertibleUpdatedImpl(
+  companyId: json['companyId'] as String,
+  convertibleId: json['convertibleId'] as String,
+  principal: (json['principal'] as num?)?.toDouble(),
+  valuationCap: (json['valuationCap'] as num?)?.toDouble(),
+  discountPercent: (json['discountPercent'] as num?)?.toDouble(),
+  interestRate: (json['interestRate'] as num?)?.toDouble(),
+  issueDate: json['issueDate'] == null
+      ? null
+      : DateTime.parse(json['issueDate'] as String),
+  maturityDate: json['maturityDate'] == null
+      ? null
+      : DateTime.parse(json['maturityDate'] as String),
+  hasMfn: json['hasMfn'] as bool?,
+  hasProRata: json['hasProRata'] as bool?,
+  roundId: json['roundId'] as String?,
+  notes: json['notes'] as String?,
+  maturityBehavior: json['maturityBehavior'] as String?,
+  allowsVoluntaryConversion: json['allowsVoluntaryConversion'] as bool?,
+  liquidityEventBehavior: json['liquidityEventBehavior'] as String?,
+  liquidityPayoutMultiple: (json['liquidityPayoutMultiple'] as num?)
+      ?.toDouble(),
+  dissolutionBehavior: json['dissolutionBehavior'] as String?,
+  preferredShareClassId: json['preferredShareClassId'] as String?,
+  qualifiedFinancingThreshold: (json['qualifiedFinancingThreshold'] as num?)
+      ?.toDouble(),
+  timestamp: DateTime.parse(json['timestamp'] as String),
+  actorId: json['actorId'] as String?,
+  $type: json['type'] as String?,
+);
+
+Map<String, dynamic> _$$ConvertibleUpdatedImplToJson(
+  _$ConvertibleUpdatedImpl instance,
+) => <String, dynamic>{
+  'companyId': instance.companyId,
+  'convertibleId': instance.convertibleId,
+  'principal': instance.principal,
+  'valuationCap': instance.valuationCap,
+  'discountPercent': instance.discountPercent,
+  'interestRate': instance.interestRate,
+  'issueDate': instance.issueDate?.toIso8601String(),
+  'maturityDate': instance.maturityDate?.toIso8601String(),
+  'hasMfn': instance.hasMfn,
+  'hasProRata': instance.hasProRata,
+  'roundId': instance.roundId,
+  'notes': instance.notes,
+  'maturityBehavior': instance.maturityBehavior,
+  'allowsVoluntaryConversion': instance.allowsVoluntaryConversion,
+  'liquidityEventBehavior': instance.liquidityEventBehavior,
+  'liquidityPayoutMultiple': instance.liquidityPayoutMultiple,
+  'dissolutionBehavior': instance.dissolutionBehavior,
+  'preferredShareClassId': instance.preferredShareClassId,
+  'qualifiedFinancingThreshold': instance.qualifiedFinancingThreshold,
+  'timestamp': instance.timestamp.toIso8601String(),
+  'actorId': instance.actorId,
+  'type': instance.$type,
+};
+
 _$EsopPoolCreatedImpl _$$EsopPoolCreatedImplFromJson(
   Map<String, dynamic> json,
 ) => _$EsopPoolCreatedImpl(
   companyId: json['companyId'] as String,
   poolId: json['poolId'] as String,
   name: json['name'] as String,
-  shareClassId: json['shareClassId'] as String,
   poolSize: (json['poolSize'] as num).toInt(),
   targetPercentage: (json['targetPercentage'] as num?)?.toDouble(),
   establishedDate: DateTime.parse(json['establishedDate'] as String),
@@ -626,7 +752,6 @@ Map<String, dynamic> _$$EsopPoolCreatedImplToJson(
   'companyId': instance.companyId,
   'poolId': instance.poolId,
   'name': instance.name,
-  'shareClassId': instance.shareClassId,
   'poolSize': instance.poolSize,
   'targetPercentage': instance.targetPercentage,
   'establishedDate': instance.establishedDate.toIso8601String(),
@@ -691,6 +816,88 @@ Map<String, dynamic> _$$EsopPoolActivatedImplToJson(
 ) => <String, dynamic>{
   'companyId': instance.companyId,
   'poolId': instance.poolId,
+  'timestamp': instance.timestamp.toIso8601String(),
+  'actorId': instance.actorId,
+  'type': instance.$type,
+};
+
+_$EsopPoolUpdatedImpl _$$EsopPoolUpdatedImplFromJson(
+  Map<String, dynamic> json,
+) => _$EsopPoolUpdatedImpl(
+  companyId: json['companyId'] as String,
+  poolId: json['poolId'] as String,
+  name: json['name'] as String?,
+  targetPercentage: (json['targetPercentage'] as num?)?.toDouble(),
+  defaultVestingScheduleId: json['defaultVestingScheduleId'] as String?,
+  strikePriceMethod: json['strikePriceMethod'] as String?,
+  defaultStrikePrice: (json['defaultStrikePrice'] as num?)?.toDouble(),
+  defaultExpiryYears: (json['defaultExpiryYears'] as num?)?.toInt(),
+  notes: json['notes'] as String?,
+  timestamp: DateTime.parse(json['timestamp'] as String),
+  actorId: json['actorId'] as String?,
+  $type: json['type'] as String?,
+);
+
+Map<String, dynamic> _$$EsopPoolUpdatedImplToJson(
+  _$EsopPoolUpdatedImpl instance,
+) => <String, dynamic>{
+  'companyId': instance.companyId,
+  'poolId': instance.poolId,
+  'name': instance.name,
+  'targetPercentage': instance.targetPercentage,
+  'defaultVestingScheduleId': instance.defaultVestingScheduleId,
+  'strikePriceMethod': instance.strikePriceMethod,
+  'defaultStrikePrice': instance.defaultStrikePrice,
+  'defaultExpiryYears': instance.defaultExpiryYears,
+  'notes': instance.notes,
+  'timestamp': instance.timestamp.toIso8601String(),
+  'actorId': instance.actorId,
+  'type': instance.$type,
+};
+
+_$EsopPoolDeletedImpl _$$EsopPoolDeletedImplFromJson(
+  Map<String, dynamic> json,
+) => _$EsopPoolDeletedImpl(
+  companyId: json['companyId'] as String,
+  poolId: json['poolId'] as String,
+  timestamp: DateTime.parse(json['timestamp'] as String),
+  actorId: json['actorId'] as String?,
+  $type: json['type'] as String?,
+);
+
+Map<String, dynamic> _$$EsopPoolDeletedImplToJson(
+  _$EsopPoolDeletedImpl instance,
+) => <String, dynamic>{
+  'companyId': instance.companyId,
+  'poolId': instance.poolId,
+  'timestamp': instance.timestamp.toIso8601String(),
+  'actorId': instance.actorId,
+  'type': instance.$type,
+};
+
+_$EsopPoolExpansionRevertedImpl _$$EsopPoolExpansionRevertedImplFromJson(
+  Map<String, dynamic> json,
+) => _$EsopPoolExpansionRevertedImpl(
+  companyId: json['companyId'] as String,
+  expansionId: json['expansionId'] as String,
+  poolId: json['poolId'] as String,
+  previousSize: (json['previousSize'] as num).toInt(),
+  revertedSize: (json['revertedSize'] as num).toInt(),
+  sharesRemoved: (json['sharesRemoved'] as num).toInt(),
+  timestamp: DateTime.parse(json['timestamp'] as String),
+  actorId: json['actorId'] as String?,
+  $type: json['type'] as String?,
+);
+
+Map<String, dynamic> _$$EsopPoolExpansionRevertedImplToJson(
+  _$EsopPoolExpansionRevertedImpl instance,
+) => <String, dynamic>{
+  'companyId': instance.companyId,
+  'expansionId': instance.expansionId,
+  'poolId': instance.poolId,
+  'previousSize': instance.previousSize,
+  'revertedSize': instance.revertedSize,
+  'sharesRemoved': instance.sharesRemoved,
   'timestamp': instance.timestamp.toIso8601String(),
   'actorId': instance.actorId,
   'type': instance.$type,
@@ -769,6 +976,12 @@ _$OptionsExercisedImpl _$$OptionsExercisedImplFromJson(
   exerciseDate: DateTime.parse(json['exerciseDate'] as String),
   timestamp: DateTime.parse(json['timestamp'] as String),
   actorId: json['actorId'] as String?,
+  exerciseType: json['exerciseType'] as String? ?? 'cash',
+  sharesWithheldForStrike: (json['sharesWithheldForStrike'] as num?)?.toInt(),
+  sharesWithheldForTax: (json['sharesWithheldForTax'] as num?)?.toInt(),
+  netSharesReceived: (json['netSharesReceived'] as num?)?.toInt(),
+  fairMarketValue: (json['fairMarketValue'] as num?)?.toDouble(),
+  proceedsReceived: (json['proceedsReceived'] as num?)?.toDouble(),
   $type: json['type'] as String?,
 );
 
@@ -783,6 +996,12 @@ Map<String, dynamic> _$$OptionsExercisedImplToJson(
   'exerciseDate': instance.exerciseDate.toIso8601String(),
   'timestamp': instance.timestamp.toIso8601String(),
   'actorId': instance.actorId,
+  'exerciseType': instance.exerciseType,
+  'sharesWithheldForStrike': instance.sharesWithheldForStrike,
+  'sharesWithheldForTax': instance.sharesWithheldForTax,
+  'netSharesReceived': instance.netSharesReceived,
+  'fairMarketValue': instance.fairMarketValue,
+  'proceedsReceived': instance.proceedsReceived,
   'type': instance.$type,
 };
 
@@ -829,6 +1048,50 @@ Map<String, dynamic> _$$OptionGrantStatusChangedImplToJson(
   'grantId': instance.grantId,
   'previousStatus': instance.previousStatus,
   'newStatus': instance.newStatus,
+  'timestamp': instance.timestamp.toIso8601String(),
+  'actorId': instance.actorId,
+  'type': instance.$type,
+};
+
+_$OptionGrantUpdatedImpl _$$OptionGrantUpdatedImplFromJson(
+  Map<String, dynamic> json,
+) => _$OptionGrantUpdatedImpl(
+  companyId: json['companyId'] as String,
+  grantId: json['grantId'] as String,
+  shareClassId: json['shareClassId'] as String?,
+  esopPoolId: json['esopPoolId'] as String?,
+  quantity: (json['quantity'] as num?)?.toInt(),
+  strikePrice: (json['strikePrice'] as num?)?.toDouble(),
+  grantDate: json['grantDate'] == null
+      ? null
+      : DateTime.parse(json['grantDate'] as String),
+  expiryDate: json['expiryDate'] == null
+      ? null
+      : DateTime.parse(json['expiryDate'] as String),
+  vestingScheduleId: json['vestingScheduleId'] as String?,
+  roundId: json['roundId'] as String?,
+  allowsEarlyExercise: json['allowsEarlyExercise'] as bool?,
+  notes: json['notes'] as String?,
+  timestamp: DateTime.parse(json['timestamp'] as String),
+  actorId: json['actorId'] as String?,
+  $type: json['type'] as String?,
+);
+
+Map<String, dynamic> _$$OptionGrantUpdatedImplToJson(
+  _$OptionGrantUpdatedImpl instance,
+) => <String, dynamic>{
+  'companyId': instance.companyId,
+  'grantId': instance.grantId,
+  'shareClassId': instance.shareClassId,
+  'esopPoolId': instance.esopPoolId,
+  'quantity': instance.quantity,
+  'strikePrice': instance.strikePrice,
+  'grantDate': instance.grantDate?.toIso8601String(),
+  'expiryDate': instance.expiryDate?.toIso8601String(),
+  'vestingScheduleId': instance.vestingScheduleId,
+  'roundId': instance.roundId,
+  'allowsEarlyExercise': instance.allowsEarlyExercise,
+  'notes': instance.notes,
   'timestamp': instance.timestamp.toIso8601String(),
   'actorId': instance.actorId,
   'type': instance.$type,
@@ -881,6 +1144,12 @@ _$WarrantExercisedImpl _$$WarrantExercisedImplFromJson(
   exerciseDate: DateTime.parse(json['exerciseDate'] as String),
   timestamp: DateTime.parse(json['timestamp'] as String),
   actorId: json['actorId'] as String?,
+  exerciseType: json['exerciseType'] as String? ?? 'cash',
+  sharesWithheldForStrike: (json['sharesWithheldForStrike'] as num?)?.toInt(),
+  sharesWithheldForTax: (json['sharesWithheldForTax'] as num?)?.toInt(),
+  netSharesReceived: (json['netSharesReceived'] as num?)?.toInt(),
+  fairMarketValue: (json['fairMarketValue'] as num?)?.toDouble(),
+  proceedsReceived: (json['proceedsReceived'] as num?)?.toDouble(),
   $type: json['type'] as String?,
 );
 
@@ -895,6 +1164,12 @@ Map<String, dynamic> _$$WarrantExercisedImplToJson(
   'exerciseDate': instance.exerciseDate.toIso8601String(),
   'timestamp': instance.timestamp.toIso8601String(),
   'actorId': instance.actorId,
+  'exerciseType': instance.exerciseType,
+  'sharesWithheldForStrike': instance.sharesWithheldForStrike,
+  'sharesWithheldForTax': instance.sharesWithheldForTax,
+  'netSharesReceived': instance.netSharesReceived,
+  'fairMarketValue': instance.fairMarketValue,
+  'proceedsReceived': instance.proceedsReceived,
   'type': instance.$type,
 };
 

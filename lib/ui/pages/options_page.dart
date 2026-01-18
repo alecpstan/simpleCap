@@ -18,6 +18,20 @@ class OptionsPage extends ConsumerWidget {
     final shareClasses = ref.watch(shareClassesStreamProvider);
     final vestingSchedules = ref.watch(vestingSchedulesStreamProvider);
     final esopPools = ref.watch(esopPoolsStreamProvider);
+    final deleteEnabled = ref.watch(deleteEnabledProvider).valueOrNull ?? false;
+    final ownership = ref.watch(ownershipSummaryProvider).valueOrNull;
+    final effectiveValuation = ref
+        .watch(effectiveValuationProvider)
+        .valueOrNull;
+
+    // Calculate current share price for "in the money" display
+    double? currentSharePrice;
+    if (effectiveValuation != null && ownership != null) {
+      final totalShares = ownership.totalIssuedShares;
+      if (totalShares > 0) {
+        currentSharePrice = effectiveValuation.value / totalShares;
+      }
+    }
 
     if (companyId == null) {
       return Scaffold(
@@ -72,6 +86,8 @@ class OptionsPage extends ConsumerWidget {
                   shareClasses.valueOrNull ?? [],
                   vestingSchedules.valueOrNull ?? [],
                   esopPools.valueOrNull ?? [],
+                  deleteEnabled,
+                  currentSharePrice,
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -155,22 +171,87 @@ class OptionsPage extends ConsumerWidget {
     List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
     List<EsopPool> esopPools,
+    bool deleteEnabled,
+    double? currentSharePrice,
   ) {
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 80),
-      itemCount: options.length,
-      itemBuilder: (context, index) {
-        final option = options[index];
-        return _buildOptionCard(
-          context,
-          ref,
-          option,
-          stakeholders,
-          shareClasses,
-          vestingSchedules,
-          esopPools,
-        );
-      },
+    // Calculate exercisable options
+    final exercisableInfo = _calculateExercisableOptions(
+      options,
+      vestingSchedules,
+    );
+
+    return Column(
+      children: [
+        // Exercisable options notice
+        if (exercisableInfo.totalExercisable > 0)
+          CollapsibleNotice.action(
+            persistKey: 'options_exercisable_notice',
+            title: 'Options Ready to Exercise',
+            count: exercisableInfo.grantsWithExercisable,
+            message:
+                '${exercisableInfo.totalExercisable} vested options across '
+                '${exercisableInfo.grantsWithExercisable} grant(s) are ready to be exercised. '
+                'Tap on a grant to view exercise options.',
+          ),
+        // Options list
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 80),
+            itemCount: options.length,
+            itemBuilder: (context, index) {
+              final option = options[index];
+              return _buildOptionCard(
+                context,
+                ref,
+                option,
+                stakeholders,
+                shareClasses,
+                vestingSchedules,
+                esopPools,
+                deleteEnabled,
+                currentSharePrice,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Calculate how many options are exercisable across all grants.
+  _ExercisableInfo _calculateExercisableOptions(
+    List<OptionGrant> options,
+    List<VestingSchedule> vestingSchedules,
+  ) {
+    final scheduleMap = {for (final s in vestingSchedules) s.id: s};
+    int totalExercisable = 0;
+    int grantsWithExercisable = 0;
+
+    for (final option in options) {
+      // Skip non-active options
+      final status = option.status;
+      if (status != 'active' &&
+          status != 'pending' &&
+          status != 'partiallyExercised') {
+        continue;
+      }
+
+      final schedule = option.vestingScheduleId != null
+          ? scheduleMap[option.vestingScheduleId]
+          : null;
+      final vestingStatus = _calculateVestingStatus(option, schedule);
+
+      // Exercisable = vested - already exercised
+      final exercisable = vestingStatus.vestedQuantity - option.exercisedCount;
+      if (exercisable > 0) {
+        totalExercisable += exercisable;
+        grantsWithExercisable++;
+      }
+    }
+
+    return _ExercisableInfo(
+      totalExercisable: totalExercisable,
+      grantsWithExercisable: grantsWithExercisable,
     );
   }
 
@@ -182,6 +263,8 @@ class OptionsPage extends ConsumerWidget {
     List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
     List<EsopPool> esopPools,
+    bool deleteEnabled,
+    double? currentSharePrice,
   ) {
     final stakeholder = stakeholders.firstWhere(
       (s) => s.id == option.stakeholderId,
@@ -316,6 +399,19 @@ class OptionsPage extends ConsumerWidget {
             _buildDetailRow('Early Exercise', 'Allowed'),
           if (option.notes != null && option.notes!.isNotEmpty)
             _buildDetailRow('Notes', option.notes!),
+
+          // In the Money section
+          if (currentSharePrice != null) ...[
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            _buildInTheMoneySection(
+              context,
+              option.strikePrice,
+              currentSharePrice,
+              outstanding,
+            ),
+          ],
         ],
       ),
       actions: [
@@ -332,7 +428,14 @@ class OptionsPage extends ConsumerWidget {
           ),
           tooltip: 'Edit',
         ),
-        if (outstanding > 0 && option.status == 'active')
+        // Exercise button - only show if:
+        // 1. Outstanding options > 0 and status is active, AND
+        // 2. Either allowsEarlyExercise is true OR options are fully vested
+        if (outstanding > 0 &&
+            option.status == 'active' &&
+            (option.allowsEarlyExercise ||
+                vestingStatus.vestingPercent >= 100 ||
+                vestingSchedule == null))
           IconButton(
             icon: const Icon(Icons.play_arrow_outlined),
             onPressed: () => _showExerciseDialog(
@@ -349,14 +452,24 @@ class OptionsPage extends ConsumerWidget {
             onPressed: () => _showUnexerciseDialog(context, ref, option),
             tooltip: 'Undo Exercise',
           ),
-        IconButton(
-          icon: Icon(
-            Icons.delete_outlined,
-            color: Theme.of(context).colorScheme.error,
+        if (outstanding > 0 && option.status == 'active')
+          IconButton(
+            icon: Icon(
+              Icons.cancel_outlined,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => _confirmCancel(context, ref, option),
+            tooltip: 'Cancel',
           ),
-          onPressed: () => _confirmDelete(context, ref, option),
-          tooltip: 'Delete',
-        ),
+        if (deleteEnabled)
+          IconButton(
+            icon: Icon(
+              Icons.delete_outlined,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => _confirmDelete(context, ref, option),
+            tooltip: 'Delete',
+          ),
       ],
     );
   }
@@ -481,6 +594,68 @@ class OptionsPage extends ConsumerWidget {
             ),
           ),
           Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInTheMoneySection(
+    BuildContext context,
+    double strikePrice,
+    double currentSharePrice,
+    int outstanding,
+  ) {
+    final isInTheMoney = currentSharePrice > strikePrice;
+    final intrinsicValue = isInTheMoney
+        ? (currentSharePrice - strikePrice) * outstanding
+        : 0.0;
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isInTheMoney
+            ? Colors.green.withValues(alpha: 0.1)
+            : Colors.grey.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isInTheMoney
+              ? Colors.green.withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isInTheMoney ? Icons.trending_up : Icons.trending_flat,
+            color: isInTheMoney ? Colors.green : Colors.grey,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isInTheMoney ? 'In The Money' : 'Out of Money',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: isInTheMoney ? Colors.green : Colors.grey,
+                  ),
+                ),
+                Text(
+                  'FMV: ${Formatters.currency(currentSharePrice)} vs Strike: ${Formatters.currency(strikePrice)}',
+                  style: theme.textTheme.bodySmall,
+                ),
+                if (isInTheMoney)
+                  Text(
+                    'Intrinsic value: ${Formatters.currency(intrinsicValue)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -760,9 +935,19 @@ class OptionsPage extends ConsumerWidget {
                 final commands = ref.read(optionGrantCommandsProvider.notifier);
 
                 if (isEditing) {
-                  // TODO: Implement updateOptionGrant in OptionGrantCommands
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Edit not yet implemented')),
+                  await commands.updateOptionGrant(
+                    grantId: option!.id,
+                    shareClassId: selectedShareClassId,
+                    esopPoolId: selectedEsopPoolId,
+                    quantity: quantity,
+                    strikePrice: strike,
+                    grantDate: grantDate,
+                    expiryDate: expiryDate,
+                    vestingScheduleId: selectedVestingScheduleId,
+                    allowsEarlyExercise: allowsEarlyExercise,
+                    notes: notesController.text.trim().isEmpty
+                        ? null
+                        : notesController.text.trim(),
                   );
                 } else {
                   await commands.grantOptions(
@@ -791,155 +976,32 @@ class OptionsPage extends ConsumerWidget {
     );
   }
 
-  void _showExerciseDialog(
+  Future<void> _showExerciseDialog(
     BuildContext context,
     WidgetRef ref,
     OptionGrant option,
     int maxShares,
-  ) {
-    final sharesController = TextEditingController();
-    final effectiveValuation = ref.read(effectiveValuationProvider).valueOrNull;
-    final ownership = ref.read(ownershipSummaryProvider).valueOrNull;
-
-    // Calculate current price per share if valuation available
-    double? pricePerShare;
-    if (effectiveValuation != null && ownership != null) {
-      final totalShares = ownership.totalIssuedShares;
-      if (totalShares > 0) {
-        pricePerShare = effectiveValuation.value / totalShares;
-      }
+  ) async {
+    if (maxShares <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No vested options available to exercise'),
+        ),
+      );
+      return;
     }
 
-    showDialog(
+    // Get stakeholder name
+    final stakeholders = ref.read(stakeholdersStreamProvider).valueOrNull ?? [];
+    final stakeholder = stakeholders
+        .where((s) => s.id == option.stakeholderId)
+        .firstOrNull;
+
+    await ExerciseOptionsDialog.show(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final shares = int.tryParse(sharesController.text) ?? 0;
-          final totalCost = shares * option.strikePrice;
-          final currentValue = pricePerShare != null
-              ? shares * pricePerShare
-              : null;
-          final potentialGain = currentValue != null
-              ? currentValue - totalCost
-              : null;
-
-          return AlertDialog(
-            title: const Text('Exercise Options'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Up to ${Formatters.number(maxShares)} vested options available',
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: sharesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Options to Exercise',
-                    ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => setDialogState(() {}),
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Exercise Summary',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildSummaryRow(
-                    context,
-                    'Strike Price',
-                    Formatters.currency(option.strikePrice),
-                  ),
-                  _buildSummaryRow(
-                    context,
-                    'Total Cost to Exercise',
-                    Formatters.currency(totalCost),
-                    highlight: true,
-                  ),
-                  if (pricePerShare != null) ...[
-                    const SizedBox(height: 8),
-                    _buildSummaryRow(
-                      context,
-                      'Current Price/Share',
-                      Formatters.currency(pricePerShare),
-                    ),
-                    _buildSummaryRow(
-                      context,
-                      'Current Value',
-                      Formatters.currency(currentValue!),
-                    ),
-                    _buildSummaryRow(
-                      context,
-                      'Potential Gain',
-                      Formatters.currency(potentialGain!),
-                      valueColor: potentialGain >= 0
-                          ? Colors.green
-                          : Colors.red,
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          size: 18,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Exercising converts options to actual shares. You pay the strike price to acquire shares.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: shares > 0 && shares <= maxShares
-                    ? () async {
-                        await ref
-                            .read(optionGrantCommandsProvider.notifier)
-                            .exerciseOptions(
-                              grantId: option.id,
-                              exercisedCount: shares,
-                              exercisePrice: option.strikePrice,
-                              exerciseDate: DateTime.now(),
-                            );
-
-                        if (context.mounted) Navigator.pop(context);
-                      }
-                    : null,
-                child: const Text('Exercise'),
-              ),
-            ],
-          );
-        },
-      ),
+      option: option,
+      maxExercisable: maxShares,
+      stakeholderName: stakeholder?.name,
     );
   }
 
@@ -1024,49 +1086,21 @@ class OptionsPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildSummaryRow(
-    BuildContext context,
-    String label,
-    String value, {
-    bool highlight = false,
-    Color? valueColor,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: highlight
-                ? Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)
-                : Theme.of(context).textTheme.bodyMedium,
-          ),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: highlight ? FontWeight.bold : FontWeight.w500,
-              color: valueColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _confirmDelete(
+  Future<void> _confirmCancel(
     BuildContext context,
     WidgetRef ref,
     OptionGrant option,
   ) async {
-    final confirmed = await ConfirmDialog.showDelete(
+    final outstanding =
+        option.quantity - option.exercisedCount - option.cancelledCount;
+
+    final confirmed = await ConfirmDialog.show(
       context: context,
-      itemName: 'this option grant',
-      additionalMessage: option.exercisedCount > 0
-          ? 'Warning: ${option.exercisedCount} options have already been exercised.'
-          : null,
+      title: 'Cancel Options',
+      message:
+          'Are you sure you want to cancel the remaining $outstanding option(s)? This will record a cancellation event.',
+      confirmLabel: 'Cancel Options',
+      isDestructive: true,
     );
 
     if (confirmed && context.mounted) {
@@ -1074,10 +1108,56 @@ class OptionsPage extends ConsumerWidget {
           .read(optionGrantCommandsProvider.notifier)
           .cancelOptions(
             grantId: option.id,
-            cancelledCount:
-                option.quantity - option.exercisedCount - option.cancelledCount,
-            reason: 'Deleted by user',
+            cancelledCount: outstanding,
+            reason: 'Cancelled by user',
           );
+    }
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    OptionGrant option,
+  ) async {
+    // Preview cascade impact
+    final cascadeImpact = await ref
+        .read(eventLedgerProvider.notifier)
+        .previewCascadeDelete(
+          entityId: option.id,
+          entityType: EntityType.optionGrant,
+        );
+
+    final impactLines = <String>[];
+    cascadeImpact.forEach((type, count) {
+      if (count > 0) {
+        impactLines.add('• $count ${type.name}(s)');
+      }
+    });
+
+    String message;
+    if (impactLines.isEmpty) {
+      message = option.exercisedCount > 0
+          ? 'Warning: ${option.exercisedCount} options have already been exercised. This cannot be undone.'
+          : 'Are you sure you want to permanently delete this option grant? This cannot be undone.';
+    } else {
+      message = 'This will permanently delete:\n${impactLines.join('\n')}\n\n';
+      if (option.exercisedCount > 0) {
+        message +=
+            'Warning: ${option.exercisedCount} options have already been exercised.\n';
+      }
+      message += 'This cannot be undone.';
+    }
+
+    final confirmed = await ConfirmDialog.showDelete(
+      context: context,
+      itemName: 'option grant',
+      customMessage: message,
+    );
+
+    if (confirmed && context.mounted) {
+      await ref
+          .read(optionGrantCommandsProvider.notifier)
+          .deleteOptionGrant(grantId: option.id);
     }
   }
 
@@ -1150,5 +1230,16 @@ class _VestingStatusLocal {
     required this.vestingEndDate,
     required this.nextVestingDate,
     required this.nextVestingQuantity,
+  });
+}
+
+/// Information about exercisable options across all grants.
+class _ExercisableInfo {
+  final int totalExercisable;
+  final int grantsWithExercisable;
+
+  const _ExercisableInfo({
+    required this.totalExercisable,
+    required this.grantsWithExercisable,
   });
 }

@@ -24,12 +24,14 @@ export 'inputs/currency_field.dart';
 export 'vesting/vesting_progress.dart';
 
 // Feedback components
+export 'feedback/collapsible_notice.dart';
 export 'feedback/empty_state.dart';
 export 'feedback/info_box.dart';
 export 'feedback/snackbars.dart';
 
 // Dialog components
 export 'dialogs/dialogs.dart';
+export 'dialogs/exercise_dialogs.dart';
 export 'dialogs/instrument_detail_dialogs.dart';
 
 // Avatar components

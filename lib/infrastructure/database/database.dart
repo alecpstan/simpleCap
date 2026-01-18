@@ -40,7 +40,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -127,6 +127,51 @@ class AppDatabase extends _$AppDatabase {
 
           // Create snapshots table
           await m.createTable(snapshots);
+        }
+        // Migration from version 8 to 9: Add advanced conversion terms to convertibles
+        if (from < 9) {
+          final convertiblesColumns = await customSelect(
+            "PRAGMA table_info(convertibles)",
+          ).get();
+          final columnNames = convertiblesColumns
+              .map((r) => r.read<String>('name'))
+              .toSet();
+
+          if (!columnNames.contains('maturity_behavior')) {
+            await customStatement(
+              'ALTER TABLE convertibles ADD COLUMN maturity_behavior TEXT',
+            );
+          }
+          if (!columnNames.contains('allows_voluntary_conversion')) {
+            await customStatement(
+              'ALTER TABLE convertibles ADD COLUMN allows_voluntary_conversion INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+          if (!columnNames.contains('liquidity_event_behavior')) {
+            await customStatement(
+              'ALTER TABLE convertibles ADD COLUMN liquidity_event_behavior TEXT',
+            );
+          }
+          if (!columnNames.contains('liquidity_payout_multiple')) {
+            await customStatement(
+              'ALTER TABLE convertibles ADD COLUMN liquidity_payout_multiple REAL',
+            );
+          }
+          if (!columnNames.contains('dissolution_behavior')) {
+            await customStatement(
+              'ALTER TABLE convertibles ADD COLUMN dissolution_behavior TEXT',
+            );
+          }
+          if (!columnNames.contains('preferred_share_class_id')) {
+            await customStatement(
+              'ALTER TABLE convertibles ADD COLUMN preferred_share_class_id TEXT',
+            );
+          }
+          if (!columnNames.contains('qualified_financing_threshold')) {
+            await customStatement(
+              'ALTER TABLE convertibles ADD COLUMN qualified_financing_threshold REAL',
+            );
+          }
         }
       },
       beforeOpen: (details) async {
@@ -1052,6 +1097,32 @@ class AppDatabase extends _$AppDatabase {
       final toDelete = allSnapshots.skip(keepCount).map((s) => s.id).toList();
       await (delete(snapshots)..where((s) => s.id.isIn(toDelete))).go();
     }
+  }
+
+  /// Completely reset all data in the database.
+  /// This deletes all companies, stakeholders, rounds, holdings, etc.
+  Future<void> resetAllData() async {
+    await transaction(() async {
+      // Delete in order to respect foreign key constraints
+      // First delete tables with foreign keys to other tables
+      await delete(snapshots).go();
+      await delete(capitalizationEvents).go();
+      await delete(mfnUpgrades).go();
+      await delete(transfers).go();
+      await delete(esopPoolExpansions).go();
+      await delete(optionGrants).go();
+      await delete(warrants).go();
+      await delete(holdings).go();
+      await delete(convertibles).go();
+      await delete(valuations).go();
+      await delete(esopPools).go();
+      await delete(rounds).go();
+      await delete(stakeholders).go();
+      await delete(shareClasses).go();
+      await delete(vestingSchedules).go();
+      await delete(savedScenarios).go();
+      await delete(companies).go();
+    });
   }
 }
 

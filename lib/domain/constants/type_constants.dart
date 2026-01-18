@@ -196,22 +196,170 @@ abstract class ConvertibleType {
 
 /// Status constants for convertible instruments.
 abstract class ConvertibleStatus {
+  /// Draft: Part of a draft round, not yet committed. No audit trail.
+  static const String draft = 'draft';
+
+  /// Outstanding: Formally issued and active.
   static const String outstanding = 'outstanding';
   static const String converted = 'converted';
   static const String cancelled = 'cancelled';
 
-  static const List<String> all = [outstanding, converted, cancelled];
+  static const List<String> all = [draft, outstanding, converted, cancelled];
 
   static String displayName(String status) => switch (status) {
+    draft => 'Draft',
     outstanding => 'Outstanding',
     converted => 'Converted',
     cancelled => 'Cancelled',
     _ => status,
   };
+
+  /// Returns true if the status is a formal, committed state (not draft).
+  static bool isCommitted(String status) => status != draft;
+}
+
+/// Conversion trigger types for convertibles.
+///
+/// These define what events can trigger the conversion of a SAFE or note.
+abstract class ConversionTrigger {
+  /// Qualified/priced financing round (most common trigger).
+  static const String qualifiedFinancing = 'qualifiedFinancing';
+
+  /// Maturity date reached (for notes).
+  static const String maturity = 'maturity';
+
+  /// Liquidity event (acquisition, sale, IPO).
+  static const String liquidityEvent = 'liquidityEvent';
+
+  /// Company dissolution/wind-down.
+  static const String dissolution = 'dissolution';
+
+  /// Voluntary conversion by board/investor agreement.
+  static const String voluntary = 'voluntary';
+
+  static const List<String> all = [
+    qualifiedFinancing,
+    maturity,
+    liquidityEvent,
+    dissolution,
+    voluntary,
+  ];
+
+  static String displayName(String trigger) => switch (trigger) {
+    qualifiedFinancing => 'Qualified Financing',
+    maturity => 'Maturity',
+    liquidityEvent => 'Liquidity Event',
+    dissolution => 'Dissolution',
+    voluntary => 'Voluntary',
+    _ => trigger,
+  };
+}
+
+/// Maturity behavior - what happens when a convertible note matures.
+abstract class MaturityBehavior {
+  /// Automatically convert at the valuation cap.
+  static const String convertAtCap = 'convertAtCap';
+
+  /// Automatically convert at the discount rate.
+  static const String convertAtDiscount = 'convertAtDiscount';
+
+  /// Repay principal plus accrued interest.
+  static const String repay = 'repay';
+
+  /// Extend the maturity date (requires negotiation).
+  static const String extend = 'extend';
+
+  /// Requires negotiation - no automatic behavior.
+  static const String negotiate = 'negotiate';
+
+  static const List<String> all = [
+    convertAtCap,
+    convertAtDiscount,
+    repay,
+    extend,
+    negotiate,
+  ];
+
+  static String displayName(String behavior) => switch (behavior) {
+    convertAtCap => 'Convert at Cap',
+    convertAtDiscount => 'Convert at Discount',
+    repay => 'Repay Principal + Interest',
+    extend => 'Extend Maturity',
+    negotiate => 'Requires Negotiation',
+    _ => behavior,
+  };
+
+  /// Whether this behavior allows standalone conversion (outside a round).
+  static bool allowsStandaloneConversion(String behavior) =>
+      behavior == convertAtCap || behavior == convertAtDiscount;
+}
+
+/// Liquidity event behavior - what happens on exit/IPO.
+abstract class LiquidityEventBehavior {
+  /// Convert at valuation cap before distribution.
+  static const String convertAtCap = 'convertAtCap';
+
+  /// Receive cash payout (principal multiplied by a factor).
+  static const String cashPayout = 'cashPayout';
+
+  /// Greater of conversion value or cash payout.
+  static const String greaterOf = 'greaterOf';
+
+  /// Requires negotiation.
+  static const String negotiate = 'negotiate';
+
+  static const List<String> all = [
+    convertAtCap,
+    cashPayout,
+    greaterOf,
+    negotiate,
+  ];
+
+  static String displayName(String behavior) => switch (behavior) {
+    convertAtCap => 'Convert at Cap',
+    cashPayout => 'Cash Payout',
+    greaterOf => 'Greater of Convert or Cash',
+    negotiate => 'Requires Negotiation',
+    _ => behavior,
+  };
+}
+
+/// Dissolution behavior - what happens if company winds down.
+abstract class DissolutionBehavior {
+  /// Pari passu with common shareholders.
+  static const String pariPassu = 'pariPassu';
+
+  /// Priority return of principal.
+  static const String principalFirst = 'principalFirst';
+
+  /// Full amount plus accrued interest.
+  static const String fullAmount = 'fullAmount';
+
+  /// Nothing (SAFE-style, no debt).
+  static const String nothing = 'nothing';
+
+  static const List<String> all = [
+    pariPassu,
+    principalFirst,
+    fullAmount,
+    nothing,
+  ];
+
+  static String displayName(String behavior) => switch (behavior) {
+    pariPassu => 'Pari Passu with Common',
+    principalFirst => 'Principal Returned First',
+    fullAmount => 'Full Amount + Interest',
+    nothing => 'No Return (SAFE-style)',
+    _ => behavior,
+  };
 }
 
 /// Status constants for option grants.
 abstract class OptionGrantStatus {
+  /// Draft: Part of a draft round, not yet committed. No audit trail.
+  static const String draft = 'draft';
+
+  /// Pending: Formally granted but cliff not yet met.
   static const String pending = 'pending';
   static const String active = 'active';
   static const String partiallyExercised = 'partiallyExercised';
@@ -221,6 +369,7 @@ abstract class OptionGrantStatus {
   static const String forfeited = 'forfeited';
 
   static const List<String> all = [
+    draft,
     pending,
     active,
     partiallyExercised,
@@ -231,6 +380,7 @@ abstract class OptionGrantStatus {
   ];
 
   static String displayName(String status) => switch (status) {
+    draft => 'Draft',
     pending => 'Pending',
     active => 'Active',
     partiallyExercised => 'Partially Exercised',
@@ -243,10 +393,17 @@ abstract class OptionGrantStatus {
 
   static bool isExercisable(String status) =>
       status == active || status == partiallyExercised;
+
+  /// Returns true if the status is a formal, committed state (not draft).
+  static bool isCommitted(String status) => status != draft;
 }
 
 /// Status constants for warrants.
 abstract class WarrantStatus {
+  /// Draft: Part of a draft round, not yet committed. No audit trail.
+  static const String draft = 'draft';
+
+  /// Pending: Formally issued but not yet active.
   static const String pending = 'pending';
   static const String active = 'active';
   static const String partiallyExercised = 'partiallyExercised';
@@ -255,6 +412,7 @@ abstract class WarrantStatus {
   static const String cancelled = 'cancelled';
 
   static const List<String> all = [
+    draft,
     pending,
     active,
     partiallyExercised,
@@ -264,6 +422,7 @@ abstract class WarrantStatus {
   ];
 
   static String displayName(String status) => switch (status) {
+    draft => 'Draft',
     pending => 'Pending',
     active => 'Active',
     partiallyExercised => 'Partially Exercised',
@@ -275,6 +434,55 @@ abstract class WarrantStatus {
 
   static bool isExercisable(String status) =>
       status == active || status == partiallyExercised;
+
+  /// Returns true if the status is a formal, committed state (not draft).
+  static bool isCommitted(String status) => status != draft;
+}
+
+/// Exercise type constants for options and warrants.
+///
+/// Tracks how the exercise was performed:
+/// - Cash: Holder pays full strike price in cash, receives all shares
+/// - Cashless: Shares sold at market to cover strike price, net shares received
+/// - Net: Shares withheld to cover strike price, net shares received
+abstract class ExerciseType {
+  /// Standard cash exercise - pay strike price in cash.
+  static const String cash = 'cash';
+
+  /// Cashless (same-day sale) - sell enough shares to cover strike + taxes.
+  /// Common at IPO/M&A. Holder receives cash proceeds minus costs.
+  static const String cashless = 'cashless';
+
+  /// Net exercise - shares withheld to cover strike price.
+  /// No cash changes hands, holder receives net shares.
+  static const String net = 'net';
+
+  /// Net exercise with tax withholding - shares withheld for strike + taxes.
+  static const String netWithTax = 'netWithTax';
+
+  static const List<String> all = [cash, cashless, net, netWithTax];
+
+  static String displayName(String type) => switch (type) {
+    cash => 'Cash Exercise',
+    cashless => 'Cashless (Same-Day Sale)',
+    net => 'Net Exercise',
+    netWithTax => 'Net Exercise (with Tax)',
+    _ => type,
+  };
+
+  static String description(String type) => switch (type) {
+    cash => 'Pay strike price in cash, receive all shares',
+    cashless => 'Sell shares at market to cover costs, receive cash',
+    net => 'Shares withheld to cover strike, receive net shares',
+    netWithTax => 'Shares withheld for strike + taxes, receive net shares',
+    _ => '',
+  };
+
+  /// Returns true if this exercise type results in shares being withheld.
+  static bool withholdsShares(String type) => type == net || type == netWithTax;
+
+  /// Returns true if this exercise type involves a same-day sale.
+  static bool involvesSale(String type) => type == cashless;
 }
 
 /// Type constants for vesting schedules.

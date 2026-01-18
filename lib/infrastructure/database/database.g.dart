@@ -3610,6 +3610,87 @@ class $ConvertiblesTable extends Convertibles
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _maturityBehaviorMeta = const VerificationMeta(
+    'maturityBehavior',
+  );
+  @override
+  late final GeneratedColumn<String> maturityBehavior = GeneratedColumn<String>(
+    'maturity_behavior',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _allowsVoluntaryConversionMeta =
+      const VerificationMeta('allowsVoluntaryConversion');
+  @override
+  late final GeneratedColumn<bool> allowsVoluntaryConversion =
+      GeneratedColumn<bool>(
+        'allows_voluntary_conversion',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("allows_voluntary_conversion" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _liquidityEventBehaviorMeta =
+      const VerificationMeta('liquidityEventBehavior');
+  @override
+  late final GeneratedColumn<String> liquidityEventBehavior =
+      GeneratedColumn<String>(
+        'liquidity_event_behavior',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _liquidityPayoutMultipleMeta =
+      const VerificationMeta('liquidityPayoutMultiple');
+  @override
+  late final GeneratedColumn<double> liquidityPayoutMultiple =
+      GeneratedColumn<double>(
+        'liquidity_payout_multiple',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _dissolutionBehaviorMeta =
+      const VerificationMeta('dissolutionBehavior');
+  @override
+  late final GeneratedColumn<String> dissolutionBehavior =
+      GeneratedColumn<String>(
+        'dissolution_behavior',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _preferredShareClassIdMeta =
+      const VerificationMeta('preferredShareClassId');
+  @override
+  late final GeneratedColumn<String> preferredShareClassId =
+      GeneratedColumn<String>(
+        'preferred_share_class_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _qualifiedFinancingThresholdMeta =
+      const VerificationMeta('qualifiedFinancingThreshold');
+  @override
+  late final GeneratedColumn<double> qualifiedFinancingThreshold =
+      GeneratedColumn<double>(
+        'qualified_financing_threshold',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3652,6 +3733,13 @@ class $ConvertiblesTable extends Convertibles
     convertedToShareClassId,
     sharesReceived,
     notes,
+    maturityBehavior,
+    allowsVoluntaryConversion,
+    liquidityEventBehavior,
+    liquidityPayoutMultiple,
+    dissolutionBehavior,
+    preferredShareClassId,
+    qualifiedFinancingThreshold,
     createdAt,
     updatedAt,
   ];
@@ -3811,6 +3899,69 @@ class $ConvertiblesTable extends Convertibles
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('maturity_behavior')) {
+      context.handle(
+        _maturityBehaviorMeta,
+        maturityBehavior.isAcceptableOrUnknown(
+          data['maturity_behavior']!,
+          _maturityBehaviorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('allows_voluntary_conversion')) {
+      context.handle(
+        _allowsVoluntaryConversionMeta,
+        allowsVoluntaryConversion.isAcceptableOrUnknown(
+          data['allows_voluntary_conversion']!,
+          _allowsVoluntaryConversionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('liquidity_event_behavior')) {
+      context.handle(
+        _liquidityEventBehaviorMeta,
+        liquidityEventBehavior.isAcceptableOrUnknown(
+          data['liquidity_event_behavior']!,
+          _liquidityEventBehaviorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('liquidity_payout_multiple')) {
+      context.handle(
+        _liquidityPayoutMultipleMeta,
+        liquidityPayoutMultiple.isAcceptableOrUnknown(
+          data['liquidity_payout_multiple']!,
+          _liquidityPayoutMultipleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dissolution_behavior')) {
+      context.handle(
+        _dissolutionBehaviorMeta,
+        dissolutionBehavior.isAcceptableOrUnknown(
+          data['dissolution_behavior']!,
+          _dissolutionBehaviorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('preferred_share_class_id')) {
+      context.handle(
+        _preferredShareClassIdMeta,
+        preferredShareClassId.isAcceptableOrUnknown(
+          data['preferred_share_class_id']!,
+          _preferredShareClassIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('qualified_financing_threshold')) {
+      context.handle(
+        _qualifiedFinancingThresholdMeta,
+        qualifiedFinancingThreshold.isAcceptableOrUnknown(
+          data['qualified_financing_threshold']!,
+          _qualifiedFinancingThresholdMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -3908,6 +4059,34 @@ class $ConvertiblesTable extends Convertibles
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      maturityBehavior: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}maturity_behavior'],
+      ),
+      allowsVoluntaryConversion: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}allows_voluntary_conversion'],
+      )!,
+      liquidityEventBehavior: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}liquidity_event_behavior'],
+      ),
+      liquidityPayoutMultiple: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}liquidity_payout_multiple'],
+      ),
+      dissolutionBehavior: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dissolution_behavior'],
+      ),
+      preferredShareClassId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}preferred_share_class_id'],
+      ),
+      qualifiedFinancingThreshold: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}qualified_financing_threshold'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3944,6 +4123,27 @@ class Convertible extends DataClass implements Insertable<Convertible> {
   final String? convertedToShareClassId;
   final int? sharesReceived;
   final String? notes;
+
+  /// What happens at maturity (for notes): convertAtCap, convertAtDiscount, repay, extend, negotiate
+  final String? maturityBehavior;
+
+  /// Whether voluntary conversion (by board/investor agreement) is allowed
+  final bool allowsVoluntaryConversion;
+
+  /// Behavior on liquidity event: convertAtCap, cashPayout, greaterOf, negotiate
+  final String? liquidityEventBehavior;
+
+  /// Cash payout multiplier for liquidity events (e.g., 1.0 = 1x principal)
+  final double? liquidityPayoutMultiple;
+
+  /// Behavior on dissolution: pariPassu, principalFirst, fullAmount, nothing
+  final String? dissolutionBehavior;
+
+  /// Preferred share class for conversion (if specified upfront)
+  final String? preferredShareClassId;
+
+  /// Qualified financing threshold amount (minimum raise to trigger auto-convert)
+  final double? qualifiedFinancingThreshold;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Convertible({
@@ -3965,6 +4165,13 @@ class Convertible extends DataClass implements Insertable<Convertible> {
     this.convertedToShareClassId,
     this.sharesReceived,
     this.notes,
+    this.maturityBehavior,
+    required this.allowsVoluntaryConversion,
+    this.liquidityEventBehavior,
+    this.liquidityPayoutMultiple,
+    this.dissolutionBehavior,
+    this.preferredShareClassId,
+    this.qualifiedFinancingThreshold,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -4009,6 +4216,33 @@ class Convertible extends DataClass implements Insertable<Convertible> {
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
+    if (!nullToAbsent || maturityBehavior != null) {
+      map['maturity_behavior'] = Variable<String>(maturityBehavior);
+    }
+    map['allows_voluntary_conversion'] = Variable<bool>(
+      allowsVoluntaryConversion,
+    );
+    if (!nullToAbsent || liquidityEventBehavior != null) {
+      map['liquidity_event_behavior'] = Variable<String>(
+        liquidityEventBehavior,
+      );
+    }
+    if (!nullToAbsent || liquidityPayoutMultiple != null) {
+      map['liquidity_payout_multiple'] = Variable<double>(
+        liquidityPayoutMultiple,
+      );
+    }
+    if (!nullToAbsent || dissolutionBehavior != null) {
+      map['dissolution_behavior'] = Variable<String>(dissolutionBehavior);
+    }
+    if (!nullToAbsent || preferredShareClassId != null) {
+      map['preferred_share_class_id'] = Variable<String>(preferredShareClassId);
+    }
+    if (!nullToAbsent || qualifiedFinancingThreshold != null) {
+      map['qualified_financing_threshold'] = Variable<double>(
+        qualifiedFinancingThreshold,
+      );
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -4052,6 +4286,26 @@ class Convertible extends DataClass implements Insertable<Convertible> {
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      maturityBehavior: maturityBehavior == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maturityBehavior),
+      allowsVoluntaryConversion: Value(allowsVoluntaryConversion),
+      liquidityEventBehavior: liquidityEventBehavior == null && nullToAbsent
+          ? const Value.absent()
+          : Value(liquidityEventBehavior),
+      liquidityPayoutMultiple: liquidityPayoutMultiple == null && nullToAbsent
+          ? const Value.absent()
+          : Value(liquidityPayoutMultiple),
+      dissolutionBehavior: dissolutionBehavior == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dissolutionBehavior),
+      preferredShareClassId: preferredShareClassId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(preferredShareClassId),
+      qualifiedFinancingThreshold:
+          qualifiedFinancingThreshold == null && nullToAbsent
+          ? const Value.absent()
+          : Value(qualifiedFinancingThreshold),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -4085,6 +4339,25 @@ class Convertible extends DataClass implements Insertable<Convertible> {
       ),
       sharesReceived: serializer.fromJson<int?>(json['sharesReceived']),
       notes: serializer.fromJson<String?>(json['notes']),
+      maturityBehavior: serializer.fromJson<String?>(json['maturityBehavior']),
+      allowsVoluntaryConversion: serializer.fromJson<bool>(
+        json['allowsVoluntaryConversion'],
+      ),
+      liquidityEventBehavior: serializer.fromJson<String?>(
+        json['liquidityEventBehavior'],
+      ),
+      liquidityPayoutMultiple: serializer.fromJson<double?>(
+        json['liquidityPayoutMultiple'],
+      ),
+      dissolutionBehavior: serializer.fromJson<String?>(
+        json['dissolutionBehavior'],
+      ),
+      preferredShareClassId: serializer.fromJson<String?>(
+        json['preferredShareClassId'],
+      ),
+      qualifiedFinancingThreshold: serializer.fromJson<double?>(
+        json['qualifiedFinancingThreshold'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -4113,6 +4386,23 @@ class Convertible extends DataClass implements Insertable<Convertible> {
       ),
       'sharesReceived': serializer.toJson<int?>(sharesReceived),
       'notes': serializer.toJson<String?>(notes),
+      'maturityBehavior': serializer.toJson<String?>(maturityBehavior),
+      'allowsVoluntaryConversion': serializer.toJson<bool>(
+        allowsVoluntaryConversion,
+      ),
+      'liquidityEventBehavior': serializer.toJson<String?>(
+        liquidityEventBehavior,
+      ),
+      'liquidityPayoutMultiple': serializer.toJson<double?>(
+        liquidityPayoutMultiple,
+      ),
+      'dissolutionBehavior': serializer.toJson<String?>(dissolutionBehavior),
+      'preferredShareClassId': serializer.toJson<String?>(
+        preferredShareClassId,
+      ),
+      'qualifiedFinancingThreshold': serializer.toJson<double?>(
+        qualifiedFinancingThreshold,
+      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -4137,6 +4427,13 @@ class Convertible extends DataClass implements Insertable<Convertible> {
     Value<String?> convertedToShareClassId = const Value.absent(),
     Value<int?> sharesReceived = const Value.absent(),
     Value<String?> notes = const Value.absent(),
+    Value<String?> maturityBehavior = const Value.absent(),
+    bool? allowsVoluntaryConversion,
+    Value<String?> liquidityEventBehavior = const Value.absent(),
+    Value<double?> liquidityPayoutMultiple = const Value.absent(),
+    Value<String?> dissolutionBehavior = const Value.absent(),
+    Value<String?> preferredShareClassId = const Value.absent(),
+    Value<double?> qualifiedFinancingThreshold = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Convertible(
@@ -4166,6 +4463,26 @@ class Convertible extends DataClass implements Insertable<Convertible> {
         ? sharesReceived.value
         : this.sharesReceived,
     notes: notes.present ? notes.value : this.notes,
+    maturityBehavior: maturityBehavior.present
+        ? maturityBehavior.value
+        : this.maturityBehavior,
+    allowsVoluntaryConversion:
+        allowsVoluntaryConversion ?? this.allowsVoluntaryConversion,
+    liquidityEventBehavior: liquidityEventBehavior.present
+        ? liquidityEventBehavior.value
+        : this.liquidityEventBehavior,
+    liquidityPayoutMultiple: liquidityPayoutMultiple.present
+        ? liquidityPayoutMultiple.value
+        : this.liquidityPayoutMultiple,
+    dissolutionBehavior: dissolutionBehavior.present
+        ? dissolutionBehavior.value
+        : this.dissolutionBehavior,
+    preferredShareClassId: preferredShareClassId.present
+        ? preferredShareClassId.value
+        : this.preferredShareClassId,
+    qualifiedFinancingThreshold: qualifiedFinancingThreshold.present
+        ? qualifiedFinancingThreshold.value
+        : this.qualifiedFinancingThreshold,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -4207,6 +4524,27 @@ class Convertible extends DataClass implements Insertable<Convertible> {
           ? data.sharesReceived.value
           : this.sharesReceived,
       notes: data.notes.present ? data.notes.value : this.notes,
+      maturityBehavior: data.maturityBehavior.present
+          ? data.maturityBehavior.value
+          : this.maturityBehavior,
+      allowsVoluntaryConversion: data.allowsVoluntaryConversion.present
+          ? data.allowsVoluntaryConversion.value
+          : this.allowsVoluntaryConversion,
+      liquidityEventBehavior: data.liquidityEventBehavior.present
+          ? data.liquidityEventBehavior.value
+          : this.liquidityEventBehavior,
+      liquidityPayoutMultiple: data.liquidityPayoutMultiple.present
+          ? data.liquidityPayoutMultiple.value
+          : this.liquidityPayoutMultiple,
+      dissolutionBehavior: data.dissolutionBehavior.present
+          ? data.dissolutionBehavior.value
+          : this.dissolutionBehavior,
+      preferredShareClassId: data.preferredShareClassId.present
+          ? data.preferredShareClassId.value
+          : this.preferredShareClassId,
+      qualifiedFinancingThreshold: data.qualifiedFinancingThreshold.present
+          ? data.qualifiedFinancingThreshold.value
+          : this.qualifiedFinancingThreshold,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -4233,6 +4571,13 @@ class Convertible extends DataClass implements Insertable<Convertible> {
           ..write('convertedToShareClassId: $convertedToShareClassId, ')
           ..write('sharesReceived: $sharesReceived, ')
           ..write('notes: $notes, ')
+          ..write('maturityBehavior: $maturityBehavior, ')
+          ..write('allowsVoluntaryConversion: $allowsVoluntaryConversion, ')
+          ..write('liquidityEventBehavior: $liquidityEventBehavior, ')
+          ..write('liquidityPayoutMultiple: $liquidityPayoutMultiple, ')
+          ..write('dissolutionBehavior: $dissolutionBehavior, ')
+          ..write('preferredShareClassId: $preferredShareClassId, ')
+          ..write('qualifiedFinancingThreshold: $qualifiedFinancingThreshold, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -4240,7 +4585,7 @@ class Convertible extends DataClass implements Insertable<Convertible> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     companyId,
     stakeholderId,
@@ -4259,9 +4604,16 @@ class Convertible extends DataClass implements Insertable<Convertible> {
     convertedToShareClassId,
     sharesReceived,
     notes,
+    maturityBehavior,
+    allowsVoluntaryConversion,
+    liquidityEventBehavior,
+    liquidityPayoutMultiple,
+    dissolutionBehavior,
+    preferredShareClassId,
+    qualifiedFinancingThreshold,
     createdAt,
     updatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4284,6 +4636,14 @@ class Convertible extends DataClass implements Insertable<Convertible> {
           other.convertedToShareClassId == this.convertedToShareClassId &&
           other.sharesReceived == this.sharesReceived &&
           other.notes == this.notes &&
+          other.maturityBehavior == this.maturityBehavior &&
+          other.allowsVoluntaryConversion == this.allowsVoluntaryConversion &&
+          other.liquidityEventBehavior == this.liquidityEventBehavior &&
+          other.liquidityPayoutMultiple == this.liquidityPayoutMultiple &&
+          other.dissolutionBehavior == this.dissolutionBehavior &&
+          other.preferredShareClassId == this.preferredShareClassId &&
+          other.qualifiedFinancingThreshold ==
+              this.qualifiedFinancingThreshold &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -4307,6 +4667,13 @@ class ConvertiblesCompanion extends UpdateCompanion<Convertible> {
   final Value<String?> convertedToShareClassId;
   final Value<int?> sharesReceived;
   final Value<String?> notes;
+  final Value<String?> maturityBehavior;
+  final Value<bool> allowsVoluntaryConversion;
+  final Value<String?> liquidityEventBehavior;
+  final Value<double?> liquidityPayoutMultiple;
+  final Value<String?> dissolutionBehavior;
+  final Value<String?> preferredShareClassId;
+  final Value<double?> qualifiedFinancingThreshold;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -4329,6 +4696,13 @@ class ConvertiblesCompanion extends UpdateCompanion<Convertible> {
     this.convertedToShareClassId = const Value.absent(),
     this.sharesReceived = const Value.absent(),
     this.notes = const Value.absent(),
+    this.maturityBehavior = const Value.absent(),
+    this.allowsVoluntaryConversion = const Value.absent(),
+    this.liquidityEventBehavior = const Value.absent(),
+    this.liquidityPayoutMultiple = const Value.absent(),
+    this.dissolutionBehavior = const Value.absent(),
+    this.preferredShareClassId = const Value.absent(),
+    this.qualifiedFinancingThreshold = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4352,6 +4726,13 @@ class ConvertiblesCompanion extends UpdateCompanion<Convertible> {
     this.convertedToShareClassId = const Value.absent(),
     this.sharesReceived = const Value.absent(),
     this.notes = const Value.absent(),
+    this.maturityBehavior = const Value.absent(),
+    this.allowsVoluntaryConversion = const Value.absent(),
+    this.liquidityEventBehavior = const Value.absent(),
+    this.liquidityPayoutMultiple = const Value.absent(),
+    this.dissolutionBehavior = const Value.absent(),
+    this.preferredShareClassId = const Value.absent(),
+    this.qualifiedFinancingThreshold = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -4382,6 +4763,13 @@ class ConvertiblesCompanion extends UpdateCompanion<Convertible> {
     Expression<String>? convertedToShareClassId,
     Expression<int>? sharesReceived,
     Expression<String>? notes,
+    Expression<String>? maturityBehavior,
+    Expression<bool>? allowsVoluntaryConversion,
+    Expression<String>? liquidityEventBehavior,
+    Expression<double>? liquidityPayoutMultiple,
+    Expression<String>? dissolutionBehavior,
+    Expression<String>? preferredShareClassId,
+    Expression<double>? qualifiedFinancingThreshold,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -4406,6 +4794,19 @@ class ConvertiblesCompanion extends UpdateCompanion<Convertible> {
         'converted_to_share_class_id': convertedToShareClassId,
       if (sharesReceived != null) 'shares_received': sharesReceived,
       if (notes != null) 'notes': notes,
+      if (maturityBehavior != null) 'maturity_behavior': maturityBehavior,
+      if (allowsVoluntaryConversion != null)
+        'allows_voluntary_conversion': allowsVoluntaryConversion,
+      if (liquidityEventBehavior != null)
+        'liquidity_event_behavior': liquidityEventBehavior,
+      if (liquidityPayoutMultiple != null)
+        'liquidity_payout_multiple': liquidityPayoutMultiple,
+      if (dissolutionBehavior != null)
+        'dissolution_behavior': dissolutionBehavior,
+      if (preferredShareClassId != null)
+        'preferred_share_class_id': preferredShareClassId,
+      if (qualifiedFinancingThreshold != null)
+        'qualified_financing_threshold': qualifiedFinancingThreshold,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -4431,6 +4832,13 @@ class ConvertiblesCompanion extends UpdateCompanion<Convertible> {
     Value<String?>? convertedToShareClassId,
     Value<int?>? sharesReceived,
     Value<String?>? notes,
+    Value<String?>? maturityBehavior,
+    Value<bool>? allowsVoluntaryConversion,
+    Value<String?>? liquidityEventBehavior,
+    Value<double?>? liquidityPayoutMultiple,
+    Value<String?>? dissolutionBehavior,
+    Value<String?>? preferredShareClassId,
+    Value<double?>? qualifiedFinancingThreshold,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -4455,6 +4863,18 @@ class ConvertiblesCompanion extends UpdateCompanion<Convertible> {
           convertedToShareClassId ?? this.convertedToShareClassId,
       sharesReceived: sharesReceived ?? this.sharesReceived,
       notes: notes ?? this.notes,
+      maturityBehavior: maturityBehavior ?? this.maturityBehavior,
+      allowsVoluntaryConversion:
+          allowsVoluntaryConversion ?? this.allowsVoluntaryConversion,
+      liquidityEventBehavior:
+          liquidityEventBehavior ?? this.liquidityEventBehavior,
+      liquidityPayoutMultiple:
+          liquidityPayoutMultiple ?? this.liquidityPayoutMultiple,
+      dissolutionBehavior: dissolutionBehavior ?? this.dissolutionBehavior,
+      preferredShareClassId:
+          preferredShareClassId ?? this.preferredShareClassId,
+      qualifiedFinancingThreshold:
+          qualifiedFinancingThreshold ?? this.qualifiedFinancingThreshold,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -4520,6 +4940,37 @@ class ConvertiblesCompanion extends UpdateCompanion<Convertible> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (maturityBehavior.present) {
+      map['maturity_behavior'] = Variable<String>(maturityBehavior.value);
+    }
+    if (allowsVoluntaryConversion.present) {
+      map['allows_voluntary_conversion'] = Variable<bool>(
+        allowsVoluntaryConversion.value,
+      );
+    }
+    if (liquidityEventBehavior.present) {
+      map['liquidity_event_behavior'] = Variable<String>(
+        liquidityEventBehavior.value,
+      );
+    }
+    if (liquidityPayoutMultiple.present) {
+      map['liquidity_payout_multiple'] = Variable<double>(
+        liquidityPayoutMultiple.value,
+      );
+    }
+    if (dissolutionBehavior.present) {
+      map['dissolution_behavior'] = Variable<String>(dissolutionBehavior.value);
+    }
+    if (preferredShareClassId.present) {
+      map['preferred_share_class_id'] = Variable<String>(
+        preferredShareClassId.value,
+      );
+    }
+    if (qualifiedFinancingThreshold.present) {
+      map['qualified_financing_threshold'] = Variable<double>(
+        qualifiedFinancingThreshold.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4553,6 +5004,13 @@ class ConvertiblesCompanion extends UpdateCompanion<Convertible> {
           ..write('convertedToShareClassId: $convertedToShareClassId, ')
           ..write('sharesReceived: $sharesReceived, ')
           ..write('notes: $notes, ')
+          ..write('maturityBehavior: $maturityBehavior, ')
+          ..write('allowsVoluntaryConversion: $allowsVoluntaryConversion, ')
+          ..write('liquidityEventBehavior: $liquidityEventBehavior, ')
+          ..write('liquidityPayoutMultiple: $liquidityPayoutMultiple, ')
+          ..write('dissolutionBehavior: $dissolutionBehavior, ')
+          ..write('preferredShareClassId: $preferredShareClassId, ')
+          ..write('qualifiedFinancingThreshold: $qualifiedFinancingThreshold, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -4598,20 +5056,6 @@ class $EsopPoolsTable extends EsopPools
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
-  );
-  static const VerificationMeta _shareClassIdMeta = const VerificationMeta(
-    'shareClassId',
-  );
-  @override
-  late final GeneratedColumn<String> shareClassId = GeneratedColumn<String>(
-    'share_class_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES share_classes (id)',
-    ),
   );
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
@@ -4764,7 +5208,6 @@ class $EsopPoolsTable extends EsopPools
     id,
     companyId,
     name,
-    shareClassId,
     status,
     poolSize,
     targetPercentage,
@@ -4811,17 +5254,6 @@ class $EsopPoolsTable extends EsopPools
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
-    }
-    if (data.containsKey('share_class_id')) {
-      context.handle(
-        _shareClassIdMeta,
-        shareClassId.isAcceptableOrUnknown(
-          data['share_class_id']!,
-          _shareClassIdMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_shareClassIdMeta);
     }
     if (data.containsKey('status')) {
       context.handle(
@@ -4951,10 +5383,6 @@ class $EsopPoolsTable extends EsopPools
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
-      shareClassId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}share_class_id'],
-      )!,
       status: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}status'],
@@ -5020,7 +5448,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
   final String id;
   final String companyId;
   final String name;
-  final String shareClassId;
   final String status;
   final int poolSize;
   final double? targetPercentage;
@@ -5038,7 +5465,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
     required this.id,
     required this.companyId,
     required this.name,
-    required this.shareClassId,
     required this.status,
     required this.poolSize,
     this.targetPercentage,
@@ -5059,7 +5485,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
     map['id'] = Variable<String>(id);
     map['company_id'] = Variable<String>(companyId);
     map['name'] = Variable<String>(name);
-    map['share_class_id'] = Variable<String>(shareClassId);
     map['status'] = Variable<String>(status);
     map['pool_size'] = Variable<int>(poolSize);
     if (!nullToAbsent || targetPercentage != null) {
@@ -5095,7 +5520,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
       id: Value(id),
       companyId: Value(companyId),
       name: Value(name),
-      shareClassId: Value(shareClassId),
       status: Value(status),
       poolSize: Value(poolSize),
       targetPercentage: targetPercentage == null && nullToAbsent
@@ -5133,7 +5557,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
       id: serializer.fromJson<String>(json['id']),
       companyId: serializer.fromJson<String>(json['companyId']),
       name: serializer.fromJson<String>(json['name']),
-      shareClassId: serializer.fromJson<String>(json['shareClassId']),
       status: serializer.fromJson<String>(json['status']),
       poolSize: serializer.fromJson<int>(json['poolSize']),
       targetPercentage: serializer.fromJson<double?>(json['targetPercentage']),
@@ -5162,7 +5585,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
       'id': serializer.toJson<String>(id),
       'companyId': serializer.toJson<String>(companyId),
       'name': serializer.toJson<String>(name),
-      'shareClassId': serializer.toJson<String>(shareClassId),
       'status': serializer.toJson<String>(status),
       'poolSize': serializer.toJson<int>(poolSize),
       'targetPercentage': serializer.toJson<double?>(targetPercentage),
@@ -5185,7 +5607,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
     String? id,
     String? companyId,
     String? name,
-    String? shareClassId,
     String? status,
     int? poolSize,
     Value<double?> targetPercentage = const Value.absent(),
@@ -5203,7 +5624,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
     id: id ?? this.id,
     companyId: companyId ?? this.companyId,
     name: name ?? this.name,
-    shareClassId: shareClassId ?? this.shareClassId,
     status: status ?? this.status,
     poolSize: poolSize ?? this.poolSize,
     targetPercentage: targetPercentage.present
@@ -5231,9 +5651,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
       id: data.id.present ? data.id.value : this.id,
       companyId: data.companyId.present ? data.companyId.value : this.companyId,
       name: data.name.present ? data.name.value : this.name,
-      shareClassId: data.shareClassId.present
-          ? data.shareClassId.value
-          : this.shareClassId,
       status: data.status.present ? data.status.value : this.status,
       poolSize: data.poolSize.present ? data.poolSize.value : this.poolSize,
       targetPercentage: data.targetPercentage.present
@@ -5270,7 +5687,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
           ..write('id: $id, ')
           ..write('companyId: $companyId, ')
           ..write('name: $name, ')
-          ..write('shareClassId: $shareClassId, ')
           ..write('status: $status, ')
           ..write('poolSize: $poolSize, ')
           ..write('targetPercentage: $targetPercentage, ')
@@ -5293,7 +5709,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
     id,
     companyId,
     name,
-    shareClassId,
     status,
     poolSize,
     targetPercentage,
@@ -5315,7 +5730,6 @@ class EsopPool extends DataClass implements Insertable<EsopPool> {
           other.id == this.id &&
           other.companyId == this.companyId &&
           other.name == this.name &&
-          other.shareClassId == this.shareClassId &&
           other.status == this.status &&
           other.poolSize == this.poolSize &&
           other.targetPercentage == this.targetPercentage &&
@@ -5335,7 +5749,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
   final Value<String> id;
   final Value<String> companyId;
   final Value<String> name;
-  final Value<String> shareClassId;
   final Value<String> status;
   final Value<int> poolSize;
   final Value<double?> targetPercentage;
@@ -5354,7 +5767,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
     this.id = const Value.absent(),
     this.companyId = const Value.absent(),
     this.name = const Value.absent(),
-    this.shareClassId = const Value.absent(),
     this.status = const Value.absent(),
     this.poolSize = const Value.absent(),
     this.targetPercentage = const Value.absent(),
@@ -5374,7 +5786,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
     required String id,
     required String companyId,
     required String name,
-    required String shareClassId,
     this.status = const Value.absent(),
     required int poolSize,
     this.targetPercentage = const Value.absent(),
@@ -5392,7 +5803,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
   }) : id = Value(id),
        companyId = Value(companyId),
        name = Value(name),
-       shareClassId = Value(shareClassId),
        poolSize = Value(poolSize),
        establishedDate = Value(establishedDate),
        createdAt = Value(createdAt),
@@ -5401,7 +5811,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
     Expression<String>? id,
     Expression<String>? companyId,
     Expression<String>? name,
-    Expression<String>? shareClassId,
     Expression<String>? status,
     Expression<int>? poolSize,
     Expression<double>? targetPercentage,
@@ -5421,7 +5830,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
       if (id != null) 'id': id,
       if (companyId != null) 'company_id': companyId,
       if (name != null) 'name': name,
-      if (shareClassId != null) 'share_class_id': shareClassId,
       if (status != null) 'status': status,
       if (poolSize != null) 'pool_size': poolSize,
       if (targetPercentage != null) 'target_percentage': targetPercentage,
@@ -5447,7 +5855,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
     Value<String>? id,
     Value<String>? companyId,
     Value<String>? name,
-    Value<String>? shareClassId,
     Value<String>? status,
     Value<int>? poolSize,
     Value<double?>? targetPercentage,
@@ -5467,7 +5874,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
       id: id ?? this.id,
       companyId: companyId ?? this.companyId,
       name: name ?? this.name,
-      shareClassId: shareClassId ?? this.shareClassId,
       status: status ?? this.status,
       poolSize: poolSize ?? this.poolSize,
       targetPercentage: targetPercentage ?? this.targetPercentage,
@@ -5497,9 +5903,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
-    }
-    if (shareClassId.present) {
-      map['share_class_id'] = Variable<String>(shareClassId.value);
     }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
@@ -5554,7 +5957,6 @@ class EsopPoolsCompanion extends UpdateCompanion<EsopPool> {
           ..write('id: $id, ')
           ..write('companyId: $companyId, ')
           ..write('name: $name, ')
-          ..write('shareClassId: $shareClassId, ')
           ..write('status: $status, ')
           ..write('poolSize: $poolSize, ')
           ..write('targetPercentage: $targetPercentage, ')
@@ -15630,27 +16032,6 @@ final class $$ShareClassesTableReferences
     );
   }
 
-  static MultiTypedResultKey<$EsopPoolsTable, List<EsopPool>>
-  _esopPoolsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.esopPools,
-    aliasName: $_aliasNameGenerator(
-      db.shareClasses.id,
-      db.esopPools.shareClassId,
-    ),
-  );
-
-  $$EsopPoolsTableProcessedTableManager get esopPoolsRefs {
-    final manager = $$EsopPoolsTableTableManager(
-      $_db,
-      $_db.esopPools,
-    ).filter((f) => f.shareClassId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_esopPoolsRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
   static MultiTypedResultKey<$OptionGrantsTable, List<OptionGrant>>
   _optionGrantsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.optionGrants,
@@ -15824,31 +16205,6 @@ class $$ShareClassesTableFilterComposer
           }) => $$HoldingsTableFilterComposer(
             $db: $db,
             $table: $db.holdings,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> esopPoolsRefs(
-    Expression<bool> Function($$EsopPoolsTableFilterComposer f) f,
-  ) {
-    final $$EsopPoolsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.esopPools,
-      getReferencedColumn: (t) => t.shareClassId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$EsopPoolsTableFilterComposer(
-            $db: $db,
-            $table: $db.esopPools,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -16130,31 +16486,6 @@ class $$ShareClassesTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> esopPoolsRefs<T extends Object>(
-    Expression<T> Function($$EsopPoolsTableAnnotationComposer a) f,
-  ) {
-    final $$EsopPoolsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.esopPools,
-      getReferencedColumn: (t) => t.shareClassId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$EsopPoolsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.esopPools,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
   Expression<T> optionGrantsRefs<T extends Object>(
     Expression<T> Function($$OptionGrantsTableAnnotationComposer a) f,
   ) {
@@ -16247,7 +16578,6 @@ class $$ShareClassesTableTableManager
           PrefetchHooks Function({
             bool companyId,
             bool holdingsRefs,
-            bool esopPoolsRefs,
             bool optionGrantsRefs,
             bool warrantsRefs,
             bool transfersRefs,
@@ -16340,7 +16670,6 @@ class $$ShareClassesTableTableManager
               ({
                 companyId = false,
                 holdingsRefs = false,
-                esopPoolsRefs = false,
                 optionGrantsRefs = false,
                 warrantsRefs = false,
                 transfersRefs = false,
@@ -16349,7 +16678,6 @@ class $$ShareClassesTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (holdingsRefs) db.holdings,
-                    if (esopPoolsRefs) db.esopPools,
                     if (optionGrantsRefs) db.optionGrants,
                     if (warrantsRefs) db.warrants,
                     if (transfersRefs) db.transfers,
@@ -16405,27 +16733,6 @@ class $$ShareClassesTableTableManager
                                 table,
                                 p0,
                               ).holdingsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.shareClassId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (esopPoolsRefs)
-                        await $_getPrefetchedData<
-                          ShareClassesData,
-                          $ShareClassesTable,
-                          EsopPool
-                        >(
-                          currentTable: table,
-                          referencedTable: $$ShareClassesTableReferences
-                              ._esopPoolsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$ShareClassesTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).esopPoolsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.shareClassId == item.id,
@@ -16518,7 +16825,6 @@ typedef $$ShareClassesTableProcessedTableManager =
       PrefetchHooks Function({
         bool companyId,
         bool holdingsRefs,
-        bool esopPoolsRefs,
         bool optionGrantsRefs,
         bool warrantsRefs,
         bool transfersRefs,
@@ -18454,6 +18760,13 @@ typedef $$ConvertiblesTableCreateCompanionBuilder =
       Value<String?> convertedToShareClassId,
       Value<int?> sharesReceived,
       Value<String?> notes,
+      Value<String?> maturityBehavior,
+      Value<bool> allowsVoluntaryConversion,
+      Value<String?> liquidityEventBehavior,
+      Value<double?> liquidityPayoutMultiple,
+      Value<String?> dissolutionBehavior,
+      Value<String?> preferredShareClassId,
+      Value<double?> qualifiedFinancingThreshold,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -18478,6 +18791,13 @@ typedef $$ConvertiblesTableUpdateCompanionBuilder =
       Value<String?> convertedToShareClassId,
       Value<int?> sharesReceived,
       Value<String?> notes,
+      Value<String?> maturityBehavior,
+      Value<bool> allowsVoluntaryConversion,
+      Value<String?> liquidityEventBehavior,
+      Value<double?> liquidityPayoutMultiple,
+      Value<String?> dissolutionBehavior,
+      Value<String?> preferredShareClassId,
+      Value<double?> qualifiedFinancingThreshold,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -18690,6 +19010,41 @@ class $$ConvertiblesTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get maturityBehavior => $composableBuilder(
+    column: $table.maturityBehavior,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get allowsVoluntaryConversion => $composableBuilder(
+    column: $table.allowsVoluntaryConversion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get liquidityEventBehavior => $composableBuilder(
+    column: $table.liquidityEventBehavior,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get liquidityPayoutMultiple => $composableBuilder(
+    column: $table.liquidityPayoutMultiple,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dissolutionBehavior => $composableBuilder(
+    column: $table.dissolutionBehavior,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get preferredShareClassId => $composableBuilder(
+    column: $table.preferredShareClassId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get qualifiedFinancingThreshold => $composableBuilder(
+    column: $table.qualifiedFinancingThreshold,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18932,6 +19287,41 @@ class $$ConvertiblesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get maturityBehavior => $composableBuilder(
+    column: $table.maturityBehavior,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get allowsVoluntaryConversion => $composableBuilder(
+    column: $table.allowsVoluntaryConversion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get liquidityEventBehavior => $composableBuilder(
+    column: $table.liquidityEventBehavior,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get liquidityPayoutMultiple => $composableBuilder(
+    column: $table.liquidityPayoutMultiple,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dissolutionBehavior => $composableBuilder(
+    column: $table.dissolutionBehavior,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get preferredShareClassId => $composableBuilder(
+    column: $table.preferredShareClassId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get qualifiedFinancingThreshold => $composableBuilder(
+    column: $table.qualifiedFinancingThreshold,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -19081,6 +19471,41 @@ class $$ConvertiblesTableAnnotationComposer
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get maturityBehavior => $composableBuilder(
+    column: $table.maturityBehavior,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get allowsVoluntaryConversion => $composableBuilder(
+    column: $table.allowsVoluntaryConversion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get liquidityEventBehavior => $composableBuilder(
+    column: $table.liquidityEventBehavior,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get liquidityPayoutMultiple => $composableBuilder(
+    column: $table.liquidityPayoutMultiple,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get dissolutionBehavior => $composableBuilder(
+    column: $table.dissolutionBehavior,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get preferredShareClassId => $composableBuilder(
+    column: $table.preferredShareClassId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get qualifiedFinancingThreshold => $composableBuilder(
+    column: $table.qualifiedFinancingThreshold,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -19286,6 +19711,14 @@ class $$ConvertiblesTableTableManager
                 Value<String?> convertedToShareClassId = const Value.absent(),
                 Value<int?> sharesReceived = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> maturityBehavior = const Value.absent(),
+                Value<bool> allowsVoluntaryConversion = const Value.absent(),
+                Value<String?> liquidityEventBehavior = const Value.absent(),
+                Value<double?> liquidityPayoutMultiple = const Value.absent(),
+                Value<String?> dissolutionBehavior = const Value.absent(),
+                Value<String?> preferredShareClassId = const Value.absent(),
+                Value<double?> qualifiedFinancingThreshold =
+                    const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -19308,6 +19741,13 @@ class $$ConvertiblesTableTableManager
                 convertedToShareClassId: convertedToShareClassId,
                 sharesReceived: sharesReceived,
                 notes: notes,
+                maturityBehavior: maturityBehavior,
+                allowsVoluntaryConversion: allowsVoluntaryConversion,
+                liquidityEventBehavior: liquidityEventBehavior,
+                liquidityPayoutMultiple: liquidityPayoutMultiple,
+                dissolutionBehavior: dissolutionBehavior,
+                preferredShareClassId: preferredShareClassId,
+                qualifiedFinancingThreshold: qualifiedFinancingThreshold,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -19332,6 +19772,14 @@ class $$ConvertiblesTableTableManager
                 Value<String?> convertedToShareClassId = const Value.absent(),
                 Value<int?> sharesReceived = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> maturityBehavior = const Value.absent(),
+                Value<bool> allowsVoluntaryConversion = const Value.absent(),
+                Value<String?> liquidityEventBehavior = const Value.absent(),
+                Value<double?> liquidityPayoutMultiple = const Value.absent(),
+                Value<String?> dissolutionBehavior = const Value.absent(),
+                Value<String?> preferredShareClassId = const Value.absent(),
+                Value<double?> qualifiedFinancingThreshold =
+                    const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -19354,6 +19802,13 @@ class $$ConvertiblesTableTableManager
                 convertedToShareClassId: convertedToShareClassId,
                 sharesReceived: sharesReceived,
                 notes: notes,
+                maturityBehavior: maturityBehavior,
+                allowsVoluntaryConversion: allowsVoluntaryConversion,
+                liquidityEventBehavior: liquidityEventBehavior,
+                liquidityPayoutMultiple: liquidityPayoutMultiple,
+                dissolutionBehavior: dissolutionBehavior,
+                preferredShareClassId: preferredShareClassId,
+                qualifiedFinancingThreshold: qualifiedFinancingThreshold,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -19545,7 +20000,6 @@ typedef $$EsopPoolsTableCreateCompanionBuilder =
       required String id,
       required String companyId,
       required String name,
-      required String shareClassId,
       Value<String> status,
       required int poolSize,
       Value<double?> targetPercentage,
@@ -19566,7 +20020,6 @@ typedef $$EsopPoolsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> companyId,
       Value<String> name,
-      Value<String> shareClassId,
       Value<String> status,
       Value<int> poolSize,
       Value<double?> targetPercentage,
@@ -19600,25 +20053,6 @@ final class $$EsopPoolsTableReferences
       $_db.companies,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_companyIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-
-  static $ShareClassesTable _shareClassIdTable(_$AppDatabase db) =>
-      db.shareClasses.createAlias(
-        $_aliasNameGenerator(db.esopPools.shareClassId, db.shareClasses.id),
-      );
-
-  $$ShareClassesTableProcessedTableManager get shareClassId {
-    final $_column = $_itemColumn<String>('share_class_id')!;
-
-    final manager = $$ShareClassesTableTableManager(
-      $_db,
-      $_db.shareClasses,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_shareClassIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -19761,29 +20195,6 @@ class $$EsopPoolsTableFilterComposer
           }) => $$CompaniesTableFilterComposer(
             $db: $db,
             $table: $db.companies,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  $$ShareClassesTableFilterComposer get shareClassId {
-    final $$ShareClassesTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.shareClassId,
-      referencedTable: $db.shareClasses,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$ShareClassesTableFilterComposer(
-            $db: $db,
-            $table: $db.shareClasses,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -19944,29 +20355,6 @@ class $$EsopPoolsTableOrderingComposer
     return composer;
   }
 
-  $$ShareClassesTableOrderingComposer get shareClassId {
-    final $$ShareClassesTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.shareClassId,
-      referencedTable: $db.shareClasses,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$ShareClassesTableOrderingComposer(
-            $db: $db,
-            $table: $db.shareClasses,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
   $$RoundsTableOrderingComposer get roundId {
     final $$RoundsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -20079,29 +20467,6 @@ class $$EsopPoolsTableAnnotationComposer
     return composer;
   }
 
-  $$ShareClassesTableAnnotationComposer get shareClassId {
-    final $$ShareClassesTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.shareClassId,
-      referencedTable: $db.shareClasses,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$ShareClassesTableAnnotationComposer(
-            $db: $db,
-            $table: $db.shareClasses,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
   $$RoundsTableAnnotationComposer get roundId {
     final $$RoundsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -20167,7 +20532,6 @@ class $$EsopPoolsTableTableManager
           EsopPool,
           PrefetchHooks Function({
             bool companyId,
-            bool shareClassId,
             bool roundId,
             bool esopPoolExpansionsRefs,
           })
@@ -20188,7 +20552,6 @@ class $$EsopPoolsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> companyId = const Value.absent(),
                 Value<String> name = const Value.absent(),
-                Value<String> shareClassId = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<int> poolSize = const Value.absent(),
                 Value<double?> targetPercentage = const Value.absent(),
@@ -20207,7 +20570,6 @@ class $$EsopPoolsTableTableManager
                 id: id,
                 companyId: companyId,
                 name: name,
-                shareClassId: shareClassId,
                 status: status,
                 poolSize: poolSize,
                 targetPercentage: targetPercentage,
@@ -20228,7 +20590,6 @@ class $$EsopPoolsTableTableManager
                 required String id,
                 required String companyId,
                 required String name,
-                required String shareClassId,
                 Value<String> status = const Value.absent(),
                 required int poolSize,
                 Value<double?> targetPercentage = const Value.absent(),
@@ -20247,7 +20608,6 @@ class $$EsopPoolsTableTableManager
                 id: id,
                 companyId: companyId,
                 name: name,
-                shareClassId: shareClassId,
                 status: status,
                 poolSize: poolSize,
                 targetPercentage: targetPercentage,
@@ -20274,7 +20634,6 @@ class $$EsopPoolsTableTableManager
           prefetchHooksCallback:
               ({
                 companyId = false,
-                shareClassId = false,
                 roundId = false,
                 esopPoolExpansionsRefs = false,
               }) {
@@ -20308,19 +20667,6 @@ class $$EsopPoolsTableTableManager
                                         ._companyIdTable(db),
                                     referencedColumn: $$EsopPoolsTableReferences
                                         ._companyIdTable(db)
-                                        .id,
-                                  )
-                                  as T;
-                        }
-                        if (shareClassId) {
-                          state =
-                              state.withJoin(
-                                    currentTable: table,
-                                    currentColumn: table.shareClassId,
-                                    referencedTable: $$EsopPoolsTableReferences
-                                        ._shareClassIdTable(db),
-                                    referencedColumn: $$EsopPoolsTableReferences
-                                        ._shareClassIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -20386,7 +20732,6 @@ typedef $$EsopPoolsTableProcessedTableManager =
       EsopPool,
       PrefetchHooks Function({
         bool companyId,
-        bool shareClassId,
         bool roundId,
         bool esopPoolExpansionsRefs,
       })

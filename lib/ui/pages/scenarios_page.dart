@@ -814,6 +814,7 @@ class _SavedScenarioCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dateFormat = DateFormat.yMMMd();
+    final deleteEnabled = ref.watch(deleteEnabledProvider).valueOrNull ?? false;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -845,14 +846,15 @@ class _SavedScenarioCard extends ConsumerWidget {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
-            const PopupMenuItem(
-              value: 'delete',
-              child: ListTile(
-                leading: Icon(Icons.delete, color: Colors.red),
-                title: Text('Delete', style: TextStyle(color: Colors.red)),
-                contentPadding: EdgeInsets.zero,
+            if (deleteEnabled)
+              const PopupMenuItem(
+                value: 'delete',
+                child: ListTile(
+                  leading: Icon(Icons.delete, color: Colors.red),
+                  title: Text('Delete', style: TextStyle(color: Colors.red)),
+                  contentPadding: EdgeInsets.zero,
+                ),
               ),
-            ),
           ],
           onSelected: (value) async {
             if (value == 'view') {
@@ -862,7 +864,9 @@ class _SavedScenarioCard extends ConsumerWidget {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('Delete Scenario?'),
-                  content: Text('Delete "${scenario.name}"?'),
+                  content: Text(
+                    'Are you sure you want to permanently delete "${scenario.name}"? This cannot be undone.',
+                  ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
@@ -870,6 +874,9 @@ class _SavedScenarioCard extends ConsumerWidget {
                     ),
                     FilledButton(
                       onPressed: () => Navigator.pop(context, true),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
                       child: const Text('Delete'),
                     ),
                   ],
@@ -879,6 +886,11 @@ class _SavedScenarioCard extends ConsumerWidget {
                 await ref
                     .read(scenarioCommandsProvider.notifier)
                     .deleteScenario(scenarioId: scenario.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${scenario.name} deleted')),
+                  );
+                }
               }
             }
           },

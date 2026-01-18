@@ -68,6 +68,8 @@ class ShareClassesPage extends ConsumerWidget {
     WidgetRef ref,
     ShareClassesData shareClass,
   ) {
+    final deleteEnabled = ref.watch(deleteEnabledProvider).valueOrNull ?? false;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -126,22 +128,23 @@ class ShareClassesPage extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.delete,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    title: Text(
-                      'Delete',
-                      style: TextStyle(
+                if (deleteEnabled)
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.delete,
                         color: Theme.of(context).colorScheme.error,
                       ),
+                      title: Text(
+                        'Delete',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      contentPadding: EdgeInsets.zero,
                     ),
-                    contentPadding: EdgeInsets.zero,
                   ),
-                ),
               ],
             ),
           ],
@@ -509,18 +512,47 @@ class ShareClassesPage extends ConsumerWidget {
     WidgetRef ref,
     ShareClassesData shareClass,
   ) async {
+    // Preview cascade impact
+    final cascadeImpact = await ref
+        .read(eventLedgerProvider.notifier)
+        .previewCascadeDelete(
+          entityId: shareClass.id,
+          entityType: EntityType.shareClass,
+        );
+
+    final impactLines = <String>[];
+    cascadeImpact.forEach((type, count) {
+      if (count > 0) {
+        impactLines.add('• $count ${type.name}(s)');
+      }
+    });
+
+    final message = impactLines.isEmpty
+        ? 'Are you sure you want to permanently delete "${shareClass.name}"? This cannot be undone.'
+        : 'This will permanently delete:\n${impactLines.join('\n')}\n\nThis cannot be undone.';
+
     final confirmed = await ConfirmDialog.showDelete(
       context: context,
       itemName: shareClass.name,
+      customMessage: message,
     );
 
     if (confirmed) {
-      // TODO: Implement deleteShareClass in ShareClassCommands
-      // This operation is not yet supported in the event-sourcing architecture.
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Delete not yet implemented')),
-        );
+      try {
+        await ref
+            .read(shareClassCommandsProvider.notifier)
+            .deleteShareClass(shareClassId: shareClass.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('${shareClass.name} deleted')));
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting share class: $e')),
+          );
+        }
       }
     }
   }

@@ -210,6 +210,25 @@ sealed class CapTableEvent with _$CapTableEvent {
     String? actorId,
   }) = SharesRepurchased;
 
+  const factory CapTableEvent.holdingDeleted({
+    required String companyId,
+    required String holdingId,
+    required DateTime timestamp,
+    String? actorId,
+  }) = HoldingDeleted;
+
+  const factory CapTableEvent.holdingUpdated({
+    required String companyId,
+    required String holdingId,
+    int? shareCount,
+    double? costBasis,
+    DateTime? acquiredDate,
+    String? shareClassId,
+    String? vestingScheduleId,
+    required DateTime timestamp,
+    String? actorId,
+  }) = HoldingUpdated;
+
   const factory CapTableEvent.holdingVestingUpdated({
     required String companyId,
     required String holdingId,
@@ -237,6 +256,14 @@ sealed class CapTableEvent with _$CapTableEvent {
     @Default(false) bool hasProRata,
     String? roundId,
     String? notes,
+    // Advanced terms
+    String? maturityBehavior,
+    @Default(false) bool allowsVoluntaryConversion,
+    String? liquidityEventBehavior,
+    double? liquidityPayoutMultiple,
+    String? dissolutionBehavior,
+    String? preferredShareClassId,
+    double? qualifiedFinancingThreshold,
     required DateTime timestamp,
     String? actorId,
   }) = ConvertibleIssued;
@@ -261,7 +288,7 @@ sealed class CapTableEvent with _$CapTableEvent {
   const factory CapTableEvent.convertibleConverted({
     required String companyId,
     required String convertibleId,
-    required String roundId,
+    String? roundId, // Optional for voluntary conversions outside of a round
     required String toShareClassId,
     required int sharesReceived,
     required double conversionPrice,
@@ -277,6 +304,31 @@ sealed class CapTableEvent with _$CapTableEvent {
     String? actorId,
   }) = ConvertibleCancelled;
 
+  const factory CapTableEvent.convertibleUpdated({
+    required String companyId,
+    required String convertibleId,
+    double? principal,
+    double? valuationCap,
+    double? discountPercent,
+    double? interestRate,
+    DateTime? issueDate,
+    DateTime? maturityDate,
+    bool? hasMfn,
+    bool? hasProRata,
+    String? roundId,
+    String? notes,
+    // Advanced terms
+    String? maturityBehavior,
+    bool? allowsVoluntaryConversion,
+    String? liquidityEventBehavior,
+    double? liquidityPayoutMultiple,
+    String? dissolutionBehavior,
+    String? preferredShareClassId,
+    double? qualifiedFinancingThreshold,
+    required DateTime timestamp,
+    String? actorId,
+  }) = ConvertibleUpdated;
+
   // ============================================================
   // ESOP POOLS
   // ============================================================
@@ -285,7 +337,6 @@ sealed class CapTableEvent with _$CapTableEvent {
     required String companyId,
     required String poolId,
     required String name,
-    required String shareClassId,
     required int poolSize,
     double? targetPercentage,
     required DateTime establishedDate,
@@ -320,6 +371,38 @@ sealed class CapTableEvent with _$CapTableEvent {
     required DateTime timestamp,
     String? actorId,
   }) = EsopPoolActivated;
+
+  const factory CapTableEvent.esopPoolUpdated({
+    required String companyId,
+    required String poolId,
+    String? name,
+    double? targetPercentage,
+    String? defaultVestingScheduleId,
+    String? strikePriceMethod,
+    double? defaultStrikePrice,
+    int? defaultExpiryYears,
+    String? notes,
+    required DateTime timestamp,
+    String? actorId,
+  }) = EsopPoolUpdated;
+
+  const factory CapTableEvent.esopPoolDeleted({
+    required String companyId,
+    required String poolId,
+    required DateTime timestamp,
+    String? actorId,
+  }) = EsopPoolDeleted;
+
+  const factory CapTableEvent.esopPoolExpansionReverted({
+    required String companyId,
+    required String expansionId,
+    required String poolId,
+    required int previousSize,
+    required int revertedSize,
+    required int sharesRemoved,
+    required DateTime timestamp,
+    String? actorId,
+  }) = EsopPoolExpansionReverted;
 
   // ============================================================
   // OPTION GRANTS
@@ -361,6 +444,24 @@ sealed class CapTableEvent with _$CapTableEvent {
     required DateTime exerciseDate,
     required DateTime timestamp,
     String? actorId,
+
+    /// The type of exercise: cash, cashless, net, netWithTax
+    @Default('cash') String exerciseType,
+
+    /// Shares withheld to cover strike price (for net exercise)
+    int? sharesWithheldForStrike,
+
+    /// Shares withheld for tax withholding (for netWithTax or cashless)
+    int? sharesWithheldForTax,
+
+    /// Net shares received by the holder after withholding
+    int? netSharesReceived,
+
+    /// For cashless: the fair market value per share at exercise
+    double? fairMarketValue,
+
+    /// For cashless: proceeds received after costs
+    double? proceedsReceived,
   }) = OptionsExercised;
 
   const factory CapTableEvent.optionsCancelled({
@@ -380,6 +481,23 @@ sealed class CapTableEvent with _$CapTableEvent {
     required DateTime timestamp,
     String? actorId,
   }) = OptionGrantStatusChanged;
+
+  const factory CapTableEvent.optionGrantUpdated({
+    required String companyId,
+    required String grantId,
+    String? shareClassId,
+    String? esopPoolId,
+    int? quantity,
+    double? strikePrice,
+    DateTime? grantDate,
+    DateTime? expiryDate,
+    String? vestingScheduleId,
+    String? roundId,
+    bool? allowsEarlyExercise,
+    String? notes,
+    required DateTime timestamp,
+    String? actorId,
+  }) = OptionGrantUpdated;
 
   // ============================================================
   // WARRANTS
@@ -410,6 +528,24 @@ sealed class CapTableEvent with _$CapTableEvent {
     required DateTime exerciseDate,
     required DateTime timestamp,
     String? actorId,
+
+    /// The type of exercise: cash, cashless, net, netWithTax
+    @Default('cash') String exerciseType,
+
+    /// Shares withheld to cover strike price (for net exercise)
+    int? sharesWithheldForStrike,
+
+    /// Shares withheld for tax withholding (for netWithTax or cashless)
+    int? sharesWithheldForTax,
+
+    /// Net shares received by the holder after withholding
+    int? netSharesReceived,
+
+    /// For cashless: the fair market value per share at exercise
+    double? fairMarketValue,
+
+    /// For cashless: proceeds received after costs
+    double? proceedsReceived,
   }) = WarrantExercised;
 
   const factory CapTableEvent.warrantCancelled({

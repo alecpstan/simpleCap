@@ -45,3 +45,17 @@ Future<int> pendingMfnUpgradeCount(PendingMfnUpgradeCountRef ref) async {
   final upgrades = await ref.watch(pendingMfnUpgradesProvider.future);
   return upgrades.length;
 }
+
+/// Watches MFN upgrades for a specific target convertible.
+@riverpod
+Stream<List<MfnUpgrade>> mfnUpgradesForTarget(
+  MfnUpgradesForTargetRef ref,
+  String targetConvertibleId,
+) {
+  final db = ref.watch(databaseProvider);
+  // Use a custom query that watches for changes
+  return (db.select(db.mfnUpgrades)
+        ..where((u) => u.targetConvertibleId.equals(targetConvertibleId))
+        ..orderBy([(u) => OrderingTerm.desc(u.upgradeDate)]))
+      .watch();
+}

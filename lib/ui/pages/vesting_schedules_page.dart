@@ -106,6 +106,8 @@ class VestingSchedulesPage extends ConsumerWidget {
     WidgetRef ref,
     VestingSchedule schedule,
   ) {
+    final deleteEnabled = ref.watch(deleteEnabledProvider).valueOrNull ?? false;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -167,22 +169,23 @@ class VestingSchedulesPage extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.delete,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    title: Text(
-                      'Delete',
-                      style: TextStyle(
+                if (deleteEnabled)
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.delete,
                         color: Theme.of(context).colorScheme.error,
                       ),
+                      title: Text(
+                        'Delete',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      contentPadding: EdgeInsets.zero,
                     ),
-                    contentPadding: EdgeInsets.zero,
                   ),
-                ),
               ],
             ),
           ],
@@ -514,15 +517,48 @@ class VestingSchedulesPage extends ConsumerWidget {
     WidgetRef ref,
     VestingSchedule schedule,
   ) async {
+    // Preview cascade impact
+    final cascadeImpact = await ref
+        .read(eventLedgerProvider.notifier)
+        .previewCascadeDelete(
+          entityId: schedule.id,
+          entityType: EntityType.vestingSchedule,
+        );
+
+    final impactLines = <String>[];
+    cascadeImpact.forEach((type, count) {
+      if (count > 0) {
+        impactLines.add('• $count ${type.name}(s)');
+      }
+    });
+
+    final message = impactLines.isEmpty
+        ? 'Are you sure you want to permanently delete "${schedule.name}"? This cannot be undone.'
+        : 'This will permanently delete:\n${impactLines.join('\n')}\n\nThis cannot be undone.';
+
     final confirmed = await ConfirmDialog.showDelete(
       context: context,
       itemName: schedule.name,
+      customMessage: message,
     );
 
     if (confirmed) {
-      await ref
-          .read(vestingScheduleCommandsProvider.notifier)
-          .deleteVestingSchedule(scheduleId: schedule.id);
+      try {
+        await ref
+            .read(vestingScheduleCommandsProvider.notifier)
+            .deleteVestingSchedule(scheduleId: schedule.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('${schedule.name} deleted')));
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting schedule: $e')),
+          );
+        }
+      }
     }
   }
 

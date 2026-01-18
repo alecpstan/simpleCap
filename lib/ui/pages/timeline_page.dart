@@ -35,9 +35,12 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         title: const Text('Timeline'),
         actions: [
           IconButton(
-            icon: Icon(_sortNewestFirst ? Icons.arrow_downward : Icons.arrow_upward),
+            icon: Icon(
+              _sortNewestFirst ? Icons.arrow_downward : Icons.arrow_upward,
+            ),
             tooltip: _sortNewestFirst ? 'Newest first' : 'Oldest first',
-            onPressed: () => setState(() => _sortNewestFirst = !_sortNewestFirst),
+            onPressed: () =>
+                setState(() => _sortNewestFirst = !_sortNewestFirst),
           ),
         ],
       ),
@@ -65,7 +68,8 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
                 ),
                 filled: true,
               ),
-              onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
+              onChanged: (value) =>
+                  setState(() => _searchQuery = value.toLowerCase()),
             ),
           ),
           // Events list
@@ -195,10 +199,7 @@ class _MonthSection extends StatelessWidget {
   final String monthLabel;
   final List<CapTableEvent> events;
 
-  const _MonthSection({
-    required this.monthLabel,
-    required this.events,
-  });
+  const _MonthSection({required this.monthLabel, required this.events});
 
   @override
   Widget build(BuildContext context) {
@@ -217,10 +218,12 @@ class _MonthSection extends StatelessWidget {
             ),
           ),
         ),
-        ...events.map((event) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _EventCard(event: event),
-            )),
+        ...events.map(
+          (event) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _EventCard(event: event),
+          ),
+        ),
       ],
     );
   }
@@ -243,6 +246,7 @@ class _EventCard extends StatelessWidget {
     final timestamp = _getTimestamp(event);
     final actor = _getActorId(event);
     final timeFormat = DateFormat('MMM d, yyyy • h:mm a');
+    final isDraft = _isDraftEvent(event);
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -251,50 +255,73 @@ class _EventCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  typeLabel,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: color,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      typeLabel,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      timeFormat.format(timestamp),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                    if (actor != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'by $actor',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (isDraft)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Draft',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onTertiaryContainer,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  timeFormat.format(timestamp),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-                if (actor != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'by $actor',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -304,6 +331,70 @@ class _EventCard extends StatelessWidget {
 // ===========================================================================
 // Helper functions
 // ===========================================================================
+
+/// Returns true if the event represents creating or entering a draft/pending state.
+bool _isDraftEvent(CapTableEvent event) {
+  return event.map(
+    // Rounds start as draft when opened, and return to draft when reopened
+    roundOpened: (_) => true,
+    roundReopened: (_) => true,
+    // ESOP pools are draft only when created via round builder (with roundId)
+    esopPoolCreated: (e) => e.roundId != null,
+    // Transfers start as pending when initiated
+    transferInitiated: (_) => true,
+    // Warrants start as pending when issued
+    warrantIssued: (_) => true,
+    // All other events are not draft states
+    companyCreated: (_) => false,
+    companyRenamed: (_) => false,
+    stakeholderAdded: (_) => false,
+    stakeholderUpdated: (_) => false,
+    stakeholderRemoved: (_) => false,
+    shareClassCreated: (_) => false,
+    shareClassUpdated: (_) => false,
+    roundClosed: (_) => false,
+    roundAmended: (_) => false,
+    roundDeleted: (_) => false,
+    sharesIssued: (_) => false,
+    sharesTransferred: (_) => false,
+    sharesRepurchased: (_) => false,
+    holdingDeleted: (_) => false,
+    holdingUpdated: (_) => false,
+    holdingVestingUpdated: (_) => false,
+    convertibleIssued: (_) => false,
+    mfnUpgradeApplied: (_) => false,
+    convertibleConverted: (_) => false,
+    convertibleCancelled: (_) => false,
+    convertibleUpdated: (_) => false,
+    esopPoolExpanded: (_) => false,
+    esopPoolActivated: (_) => false,
+    esopPoolUpdated: (_) => false,
+    esopPoolDeleted: (_) => false,
+    esopPoolExpansionReverted: (_) => false,
+    optionGranted: (_) => false,
+    optionGrantUpdated: (_) => false,
+    optionsVested: (_) => false,
+    optionsExercised: (_) => false,
+    optionsCancelled: (_) => false,
+    optionGrantStatusChanged: (_) => false,
+    warrantExercised: (_) => false,
+    warrantCancelled: (_) => false,
+    warrantUpdated: (_) => false,
+    warrantUnexercised: (_) => false,
+    warrantStatusChanged: (_) => false,
+    vestingScheduleCreated: (_) => false,
+    vestingScheduleUpdated: (_) => false,
+    vestingScheduleDeleted: (_) => false,
+    valuationRecorded: (_) => false,
+    valuationDeleted: (_) => false,
+    transferRofrWaived: (_) => false,
+    transferExecuted: (_) => false,
+    transferCancelled: (_) => false,
+    mfnUpgradeReverted: (_) => false,
+    scenarioSaved: (_) => false,
+    scenarioDeleted: (_) => false,
+  );
+}
 
 /// Event category for color coding.
 enum _EventCategory {
@@ -339,15 +430,22 @@ _EventCategory _getEventCategory(CapTableEvent event) {
     sharesIssued: (_) => _EventCategory.holding,
     sharesTransferred: (_) => _EventCategory.holding,
     sharesRepurchased: (_) => _EventCategory.holding,
+    holdingDeleted: (_) => _EventCategory.holding,
+    holdingUpdated: (_) => _EventCategory.holding,
     holdingVestingUpdated: (_) => _EventCategory.holding,
     convertibleIssued: (_) => _EventCategory.convertible,
     mfnUpgradeApplied: (_) => _EventCategory.convertible,
     convertibleConverted: (_) => _EventCategory.convertible,
     convertibleCancelled: (_) => _EventCategory.convertible,
+    convertibleUpdated: (_) => _EventCategory.convertible,
     esopPoolCreated: (_) => _EventCategory.esop,
     esopPoolExpanded: (_) => _EventCategory.esop,
     esopPoolActivated: (_) => _EventCategory.esop,
+    esopPoolUpdated: (_) => _EventCategory.esop,
+    esopPoolDeleted: (_) => _EventCategory.esop,
+    esopPoolExpansionReverted: (_) => _EventCategory.esop,
     optionGranted: (_) => _EventCategory.option,
+    optionGrantUpdated: (_) => _EventCategory.option,
     optionsVested: (_) => _EventCategory.option,
     optionsExercised: (_) => _EventCategory.option,
     optionsCancelled: (_) => _EventCategory.option,
@@ -452,15 +550,22 @@ String _getEventTypeLabel(CapTableEvent event) {
     sharesIssued: (_) => 'Shares Issued',
     sharesTransferred: (_) => 'Shares Transferred',
     sharesRepurchased: (_) => 'Shares Repurchased',
+    holdingDeleted: (_) => 'Holding Deleted',
+    holdingUpdated: (_) => 'Holding Updated',
     holdingVestingUpdated: (_) => 'Vesting Updated',
     convertibleIssued: (_) => 'Convertible Issued',
     mfnUpgradeApplied: (_) => 'MFN Upgrade Applied',
     convertibleConverted: (_) => 'Convertible Converted',
     convertibleCancelled: (_) => 'Convertible Cancelled',
+    convertibleUpdated: (_) => 'Convertible Updated',
     esopPoolCreated: (_) => 'ESOP Pool Created',
     esopPoolExpanded: (_) => 'ESOP Pool Expanded',
     esopPoolActivated: (_) => 'ESOP Pool Activated',
+    esopPoolUpdated: (_) => 'ESOP Pool Updated',
+    esopPoolDeleted: (_) => 'ESOP Pool Deleted',
+    esopPoolExpansionReverted: (_) => 'Pool Expansion Reverted',
     optionGranted: (_) => 'Option Granted',
+    optionGrantUpdated: (_) => 'Option Grant Updated',
     optionsVested: (_) => 'Options Vested',
     optionsExercised: (_) => 'Options Exercised',
     optionsCancelled: (_) => 'Options Cancelled',
@@ -490,47 +595,85 @@ String _getEventDescription(CapTableEvent event) {
   return event.map(
     companyCreated: (e) => 'Created company "${e.name}"',
     companyRenamed: (e) => 'Renamed from "${e.previousName}" to "${e.newName}"',
-    stakeholderAdded: (e) => 'Added stakeholder "${e.name}" (${e.stakeholderType})',
-    stakeholderUpdated: (e) => 'Updated stakeholder${e.name != null ? ' "${e.name}"' : ''}',
+    stakeholderAdded: (e) =>
+        'Added stakeholder "${e.name}" (${e.stakeholderType})',
+    stakeholderUpdated: (e) =>
+        'Updated stakeholder${e.name != null ? ' "${e.name}"' : ''}',
     stakeholderRemoved: (e) => 'Removed stakeholder',
-    shareClassCreated: (e) => 'Created share class "${e.name}" (${e.shareClassType})',
-    shareClassUpdated: (e) => 'Updated share class${e.name != null ? ' "${e.name}"' : ''}',
+    shareClassCreated: (e) =>
+        'Created share class "${e.name}" (${e.shareClassType})',
+    shareClassUpdated: (e) =>
+        'Updated share class${e.name != null ? ' "${e.name}"' : ''}',
     roundOpened: (e) => 'Opened round "${e.name}" (${e.roundType})',
-    roundClosed: (e) => 'Closed round with \$${_formatNumber(e.amountRaised)} raised',
+    roundClosed: (e) =>
+        'Closed round with \$${_formatNumber(e.amountRaised)} raised',
     roundAmended: (e) => 'Amended round${e.name != null ? ' "${e.name}"' : ''}',
     roundReopened: (e) => 'Reopened round',
     roundDeleted: (e) => 'Deleted round',
-    sharesIssued: (e) => 'Issued ${_formatNumber(e.shareCount.toDouble())} shares',
-    sharesTransferred: (e) => 'Transferred ${_formatNumber(e.shareCount.toDouble())} shares',
-    sharesRepurchased: (e) => 'Repurchased ${_formatNumber(e.shareCount.toDouble())} shares',
-    holdingVestingUpdated: (e) => 'Updated vesting to ${_formatNumber(e.vestedCount.toDouble())} vested',
-    convertibleIssued: (e) => 'Issued ${e.convertibleType} for \$${_formatNumber(e.principal)}',
+    sharesIssued: (e) =>
+        'Issued ${_formatNumber(e.shareCount.toDouble())} shares',
+    sharesTransferred: (e) =>
+        'Transferred ${_formatNumber(e.shareCount.toDouble())} shares',
+    sharesRepurchased: (e) =>
+        'Repurchased ${_formatNumber(e.shareCount.toDouble())} shares',
+    holdingDeleted: (e) => 'Deleted holding',
+    holdingUpdated: (e) => 'Updated holding',
+    holdingVestingUpdated: (e) =>
+        'Updated vesting to ${_formatNumber(e.vestedCount.toDouble())} vested',
+    convertibleIssued: (e) =>
+        'Issued ${e.convertibleType} for \$${_formatNumber(e.principal)}',
     mfnUpgradeApplied: (e) => 'Applied MFN upgrade',
-    convertibleConverted: (e) => 'Converted to ${_formatNumber(e.sharesReceived.toDouble())} shares',
-    convertibleCancelled: (e) => 'Cancelled convertible${e.reason != null ? ': ${e.reason}' : ''}',
-    esopPoolCreated: (e) => 'Created pool "${e.name}" with ${_formatNumber(e.poolSize.toDouble())} shares',
-    esopPoolExpanded: (e) => 'Expanded pool by ${_formatNumber(e.sharesAdded.toDouble())} shares',
+    convertibleConverted: (e) =>
+        'Converted to ${_formatNumber(e.sharesReceived.toDouble())} shares',
+    convertibleCancelled: (e) =>
+        'Cancelled convertible${e.reason != null ? ': ${e.reason}' : ''}',
+    convertibleUpdated: (e) => 'Updated convertible terms',
+    esopPoolCreated: (e) =>
+        'Created pool "${e.name}" with ${_formatNumber(e.poolSize.toDouble())} shares',
+    esopPoolExpanded: (e) =>
+        'Expanded pool by ${_formatNumber(e.sharesAdded.toDouble())} shares',
     esopPoolActivated: (e) => 'Activated ESOP pool',
-    optionGranted: (e) => 'Granted ${_formatNumber(e.quantity.toDouble())} options at \$${e.strikePrice}',
-    optionsVested: (e) => 'Vested ${_formatNumber(e.vestedCount.toDouble())} options',
-    optionsExercised: (e) => 'Exercised ${_formatNumber(e.exercisedCount.toDouble())} options',
-    optionsCancelled: (e) => 'Cancelled ${_formatNumber(e.cancelledCount.toDouble())} options',
-    optionGrantStatusChanged: (e) => 'Status changed: ${e.previousStatus} → ${e.newStatus}',
-    warrantIssued: (e) => 'Issued ${_formatNumber(e.quantity.toDouble())} warrants at \$${e.strikePrice}',
-    warrantExercised: (e) => 'Exercised ${_formatNumber(e.exercisedCount.toDouble())} warrants',
-    warrantCancelled: (e) => 'Cancelled ${_formatNumber(e.cancelledCount.toDouble())} warrants',
+    esopPoolUpdated: (e) =>
+        'Updated ESOP pool${e.name != null ? ' "${e.name}"' : ''}',
+    esopPoolDeleted: (e) => 'Deleted ESOP pool',
+    esopPoolExpansionReverted: (e) =>
+        'Reverted expansion, removed ${_formatNumber(e.sharesRemoved.toDouble())} shares',
+    optionGranted: (e) =>
+        'Granted ${_formatNumber(e.quantity.toDouble())} options at \$${e.strikePrice}',
+    optionGrantUpdated: (e) => 'Updated option grant',
+    optionsVested: (e) =>
+        'Vested ${_formatNumber(e.vestedCount.toDouble())} options',
+    optionsExercised: (e) =>
+        'Exercised ${_formatNumber(e.exercisedCount.toDouble())} options',
+    optionsCancelled: (e) =>
+        'Cancelled ${_formatNumber(e.cancelledCount.toDouble())} options',
+    optionGrantStatusChanged: (e) =>
+        'Status changed: ${e.previousStatus} → ${e.newStatus}',
+    warrantIssued: (e) =>
+        'Issued ${_formatNumber(e.quantity.toDouble())} warrants at \$${e.strikePrice}',
+    warrantExercised: (e) =>
+        'Exercised ${_formatNumber(e.exercisedCount.toDouble())} warrants',
+    warrantCancelled: (e) =>
+        'Cancelled ${_formatNumber(e.cancelledCount.toDouble())} warrants',
     warrantUpdated: (e) => 'Updated warrant',
-    warrantUnexercised: (e) => 'Unexercised ${_formatNumber(e.unexercisedCount.toDouble())} warrants',
-    warrantStatusChanged: (e) => 'Status changed: ${e.previousStatus} → ${e.newStatus}',
+    warrantUnexercised: (e) =>
+        'Unexercised ${_formatNumber(e.unexercisedCount.toDouble())} warrants',
+    warrantStatusChanged: (e) =>
+        'Status changed: ${e.previousStatus} → ${e.newStatus}',
     vestingScheduleCreated: (e) => 'Created vesting schedule "${e.name}"',
-    vestingScheduleUpdated: (e) => 'Updated vesting schedule${e.name != null ? ' "${e.name}"' : ''}',
+    vestingScheduleUpdated: (e) =>
+        'Updated vesting schedule${e.name != null ? ' "${e.name}"' : ''}',
     vestingScheduleDeleted: (e) => 'Deleted vesting schedule',
-    valuationRecorded: (e) => 'Recorded ${e.method} valuation at \$${_formatNumber(e.preMoneyValue)}',
+    valuationRecorded: (e) =>
+        'Recorded ${e.method} valuation at \$${_formatNumber(e.preMoneyValue)}',
     valuationDeleted: (e) => 'Deleted valuation',
-    transferInitiated: (e) => 'Initiated transfer of ${_formatNumber(e.shareCount.toDouble())} shares',
-    transferRofrWaived: (e) => 'ROFR waived${e.waivedBy != null ? ' by ${e.waivedBy}' : ''}',
+    transferInitiated: (e) =>
+        'Initiated transfer of ${_formatNumber(e.shareCount.toDouble())} shares',
+    transferRofrWaived: (e) =>
+        'ROFR waived${e.waivedBy != null ? ' by ${e.waivedBy}' : ''}',
     transferExecuted: (e) => 'Transfer executed',
-    transferCancelled: (e) => 'Transfer cancelled${e.reason != null ? ': ${e.reason}' : ''}',
+    transferCancelled: (e) =>
+        'Transfer cancelled${e.reason != null ? ': ${e.reason}' : ''}',
     mfnUpgradeReverted: (e) => 'Reverted MFN upgrade',
     scenarioSaved: (e) => 'Saved scenario "${e.name}"',
     scenarioDeleted: (e) => 'Deleted scenario',
@@ -554,15 +697,22 @@ DateTime _getTimestamp(CapTableEvent event) {
     sharesIssued: (e) => e.timestamp,
     sharesTransferred: (e) => e.timestamp,
     sharesRepurchased: (e) => e.timestamp,
+    holdingDeleted: (e) => e.timestamp,
+    holdingUpdated: (e) => e.timestamp,
     holdingVestingUpdated: (e) => e.timestamp,
     convertibleIssued: (e) => e.timestamp,
     mfnUpgradeApplied: (e) => e.timestamp,
     convertibleConverted: (e) => e.timestamp,
     convertibleCancelled: (e) => e.timestamp,
+    convertibleUpdated: (e) => e.timestamp,
     esopPoolCreated: (e) => e.timestamp,
     esopPoolExpanded: (e) => e.timestamp,
     esopPoolActivated: (e) => e.timestamp,
+    esopPoolUpdated: (e) => e.timestamp,
+    esopPoolDeleted: (e) => e.timestamp,
+    esopPoolExpansionReverted: (e) => e.timestamp,
     optionGranted: (e) => e.timestamp,
+    optionGrantUpdated: (e) => e.timestamp,
     optionsVested: (e) => e.timestamp,
     optionsExercised: (e) => e.timestamp,
     optionsCancelled: (e) => e.timestamp,
@@ -605,15 +755,22 @@ String? _getActorId(CapTableEvent event) {
     sharesIssued: (e) => e.actorId,
     sharesTransferred: (e) => e.actorId,
     sharesRepurchased: (e) => e.actorId,
+    holdingDeleted: (e) => e.actorId,
+    holdingUpdated: (e) => e.actorId,
     holdingVestingUpdated: (e) => e.actorId,
     convertibleIssued: (e) => e.actorId,
     mfnUpgradeApplied: (e) => e.actorId,
     convertibleConverted: (e) => e.actorId,
     convertibleCancelled: (e) => e.actorId,
+    convertibleUpdated: (e) => e.actorId,
     esopPoolCreated: (e) => e.actorId,
     esopPoolExpanded: (e) => e.actorId,
     esopPoolActivated: (e) => e.actorId,
+    esopPoolUpdated: (e) => e.actorId,
+    esopPoolDeleted: (e) => e.actorId,
+    esopPoolExpansionReverted: (e) => e.actorId,
     optionGranted: (e) => e.actorId,
+    optionGrantUpdated: (e) => e.actorId,
     optionsVested: (e) => e.actorId,
     optionsExercised: (e) => e.actorId,
     optionsCancelled: (e) => e.actorId,

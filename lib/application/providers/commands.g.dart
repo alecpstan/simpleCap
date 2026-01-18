@@ -6,7 +6,7 @@ part of 'commands.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$companyCommandsHash() => r'9b0dac0dc7b85089692bbd70a3cec0743437cc28';
+String _$companyCommandsHash() => r'0d511b81ca9a6246e1d4727e35e6e004957ab844';
 
 /// See also [CompanyCommands].
 @ProviderFor(CompanyCommands)
@@ -23,7 +23,7 @@ final companyCommandsProvider =
 
 typedef _$CompanyCommands = AutoDisposeAsyncNotifier<void>;
 String _$stakeholderCommandsHash() =>
-    r'12fc96b4a9da6a87c77490a7c9c14d80030ee09a';
+    r'02c8ccfe843293ba0488b3ffbf4ac22c058f7c26';
 
 /// See also [StakeholderCommands].
 @ProviderFor(StakeholderCommands)
@@ -40,7 +40,7 @@ final stakeholderCommandsProvider =
 
 typedef _$StakeholderCommands = AutoDisposeAsyncNotifier<void>;
 String _$shareClassCommandsHash() =>
-    r'ea3144e06c9f822f7a23c9c25322406d8aba88f8';
+    r'de060d8b95905847716e252a0540d6fc2ab46d18';
 
 /// See also [ShareClassCommands].
 @ProviderFor(ShareClassCommands)
@@ -56,7 +56,7 @@ final shareClassCommandsProvider =
     );
 
 typedef _$ShareClassCommands = AutoDisposeAsyncNotifier<void>;
-String _$roundCommandsHash() => r'6e95cd3ff8db6f390e70962cc90c2394cb665daa';
+String _$roundCommandsHash() => r'0de9fd4db25f6ad27ffb40da4db96fa6e7fb896d';
 
 /// See also [RoundCommands].
 @ProviderFor(RoundCommands)
@@ -72,7 +72,7 @@ final roundCommandsProvider =
     );
 
 typedef _$RoundCommands = AutoDisposeAsyncNotifier<void>;
-String _$holdingCommandsHash() => r'3d0c694e377dc42b02f0ea9cb6300026772f04f3';
+String _$holdingCommandsHash() => r'73beb8d71577840faf9f78fdcac6c8bb953fa880';
 
 /// See also [HoldingCommands].
 @ProviderFor(HoldingCommands)
@@ -89,7 +89,7 @@ final holdingCommandsProvider =
 
 typedef _$HoldingCommands = AutoDisposeAsyncNotifier<void>;
 String _$convertibleCommandsHash() =>
-    r'5608b52ba84e1bf433b7b51e0c941730dc7048d8';
+    r'11065c2a77525db0d27b42b4605b726aa7001bc8';
 
 /// See also [ConvertibleCommands].
 @ProviderFor(ConvertibleCommands)
@@ -105,7 +105,7 @@ final convertibleCommandsProvider =
     );
 
 typedef _$ConvertibleCommands = AutoDisposeAsyncNotifier<void>;
-String _$esopPoolCommandsHash() => r'566776268bd60017a8a1a379e4b4271313a6dce5';
+String _$esopPoolCommandsHash() => r'123431eb1edf69c7b0211cf3d8e5144b0b84cd73';
 
 /// See also [EsopPoolCommands].
 @ProviderFor(EsopPoolCommands)
@@ -122,7 +122,7 @@ final esopPoolCommandsProvider =
 
 typedef _$EsopPoolCommands = AutoDisposeAsyncNotifier<void>;
 String _$optionGrantCommandsHash() =>
-    r'fdc9570d5bff07fa69690b239377e884fd166f4d';
+    r'dad2406d941ee68a850d292517dfeef3f1c9ab83';
 
 /// See also [OptionGrantCommands].
 @ProviderFor(OptionGrantCommands)
@@ -138,7 +138,7 @@ final optionGrantCommandsProvider =
     );
 
 typedef _$OptionGrantCommands = AutoDisposeAsyncNotifier<void>;
-String _$warrantCommandsHash() => r'fda0fa99d485bdc0bac869f119ef94c1af2eb25e';
+String _$warrantCommandsHash() => r'f33e3b855f8363f502767f0d279f1a3f8c52e26b';
 
 /// See also [WarrantCommands].
 @ProviderFor(WarrantCommands)
@@ -155,7 +155,7 @@ final warrantCommandsProvider =
 
 typedef _$WarrantCommands = AutoDisposeAsyncNotifier<void>;
 String _$vestingScheduleCommandsHash() =>
-    r'c002baffc9bb35ee5c5869c5d10f314b7d277c0b';
+    r'ce4659a3422ac6aaaf8028d131b077844e95c2a9';
 
 /// See also [VestingScheduleCommands].
 @ProviderFor(VestingScheduleCommands)
@@ -171,7 +171,7 @@ final vestingScheduleCommandsProvider =
     );
 
 typedef _$VestingScheduleCommands = AutoDisposeAsyncNotifier<void>;
-String _$valuationCommandsHash() => r'd41569c35526ca3198caa5eb15d6c0cfdf06cacc';
+String _$valuationCommandsHash() => r'c502c8c670c6b796d7c76c7bf83bbc36684c08bb';
 
 /// See also [ValuationCommands].
 @ProviderFor(ValuationCommands)
@@ -187,7 +187,7 @@ final valuationCommandsProvider =
     );
 
 typedef _$ValuationCommands = AutoDisposeAsyncNotifier<void>;
-String _$transferCommandsHash() => r'608eb543fd343628f7561e05a3edbcbde2ad2346';
+String _$transferCommandsHash() => r'3ad5314f22fe2733ceba83daec7e3fd03b94ce16';
 
 /// See also [TransferCommands].
 @ProviderFor(TransferCommands)
@@ -219,7 +219,7 @@ final mfnCommandsProvider =
     );
 
 typedef _$MfnCommands = AutoDisposeAsyncNotifier<void>;
-String _$scenarioCommandsHash() => r'5a9f4e264e2f1a777cab061973c310d414651a23';
+String _$scenarioCommandsHash() => r'7351dec6aab131d0914b395fccf8099e0e0b5444';
 
 /// See also [ScenarioCommands].
 @ProviderFor(ScenarioCommands)

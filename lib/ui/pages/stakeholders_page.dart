@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers/providers.dart';
+import '../../domain/constants/type_constants.dart';
 import '../../infrastructure/database/database.dart';
 import '../../shared/formatters.dart';
 import '../components/components.dart';
@@ -407,6 +408,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     final convertiblesAsync = ref.watch(convertiblesStreamProvider);
     final warrantsAsync = ref.watch(warrantsStreamProvider);
     final roundsAsync = ref.watch(roundsStreamProvider);
+    final deleteEnabled = ref.watch(deleteEnabledProvider).valueOrNull ?? false;
 
     // Calculate ownership percentage
     final ownershipPercent = ownershipAsync.whenOrNull(
@@ -533,19 +535,31 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
             ),
             const Divider(height: 24),
           ],
-          _buildHoldingsSection(context, holdingsAsync, shareClassesAsync),
+          _buildHoldingsSection(
+            context,
+            holdingsAsync,
+            shareClassesAsync,
+            deleteEnabled,
+          ),
           _buildOptionsSection(
             context,
             stakeholder.id,
             optionsAsync,
             shareClassesAsync,
+            deleteEnabled,
           ),
-          _buildConvertiblesSection(context, stakeholder.id, convertiblesAsync),
+          _buildConvertiblesSection(
+            context,
+            stakeholder.id,
+            convertiblesAsync,
+            deleteEnabled,
+          ),
           _buildWarrantsSection(
             context,
             stakeholder.id,
             warrantsAsync,
             shareClassesAsync,
+            deleteEnabled,
           ),
         ],
       ),
@@ -571,6 +585,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     BuildContext context,
     AsyncValue<List<Holding>> holdingsAsync,
     AsyncValue<List<ShareClassesData>> shareClassesAsync,
+    bool deleteEnabled,
   ) {
     return holdingsAsync.when(
       data: (holdings) {
@@ -597,7 +612,12 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
             ),
             const SizedBox(height: 8),
             ...holdings.map(
-              (h) => _buildHoldingRow(context, h, shareClassesAsync),
+              (h) => _buildHoldingRow(
+                context,
+                h,
+                shareClassesAsync,
+                deleteEnabled,
+              ),
             ),
             const SizedBox(height: 8),
           ],
@@ -615,6 +635,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     BuildContext context,
     Holding holding,
     AsyncValue<List<ShareClassesData>> shareClassesAsync,
+    bool deleteEnabled,
   ) {
     final shareClassName = shareClassesAsync.whenOrNull(
       data: (classes) =>
@@ -629,6 +650,11 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     final isDraft = round?.status == 'draft';
     final hasVesting = holding.vestingScheduleId != null;
 
+    // Get the vesting schedule if applicable
+    final vestingSchedule = hasVesting
+        ? ref.watch(vestingScheduleProvider(holding.vestingScheduleId))
+        : null;
+
     return HoldingItem(
       shareCount: holding.shareCount,
       vestedCount: holding.vestedCount ?? holding.shareCount,
@@ -638,12 +664,157 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
       roundName: roundName,
       hasVesting: hasVesting,
       isDraft: isDraft,
+      vestingScheduleName: vestingSchedule?.name,
+      vestingScheduleTerms: vestingSchedule != null
+          ? _buildVestingTerms(vestingSchedule)
+          : null,
       onTap: () => HoldingDetailDialog.show(
         context: context,
         holding: holding,
         shareClassName: shareClassName,
         roundName: roundName,
+        vestingSchedule: vestingSchedule,
+        onEdit: () => _showEditHoldingDialog(context, holding),
         onDelete: () => _confirmDeleteHolding(context, holding),
+        showDeleteButton: deleteEnabled,
+        isDraft: isDraft,
+      ),
+    );
+  }
+
+  void _showEditHoldingDialog(BuildContext context, Holding holding) {
+    final shareClassesAsync = ref.read(shareClassesStreamProvider);
+    final vestingSchedulesAsync = ref.read(vestingSchedulesStreamProvider);
+    final shareClasses = shareClassesAsync.valueOrNull ?? [];
+    final vestingSchedules = vestingSchedulesAsync.valueOrNull ?? [];
+
+    final shareCountController = TextEditingController(
+      text: holding.shareCount.toString(),
+    );
+    final costBasisController = TextEditingController(
+      text: holding.costBasis.toStringAsFixed(4),
+    );
+    String selectedShareClassId = holding.shareClassId;
+    String? selectedVestingScheduleId = holding.vestingScheduleId;
+    DateTime acquiredDate = holding.acquiredDate;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Edit Holding'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: shareCountController,
+                  decoration: const InputDecoration(labelText: 'Share Count'),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: costBasisController,
+                  decoration: const InputDecoration(
+                    labelText: 'Cost Basis (per share)',
+                    prefixText: '\$',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedShareClassId,
+                  decoration: const InputDecoration(labelText: 'Share Class'),
+                  items: shareClasses
+                      .map(
+                        (sc) => DropdownMenuItem(
+                          value: sc.id,
+                          child: Text(sc.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedShareClassId = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String?>(
+                  value: selectedVestingScheduleId,
+                  decoration: const InputDecoration(
+                    labelText: 'Vesting Schedule',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('No vesting'),
+                    ),
+                    ...vestingSchedules.map(
+                      (vs) =>
+                          DropdownMenuItem(value: vs.id, child: Text(vs.name)),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => selectedVestingScheduleId = value),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Acquired Date'),
+                  subtitle: Text(Formatters.date(acquiredDate)),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: dialogContext,
+                      initialDate: acquiredDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setDialogState(() => acquiredDate = picked);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final shareCount = int.tryParse(shareCountController.text);
+                final costBasis = double.tryParse(costBasisController.text);
+                if (shareCount == null || shareCount <= 0) return;
+
+                try {
+                  await ref
+                      .read(holdingCommandsProvider.notifier)
+                      .updateHolding(
+                        holdingId: holding.id,
+                        shareCount: shareCount,
+                        costBasis: costBasis,
+                        acquiredDate: acquiredDate,
+                        shareClassId: selectedShareClassId,
+                        vestingScheduleId: selectedVestingScheduleId,
+                      );
+
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                } catch (e) {
+                  if (dialogContext.mounted) {
+                    ScaffoldMessenger.of(
+                      dialogContext,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -658,10 +829,28 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
 
     if (confirmed && mounted) {
-      // TODO: Implement deleteHolding in HoldingCommands
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Delete not yet implemented')),
-      );
+      try {
+        await ref
+            .read(holdingCommandsProvider.notifier)
+            .deleteHolding(holdingId: holding.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Holding deleted'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting holding: $e'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -670,6 +859,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     String stakeholderId,
     AsyncValue<List<OptionGrant>> optionsAsync,
     AsyncValue<List<ShareClassesData>> shareClassesAsync,
+    bool deleteEnabled,
   ) {
     return optionsAsync.when(
       data: (allOptions) {
@@ -690,7 +880,8 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
             ),
             const SizedBox(height: 8),
             ...options.map(
-              (o) => _buildOptionRow(context, o, shareClassesAsync),
+              (o) =>
+                  _buildOptionRow(context, o, shareClassesAsync, deleteEnabled),
             ),
           ],
         );
@@ -704,11 +895,36 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     BuildContext context,
     OptionGrant option,
     AsyncValue<List<ShareClassesData>> shareClassesAsync,
+    bool deleteEnabled,
   ) {
+    final roundsAsync = ref.watch(roundsStreamProvider);
     final shareClassName = shareClassesAsync.whenOrNull(
       data: (classes) =>
           classes.where((c) => c.id == option.shareClassId).firstOrNull?.name,
     );
+
+    // Determine if this option is part of a draft round
+    final round = roundsAsync.whenOrNull(
+      data: (rounds) => rounds.where((r) => r.id == option.roundId).firstOrNull,
+    );
+    final isDraft = round?.status == 'draft';
+
+    // Get the vesting schedule if applicable
+    final hasVesting = option.vestingScheduleId != null;
+    final vestingSchedule = hasVesting
+        ? ref.watch(vestingScheduleProvider(option.vestingScheduleId))
+        : null;
+
+    // Calculate vesting status
+    final vestingStatus = hasVesting && vestingSchedule != null
+        ? ref.watch(
+            calculateVestingStatusProvider(
+              totalQuantity: option.quantity,
+              grantDate: option.grantDate,
+              vestingScheduleId: option.vestingScheduleId,
+            ),
+          )
+        : null;
 
     return OptionItem(
       quantity: option.quantity,
@@ -717,31 +933,129 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
       strikePrice: option.strikePrice,
       shareClassName: shareClassName ?? 'Unknown',
       status: option.status,
+      vestingPercent: vestingStatus?.vestingPercent,
+      vestingScheduleName: vestingSchedule?.name,
+      vestingScheduleTerms: vestingSchedule != null
+          ? _buildVestingTerms(vestingSchedule)
+          : null,
+      vestedCount: vestingStatus?.vestedQuantity,
+      isDraft: isDraft,
       onTap: () => OptionDetailDialog.show(
         context: context,
         option: option,
         shareClassName: shareClassName,
+        vestingPercent: vestingStatus?.vestingPercent,
+        vestingSchedule: vestingSchedule,
         onEdit: () => _showOptionEditDialog(context, option),
-        onExercise: () => _showOptionExerciseDialog(context, option),
+        onExercise: isDraft
+            ? null
+            : () => _showOptionExerciseDialog(context, option),
+        onCancel: isDraft ? null : () => _confirmCancelOption(context, option),
         onDelete: () => _confirmDeleteOption(context, option),
+        showDeleteButton: deleteEnabled,
+        isDraft: isDraft,
       ),
     );
   }
 
+  /// Cancel outstanding options (soft cancel - creates event)
+  Future<void> _confirmCancelOption(
+    BuildContext context,
+    OptionGrant option,
+  ) async {
+    final remainingCount =
+        option.quantity - option.exercisedCount - option.cancelledCount;
+    if (remainingCount <= 0) return;
+
+    final confirmed = await ConfirmDialog.show(
+      context: context,
+      title: 'Cancel Options?',
+      message:
+          'This will cancel $remainingCount outstanding options. This action will be recorded.',
+      confirmLabel: 'Cancel Options',
+      isDestructive: true,
+    );
+
+    if (confirmed && mounted) {
+      try {
+        await ref
+            .read(optionGrantCommandsProvider.notifier)
+            .cancelOptions(
+              grantId: option.id,
+              cancelledCount: remainingCount,
+              reason: 'Cancelled via UI',
+            );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Options cancelled'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error cancelling options: $e'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  /// Permanently delete option grant (cascade delete - removes events)
   Future<void> _confirmDeleteOption(
     BuildContext context,
     OptionGrant option,
   ) async {
+    // Preview cascade impact
+    final cascadeImpact = await ref
+        .read(eventLedgerProvider.notifier)
+        .previewCascadeDelete(
+          entityId: option.id,
+          entityType: EntityType.optionGrant,
+        );
+
+    final holdingsCount = cascadeImpact[EntityType.holding] ?? 0;
+    String message = 'This will permanently delete this option grant.';
+    if (holdingsCount > 0) {
+      message +=
+          ' This will also delete $holdingsCount holding(s) created from exercising these options.';
+    }
+    message += ' This cannot be undone.';
+
     final confirmed = await ConfirmDialog.showDelete(
       context: context,
       itemName: 'option grant',
+      customMessage: message,
     );
 
     if (confirmed && mounted) {
-      // TODO: Implement deleteOptionGrant in OptionGrantCommands
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Delete not yet implemented')),
-      );
+      try {
+        await ref
+            .read(optionGrantCommandsProvider.notifier)
+            .deleteOptionGrant(grantId: option.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Option grant deleted'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting option grant: $e'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -752,17 +1066,61 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     ).showSnackBar(const SnackBar(content: Text('Option editing coming soon')));
   }
 
-  void _showOptionExerciseDialog(BuildContext context, OptionGrant option) {
-    // TODO: Implement option exercise dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Option exercise coming soon')),
+  Future<void> _showOptionExerciseDialog(
+    BuildContext context,
+    OptionGrant option,
+  ) async {
+    // Calculate vesting to get exercisable amount
+    final vestingStatus = option.vestingScheduleId != null
+        ? ref.read(
+            calculateVestingStatusProvider(
+              totalQuantity: option.quantity,
+              grantDate: option.grantDate,
+              vestingScheduleId: option.vestingScheduleId,
+            ),
+          )
+        : null;
+
+    // Calculate max exercisable - if no vesting, all outstanding are exercisable
+    final outstanding =
+        option.quantity - option.exercisedCount - option.cancelledCount;
+    final maxExercisable = vestingStatus != null
+        ? vestingStatus.vestedQuantity - option.exercisedCount
+        : outstanding;
+
+    if (maxExercisable <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No vested options available to exercise'),
+        ),
+      );
+      return;
+    }
+
+    // Get stakeholder name
+    final stakeholders = ref.read(stakeholdersStreamProvider).valueOrNull ?? [];
+    final stakeholder = stakeholders
+        .where((s) => s.id == option.stakeholderId)
+        .firstOrNull;
+
+    final result = await ExerciseOptionsDialog.show(
+      context: context,
+      option: option,
+      maxExercisable: maxExercisable,
+      stakeholderName: stakeholder?.name,
     );
+
+    if (result == true && mounted) {
+      // Close the detail dialog
+      Navigator.of(context).pop();
+    }
   }
 
   Widget _buildConvertiblesSection(
     BuildContext context,
     String stakeholderId,
     AsyncValue<List<Convertible>> convertiblesAsync,
+    bool deleteEnabled,
   ) {
     return convertiblesAsync.when(
       data: (allConvertibles) {
@@ -782,7 +1140,9 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
               ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            ...convertibles.map((c) => _buildConvertibleRow(context, c)),
+            ...convertibles.map(
+              (c) => _buildConvertibleRow(context, c, deleteEnabled),
+            ),
           ],
         );
       },
@@ -791,8 +1151,31 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
   }
 
-  Widget _buildConvertibleRow(BuildContext context, Convertible convertible) {
+  Widget _buildConvertibleRow(
+    BuildContext context,
+    Convertible convertible,
+    bool deleteEnabled,
+  ) {
+    final roundsAsync = ref.watch(roundsStreamProvider);
     final isConverted = convertible.status == 'converted';
+    final isCancelled = convertible.status == 'cancelled';
+
+    // Check if conversion is draft (convertible converted in a draft round)
+    // or if this is a new convertible issued as part of a draft round
+    bool isDraftConversion = false;
+    if (isConverted && convertible.conversionEventId != null) {
+      final conversionRound = roundsAsync.whenOrNull(
+        data: (rounds) => rounds
+            .where((r) => r.id == convertible.conversionEventId)
+            .firstOrNull,
+      );
+      isDraftConversion = conversionRound?.status == 'draft';
+    }
+
+    // Determine display status for draft conversion
+    final displayStatus = isDraftConversion
+        ? 'draft_conversion'
+        : convertible.status;
 
     return ConvertibleItem(
       type: convertible.type,
@@ -800,39 +1183,95 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
       valuationCap: convertible.valuationCap,
       discountPercent: convertible.discountPercent,
       interestRate: convertible.interestRate,
-      status: convertible.status,
+      status: displayStatus,
+      isDraft: isDraftConversion,
       onTap: () => ConvertibleDetailDialog.show(
         context: context,
         convertible: convertible,
-        onEdit: isConverted
+        onEdit: isConverted || isCancelled
             ? null
             : () => _showConvertibleEditDialog(context, convertible),
-        onConvert: isConverted
+        // Disable convert action if already converted (even draft)
+        onConvert: isConverted || isCancelled
             ? null
             : () => _showConvertibleConvertDialog(context, convertible),
+        // Allow revert for both real and draft conversions
         onRevert: isConverted
             ? () => _revertConvertible(context, convertible)
             : null,
+        // Hide cancel for draft conversions (use revert instead)
+        onCancel: isConverted || isCancelled
+            ? null
+            : () => _confirmCancelConvertible(context, convertible),
         onDelete: () => _confirmDeleteConvertible(context, convertible),
+        showDeleteButton: deleteEnabled,
+        isDraft: isDraftConversion,
       ),
     );
+  }
+
+  Future<void> _confirmCancelConvertible(
+    BuildContext context,
+    Convertible convertible,
+  ) async {
+    final confirmed = await ConfirmDialog.show(
+      context: context,
+      title: 'Cancel Convertible',
+      message:
+          'Are you sure you want to cancel this ${convertible.type}? This will record a cancellation event.',
+      confirmLabel: 'Cancel Convertible',
+      isDestructive: true,
+    );
+
+    if (confirmed && mounted) {
+      await ref
+          .read(convertibleCommandsProvider.notifier)
+          .cancelConvertible(
+            convertibleId: convertible.id,
+            reason: 'Cancelled via UI',
+          );
+      if (mounted) {
+        Navigator.of(context).pop(); // Close the dialog
+      }
+    }
   }
 
   Future<void> _confirmDeleteConvertible(
     BuildContext context,
     Convertible convertible,
   ) async {
+    // Preview cascade impact
+    final cascadeImpact = await ref
+        .read(eventLedgerProvider.notifier)
+        .previewCascadeDelete(
+          entityId: convertible.id,
+          entityType: EntityType.convertible,
+        );
+
+    final impactLines = <String>[];
+    cascadeImpact.forEach((type, count) {
+      if (count > 0) {
+        impactLines.add('• $count ${type.name}(s)');
+      }
+    });
+
+    final message = impactLines.isEmpty
+        ? 'Are you sure you want to permanently delete this ${convertible.type}? This cannot be undone.'
+        : 'This will permanently delete:\n${impactLines.join('\n')}\n\nThis cannot be undone.';
+
     final confirmed = await ConfirmDialog.showDelete(
       context: context,
-      itemName: 'convertible',
+      itemName: convertible.type,
+      customMessage: message,
     );
 
     if (confirmed && mounted) {
-      // TODO: Implement cancelConvertible in ConvertibleCommands
-      // or add revertConversion command
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Delete not yet implemented')),
-      );
+      await ref
+          .read(convertibleCommandsProvider.notifier)
+          .deleteConvertible(convertibleId: convertible.id);
+      if (mounted) {
+        Navigator.of(context).pop(); // Close the dialog
+      }
     }
   }
 
@@ -840,20 +1279,338 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     BuildContext context,
     Convertible convertible,
   ) {
-    // TODO: Implement convertible edit dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Convertible editing coming soon')),
+    // Get share classes for dropdown
+    final shareClasses = ref.read(shareClassesStreamProvider).valueOrNull ?? [];
+
+    final principalController = TextEditingController(
+      text: convertible.principal.toString(),
+    );
+    final capController = TextEditingController(
+      text: convertible.valuationCap?.toString() ?? '',
+    );
+    final discountController = TextEditingController(
+      text: convertible.discountPercent?.toString() ?? '',
+    );
+    final interestController = TextEditingController(
+      text: convertible.interestRate?.toString() ?? '',
+    );
+    final notesController = TextEditingController(
+      text: convertible.notes ?? '',
+    );
+    final qualifiedThresholdController = TextEditingController(
+      text: convertible.qualifiedFinancingThreshold?.toString() ?? '',
+    );
+    final liquidityMultipleController = TextEditingController(
+      text: convertible.liquidityPayoutMultiple?.toString() ?? '',
+    );
+
+    String selectedType = convertible.type;
+    DateTime issueDate = convertible.issueDate;
+    DateTime? maturityDate = convertible.maturityDate;
+    bool hasMfn = convertible.hasMfn;
+    bool hasProRata = convertible.hasProRata;
+
+    // Advanced terms state
+    String? maturityBehavior = convertible.maturityBehavior;
+    bool allowsVoluntaryConversion = convertible.allowsVoluntaryConversion;
+    String? liquidityEventBehavior = convertible.liquidityEventBehavior;
+    String? dissolutionBehavior = convertible.dissolutionBehavior;
+    String? preferredShareClassId = convertible.preferredShareClassId;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Edit Convertible'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: selectedType,
+                  decoration: const InputDecoration(labelText: 'Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'safe', child: Text('SAFE')),
+                    DropdownMenuItem(
+                      value: 'note',
+                      child: Text('Convertible Note'),
+                    ),
+                  ],
+                  onChanged: (v) =>
+                      setDialogState(() => selectedType = v ?? 'safe'),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: principalController,
+                  decoration: const InputDecoration(
+                    labelText: 'Principal Amount',
+                    prefixText: '\$',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: capController,
+                  decoration: const InputDecoration(
+                    labelText: 'Valuation Cap (optional)',
+                    prefixText: '\$',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: discountController,
+                  decoration: const InputDecoration(
+                    labelText: 'Discount % (optional)',
+                    suffixText: '%',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                if (selectedType == 'note') ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: interestController,
+                    decoration: const InputDecoration(
+                      labelText: 'Interest Rate % (optional)',
+                      suffixText: '% p.a.',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                CheckboxListTile(
+                  title: const Text('MFN (Most Favored Nation)'),
+                  value: hasMfn,
+                  onChanged: (v) => setDialogState(() => hasMfn = v ?? false),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                CheckboxListTile(
+                  title: const Text('Pro-rata Rights'),
+                  value: hasProRata,
+                  onChanged: (v) =>
+                      setDialogState(() => hasProRata = v ?? false),
+                  contentPadding: EdgeInsets.zero,
+                ),
+
+                // Advanced Terms Expandable Section
+                const SizedBox(height: 16),
+                ExpansionTile(
+                  title: const Text('Advanced Terms'),
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(top: 8),
+                  initiallyExpanded:
+                      maturityBehavior != null ||
+                      allowsVoluntaryConversion ||
+                      liquidityEventBehavior != null ||
+                      dissolutionBehavior != null,
+                  children: [
+                    // Qualified Financing Threshold
+                    TextField(
+                      controller: qualifiedThresholdController,
+                      decoration: const InputDecoration(
+                        labelText: 'Qualified Financing Threshold',
+                        prefixText: '\$',
+                        helperText: 'Minimum round size to trigger conversion',
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Maturity Behavior
+                    DropdownButtonFormField<String>(
+                      value: maturityBehavior,
+                      decoration: const InputDecoration(
+                        labelText: 'At Maturity',
+                        helperText: 'What happens when the instrument matures',
+                      ),
+                      items: MaturityBehavior.all
+                          .map(
+                            (b) => DropdownMenuItem(
+                              value: b,
+                              child: Text(MaturityBehavior.displayName(b)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialogState(() => maturityBehavior = v),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Voluntary Conversion
+                    CheckboxListTile(
+                      title: const Text('Allows Voluntary Conversion'),
+                      subtitle: const Text(
+                        'Holder can elect to convert anytime',
+                      ),
+                      value: allowsVoluntaryConversion,
+                      onChanged: (v) => setDialogState(
+                        () => allowsVoluntaryConversion = v ?? false,
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+
+                    // Liquidity Event Behavior
+                    DropdownButtonFormField<String>(
+                      value: liquidityEventBehavior,
+                      decoration: const InputDecoration(
+                        labelText: 'On Liquidity Event',
+                        helperText: 'M&A, IPO, or change of control',
+                      ),
+                      items: LiquidityEventBehavior.all
+                          .map(
+                            (b) => DropdownMenuItem(
+                              value: b,
+                              child: Text(
+                                LiquidityEventBehavior.displayName(b),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialogState(() => liquidityEventBehavior = v),
+                    ),
+                    if (liquidityEventBehavior ==
+                        LiquidityEventBehavior.cashPayout) ...[
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: liquidityMultipleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Payout Multiple',
+                          suffixText: 'x',
+                          helperText: 'e.g. 2.0 = 2x principal',
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+
+                    // Dissolution Behavior
+                    DropdownButtonFormField<String>(
+                      value: dissolutionBehavior,
+                      decoration: const InputDecoration(
+                        labelText: 'On Dissolution',
+                        helperText: 'Company wind-down or bankruptcy',
+                      ),
+                      items: DissolutionBehavior.all
+                          .map(
+                            (b) => DropdownMenuItem(
+                              value: b,
+                              child: Text(DissolutionBehavior.displayName(b)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialogState(() => dissolutionBehavior = v),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Preferred Share Class for Conversion
+                    DropdownButtonFormField<String?>(
+                      value: preferredShareClassId,
+                      decoration: const InputDecoration(
+                        labelText: 'Convert to Share Class',
+                        helperText: 'Preferred class for standalone conversion',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Same as round (default)'),
+                        ),
+                        ...shareClasses.map(
+                          (sc) => DropdownMenuItem(
+                            value: sc.id,
+                            child: Text(sc.name),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) =>
+                          setDialogState(() => preferredShareClassId = v),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                TextField(
+                  controller: notesController,
+                  decoration: const InputDecoration(labelText: 'Notes'),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final principal = double.tryParse(principalController.text);
+                if (principal == null || principal <= 0) return;
+
+                final commands = ref.read(convertibleCommandsProvider.notifier);
+                final cap = double.tryParse(capController.text);
+                final qualifiedThreshold = double.tryParse(
+                  qualifiedThresholdController.text,
+                );
+                final liquidityMultiple = double.tryParse(
+                  liquidityMultipleController.text,
+                );
+                final discount = double.tryParse(discountController.text);
+                final interest = double.tryParse(interestController.text);
+
+                await commands.updateConvertible(
+                  convertibleId: convertible.id,
+                  principal: principal,
+                  valuationCap: cap,
+                  discountPercent: discount,
+                  interestRate: interest,
+                  issueDate: issueDate,
+                  maturityDate: maturityDate,
+                  hasMfn: hasMfn,
+                  hasProRata: hasProRata,
+                  notes: notesController.text.trim().isEmpty
+                      ? null
+                      : notesController.text.trim(),
+                  maturityBehavior: maturityBehavior,
+                  allowsVoluntaryConversion: allowsVoluntaryConversion,
+                  liquidityEventBehavior: liquidityEventBehavior,
+                  liquidityPayoutMultiple: liquidityMultiple,
+                  dissolutionBehavior: dissolutionBehavior,
+                  preferredShareClassId: preferredShareClassId,
+                  qualifiedFinancingThreshold: qualifiedThreshold,
+                );
+
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  void _showConvertibleConvertDialog(
+  Future<void> _showConvertibleConvertDialog(
     BuildContext context,
     Convertible convertible,
-  ) {
-    // TODO: Implement convertible conversion dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Convertible conversion coming soon')),
+  ) async {
+    // Get stakeholder name
+    final stakeholders = ref.read(stakeholdersStreamProvider).valueOrNull ?? [];
+    final stakeholder = stakeholders
+        .where((s) => s.id == convertible.stakeholderId)
+        .firstOrNull;
+
+    final result = await ConvertConvertibleDialog.show(
+      context: context,
+      convertible: convertible,
+      stakeholderName: stakeholder?.name,
     );
+
+    if (result == true && mounted) {
+      // Close the detail dialog
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _revertConvertible(
@@ -881,6 +1638,7 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     String stakeholderId,
     AsyncValue<List<Warrant>> warrantsAsync,
     AsyncValue<List<ShareClassesData>> shareClassesAsync,
+    bool deleteEnabled,
   ) {
     return warrantsAsync.when(
       data: (allWarrants) {
@@ -901,7 +1659,12 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
             ),
             const SizedBox(height: 8),
             ...warrants.map(
-              (w) => _buildWarrantRow(context, w, shareClassesAsync),
+              (w) => _buildWarrantRow(
+                context,
+                w,
+                shareClassesAsync,
+                deleteEnabled,
+              ),
             ),
           ],
         );
@@ -915,14 +1678,25 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     BuildContext context,
     Warrant warrant,
     AsyncValue<List<ShareClassesData>> shareClassesAsync,
+    bool deleteEnabled,
   ) {
+    final roundsAsync = ref.watch(roundsStreamProvider);
     final shareClassName = shareClassesAsync.whenOrNull(
       data: (classes) =>
           classes.where((c) => c.id == warrant.shareClassId).firstOrNull?.name,
     );
+
+    // Determine if this warrant is part of a draft round
+    final round = roundsAsync.whenOrNull(
+      data: (rounds) =>
+          rounds.where((r) => r.id == warrant.roundId).firstOrNull,
+    );
+    final isDraft = round?.status == 'draft';
+
     final isActive = warrant.status == 'active';
     final remaining =
         warrant.quantity - warrant.exercisedCount - warrant.cancelledCount;
+    final isCancelled = remaining <= 0 && warrant.cancelledCount > 0;
 
     return WarrantItem(
       quantity: warrant.quantity,
@@ -932,33 +1706,91 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
       shareClassName: shareClassName,
       status: warrant.status,
       expiryDate: warrant.expiryDate,
+      isDraft: isDraft,
       onTap: () => WarrantDetailDialog.show(
         context: context,
         warrant: warrant,
         shareClassName: shareClassName,
         onEdit: () => _showWarrantEditDialog(context, warrant),
-        onExercise: (isActive && remaining > 0)
+        onExercise: (isActive && remaining > 0 && !isDraft)
             ? () => _showWarrantExerciseDialog(context, warrant)
             : null,
+        onCancel: (isActive && remaining > 0 && !isCancelled && !isDraft)
+            ? () => _confirmCancelWarrant(context, warrant)
+            : null,
         onDelete: () => _confirmDeleteWarrant(context, warrant),
+        showDeleteButton: deleteEnabled,
+        isDraft: isDraft,
       ),
     );
+  }
+
+  Future<void> _confirmCancelWarrant(
+    BuildContext context,
+    Warrant warrant,
+  ) async {
+    final remaining =
+        warrant.quantity - warrant.exercisedCount - warrant.cancelledCount;
+
+    final confirmed = await ConfirmDialog.show(
+      context: context,
+      title: 'Cancel Warrant',
+      message:
+          'Are you sure you want to cancel the remaining $remaining warrant(s)? This will record a cancellation event.',
+      confirmLabel: 'Cancel Warrant',
+      isDestructive: true,
+    );
+
+    if (confirmed && mounted) {
+      await ref
+          .read(warrantCommandsProvider.notifier)
+          .cancelWarrants(
+            warrantId: warrant.id,
+            cancelledCount: remaining,
+            reason: 'Cancelled via UI',
+          );
+      if (mounted) {
+        Navigator.of(context).pop(); // Close the dialog
+      }
+    }
   }
 
   Future<void> _confirmDeleteWarrant(
     BuildContext context,
     Warrant warrant,
   ) async {
+    // Preview cascade impact
+    final cascadeImpact = await ref
+        .read(eventLedgerProvider.notifier)
+        .previewCascadeDelete(
+          entityId: warrant.id,
+          entityType: EntityType.warrant,
+        );
+
+    final impactLines = <String>[];
+    cascadeImpact.forEach((type, count) {
+      if (count > 0) {
+        impactLines.add('• $count ${type.name}(s)');
+      }
+    });
+
+    final message = impactLines.isEmpty
+        ? 'Are you sure you want to permanently delete this warrant? This cannot be undone.'
+        : 'This will permanently delete:\n${impactLines.join('\n')}\n\nThis cannot be undone.';
+
     final confirmed = await ConfirmDialog.showDelete(
       context: context,
       itemName: 'warrant',
+      customMessage: message,
     );
 
     if (confirmed && mounted) {
-      // TODO: Implement deleteWarrant in WarrantCommands
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Delete not yet implemented')),
-      );
+      await ref
+          .read(warrantCommandsProvider.notifier)
+          .deleteWarrant(warrantId: warrant.id);
+      if (mounted) {
+        Navigator.of(context).pop(); // Close the dialog
+      }
     }
   }
 
@@ -969,181 +1801,37 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
     );
   }
 
-  void _showWarrantExerciseDialog(BuildContext context, Warrant warrant) {
-    final maxShares =
+  Future<void> _showWarrantExerciseDialog(
+    BuildContext context,
+    Warrant warrant,
+  ) async {
+    final maxExercisable =
         warrant.quantity - warrant.exercisedCount - warrant.cancelledCount;
-    final sharesController = TextEditingController();
-    DateTime exerciseDate = DateTime.now();
 
-    final effectiveValuation = ref.read(effectiveValuationProvider).valueOrNull;
-    final ownership = ref.read(ownershipSummaryProvider).valueOrNull;
-
-    // Calculate current price per share if valuation available
-    double? pricePerShare;
-    if (effectiveValuation != null && ownership != null) {
-      final totalShares = ownership.totalIssuedShares;
-      if (totalShares > 0) {
-        pricePerShare = effectiveValuation.value / totalShares;
-      }
+    if (maxExercisable <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No warrants available to exercise')),
+      );
+      return;
     }
 
-    showDialog(
+    // Get stakeholder name
+    final stakeholders = ref.read(stakeholdersStreamProvider).valueOrNull ?? [];
+    final stakeholder = stakeholders
+        .where((s) => s.id == warrant.stakeholderId)
+        .firstOrNull;
+
+    final result = await ExerciseWarrantsDialog.show(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) {
-          final shares = int.tryParse(sharesController.text) ?? 0;
-          final isValid = shares > 0 && shares <= maxShares;
-          final totalCost = shares * warrant.strikePrice;
-          final currentValue = pricePerShare != null
-              ? shares * pricePerShare
-              : null;
-          final potentialGain = currentValue != null
-              ? currentValue - totalCost
-              : null;
-
-          return AlertDialog(
-            title: const Text('Exercise Warrants'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Up to ${Formatters.number(maxShares)} warrants available',
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: sharesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Warrants to Exercise',
-                    ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => setDialogState(() {}),
-                  ),
-                  const SizedBox(height: 16),
-                  InkWell(
-                    onTap: () async {
-                      final date = await showDatePicker(
-                        context: dialogContext,
-                        initialDate: exerciseDate,
-                        firstDate: warrant.issueDate,
-                        lastDate: warrant.expiryDate,
-                      );
-                      if (date != null) {
-                        setDialogState(() => exerciseDate = date);
-                      }
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Exercise Date',
-                        suffixIcon: Icon(Icons.calendar_today, size: 18),
-                      ),
-                      child: Text(Formatters.date(exerciseDate)),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Exercise Summary',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildExerciseSummaryRow(
-                    context,
-                    'Strike Price',
-                    Formatters.currency(warrant.strikePrice),
-                  ),
-                  _buildExerciseSummaryRow(
-                    context,
-                    'Total Cost to Exercise',
-                    Formatters.currency(totalCost),
-                    highlight: true,
-                  ),
-                  if (pricePerShare != null) ...[
-                    const SizedBox(height: 8),
-                    _buildExerciseSummaryRow(
-                      context,
-                      'Current Price/Share',
-                      Formatters.currency(pricePerShare),
-                    ),
-                    _buildExerciseSummaryRow(
-                      context,
-                      'Current Value',
-                      Formatters.currency(currentValue!),
-                    ),
-                    _buildExerciseSummaryRow(
-                      context,
-                      'Potential Gain',
-                      Formatters.currency(potentialGain!),
-                      valueColor: potentialGain >= 0
-                          ? Colors.green
-                          : Colors.red,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: isValid
-                    ? () async {
-                        await ref
-                            .read(warrantCommandsProvider.notifier)
-                            .exerciseWarrants(
-                              warrantId: warrant.id,
-                              exercisedCount: shares,
-                              exercisePrice: warrant.strikePrice,
-                              exerciseDate: exerciseDate,
-                            );
-
-                        if (dialogContext.mounted) Navigator.pop(dialogContext);
-                      }
-                    : null,
-                child: const Text('Exercise'),
-              ),
-            ],
-          );
-        },
-      ),
+      warrant: warrant,
+      maxExercisable: maxExercisable,
+      stakeholderName: stakeholder?.name,
     );
-  }
 
-  Widget _buildExerciseSummaryRow(
-    BuildContext context,
-    String label,
-    String value, {
-    bool highlight = false,
-    Color? valueColor,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: highlight ? FontWeight.bold : null,
-            ),
-          ),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: highlight ? FontWeight.bold : null,
-              color: valueColor,
-            ),
-          ),
-        ],
-      ),
-    );
+    if (result == true && mounted) {
+      // Close the detail dialog
+      Navigator.of(context).pop();
+    }
   }
 
   EntityAvatarType _getAvatarType(String type) {
@@ -1339,5 +2027,34 @@ class _StakeholdersPageState extends ConsumerState<StakeholdersPage> {
           .read(stakeholderCommandsProvider.notifier)
           .removeStakeholder(stakeholderId: stakeholder.id);
     }
+  }
+
+  /// Builds a human-readable description of vesting terms.
+  String _buildVestingTerms(VestingSchedule schedule) {
+    final total = schedule.totalMonths ?? 0;
+    final years = total ~/ 12;
+    final remainingMonths = total % 12;
+    final cliffMonths = schedule.cliffMonths;
+
+    final parts = <String>[];
+
+    if (years > 0) {
+      parts.add('$years yr${years > 1 ? 's' : ''}');
+    }
+    if (remainingMonths > 0) {
+      parts.add('$remainingMonths mo');
+    }
+
+    if (cliffMonths > 0) {
+      final cliffYears = cliffMonths ~/ 12;
+      final cliffRemaining = cliffMonths % 12;
+      if (cliffYears > 0) {
+        parts.add('$cliffYears yr cliff');
+      } else {
+        parts.add('$cliffRemaining mo cliff');
+      }
+    }
+
+    return parts.isEmpty ? schedule.name : parts.join(' / ');
   }
 }

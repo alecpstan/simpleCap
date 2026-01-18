@@ -46,7 +46,7 @@ final esopPoolsProvider = AutoDisposeProvider<List<EsopPool>>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef EsopPoolsRef = AutoDisposeProviderRef<List<EsopPool>>;
-String _$esopPoolByIdHash() => r'9c16baffb56ec80d202dc340ab79555922ca3d42';
+String _$esopPoolByIdHash() => r'970ecd146814d329705b107d70fe686c16d5509f';
 
 /// Copied from Dart SDK
 class _SystemHash {
@@ -70,21 +70,25 @@ class _SystemHash {
 }
 
 /// Gets a specific ESOP pool by ID.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [esopPoolById].
 @ProviderFor(esopPoolById)
 const esopPoolByIdProvider = EsopPoolByIdFamily();
 
 /// Gets a specific ESOP pool by ID.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [esopPoolById].
 class EsopPoolByIdFamily extends Family<AsyncValue<EsopPool?>> {
   /// Gets a specific ESOP pool by ID.
+  /// Uses projected state instead of database for event sourcing compatibility.
   ///
   /// Copied from [esopPoolById].
   const EsopPoolByIdFamily();
 
   /// Gets a specific ESOP pool by ID.
+  /// Uses projected state instead of database for event sourcing compatibility.
   ///
   /// Copied from [esopPoolById].
   EsopPoolByIdProvider call(String poolId) {
@@ -114,10 +118,12 @@ class EsopPoolByIdFamily extends Family<AsyncValue<EsopPool?>> {
 }
 
 /// Gets a specific ESOP pool by ID.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [esopPoolById].
 class EsopPoolByIdProvider extends AutoDisposeFutureProvider<EsopPool?> {
   /// Gets a specific ESOP pool by ID.
+  /// Uses projected state instead of database for event sourcing compatibility.
   ///
   /// Copied from [esopPoolById].
   EsopPoolByIdProvider(String poolId)
@@ -200,25 +206,29 @@ class _EsopPoolByIdProviderElement
 }
 
 String _$poolOptionGrantsStreamHash() =>
-    r'78edd0e5f73862999780b97dd92862174b24f969';
+    r'b7b4b2b0f007cbcf19f09da88ab2a94610ad5710';
 
 /// Watches option grants for a specific ESOP pool.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [poolOptionGrantsStream].
 @ProviderFor(poolOptionGrantsStream)
 const poolOptionGrantsStreamProvider = PoolOptionGrantsStreamFamily();
 
 /// Watches option grants for a specific ESOP pool.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [poolOptionGrantsStream].
 class PoolOptionGrantsStreamFamily
     extends Family<AsyncValue<List<OptionGrant>>> {
   /// Watches option grants for a specific ESOP pool.
+  /// Uses projected state instead of database for event sourcing compatibility.
   ///
   /// Copied from [poolOptionGrantsStream].
   const PoolOptionGrantsStreamFamily();
 
   /// Watches option grants for a specific ESOP pool.
+  /// Uses projected state instead of database for event sourcing compatibility.
   ///
   /// Copied from [poolOptionGrantsStream].
   PoolOptionGrantsStreamProvider call(String poolId) {
@@ -248,11 +258,13 @@ class PoolOptionGrantsStreamFamily
 }
 
 /// Watches option grants for a specific ESOP pool.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [poolOptionGrantsStream].
 class PoolOptionGrantsStreamProvider
     extends AutoDisposeStreamProvider<List<OptionGrant>> {
   /// Watches option grants for a specific ESOP pool.
+  /// Uses projected state instead of database for event sourcing compatibility.
   ///
   /// Copied from [poolOptionGrantsStream].
   PoolOptionGrantsStreamProvider(String poolId)
@@ -337,24 +349,28 @@ class _PoolOptionGrantsStreamProviderElement
   String get poolId => (origin as PoolOptionGrantsStreamProvider).poolId;
 }
 
-String _$esopPoolSummaryHash() => r'3365b9601d6b8c3066177a101e89c517d3b1c327';
+String _$esopPoolSummaryHash() => r'21a8680c8cce04d131098042b2e78fd1d93f6495';
 
 /// Provides detailed summary for an ESOP pool.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [esopPoolSummary].
 @ProviderFor(esopPoolSummary)
 const esopPoolSummaryProvider = EsopPoolSummaryFamily();
 
 /// Provides detailed summary for an ESOP pool.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [esopPoolSummary].
 class EsopPoolSummaryFamily extends Family<AsyncValue<EsopPoolSummary?>> {
   /// Provides detailed summary for an ESOP pool.
+  /// Uses projected state instead of database for event sourcing compatibility.
   ///
   /// Copied from [esopPoolSummary].
   const EsopPoolSummaryFamily();
 
   /// Provides detailed summary for an ESOP pool.
+  /// Uses projected state instead of database for event sourcing compatibility.
   ///
   /// Copied from [esopPoolSummary].
   EsopPoolSummaryProvider call(String poolId) {
@@ -384,11 +400,13 @@ class EsopPoolSummaryFamily extends Family<AsyncValue<EsopPoolSummary?>> {
 }
 
 /// Provides detailed summary for an ESOP pool.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [esopPoolSummary].
 class EsopPoolSummaryProvider
     extends AutoDisposeFutureProvider<EsopPoolSummary?> {
   /// Provides detailed summary for an ESOP pool.
+  /// Uses projected state instead of database for event sourcing compatibility.
   ///
   /// Copied from [esopPoolSummary].
   EsopPoolSummaryProvider(String poolId)
@@ -471,9 +489,10 @@ class _EsopPoolSummaryProviderElement
 }
 
 String _$allEsopPoolsSummaryHash() =>
-    r'1db9c4d932eacd44d7d5289a04ebaad3531de352';
+    r'b5287ccc8eb1f242d60c7bffc9d6dcb0759e78fb';
 
 /// Aggregated summary across all ESOP pools.
+/// Uses projected state instead of database for event sourcing compatibility.
 ///
 /// Copied from [allEsopPoolsSummary].
 @ProviderFor(allEsopPoolsSummary)

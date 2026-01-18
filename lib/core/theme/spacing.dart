@@ -36,4 +36,17 @@ class Spacing {
 
   /// Space to leave at bottom for FAB clearance
   static const double fabClearance = 80;
+
+  // ===========================================================================
+  // Dialog Dimensions
+  // ===========================================================================
+
+  /// Standard dialog content width for detail dialogs
+  static const double dialogWidth = 400;
+
+  /// Wide dialog content width for complex forms
+  static const double dialogWidthWide = 500;
+
+  /// Narrow dialog content width for simple confirmations
+  static const double dialogWidthNarrow = 320;
 }

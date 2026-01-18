@@ -21,6 +21,9 @@ class InstrumentItem extends StatelessWidget {
   /// Secondary text (e.g., "Common Stock @ $1.00").
   final String? subtitle;
 
+  /// Optional vesting info line displayed at the bottom.
+  final String? vestingInfo;
+
   /// Status badge text (e.g., "Active", "75%", "Outstanding").
   final String? statusText;
 
@@ -33,22 +36,32 @@ class InstrumentItem extends StatelessWidget {
   /// Whether to show the chevron indicator.
   final bool showChevron;
 
+  /// Whether this item is a draft (linked to a draft round).
+  /// Drafts are shown with grey color and dashed border.
+  final bool isDraft;
+
   const InstrumentItem({
     super.key,
     required this.icon,
     required this.color,
     required this.title,
     this.subtitle,
+    this.vestingInfo,
     this.statusText,
     this.statusColor,
     this.onTap,
     this.showChevron = true,
+    this.isDraft = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final badgeColor = statusColor ?? color;
+    // Use grey for drafts, otherwise use provided color
+    final effectiveColor = isDraft ? Colors.grey : color;
+    final badgeColor = isDraft ? Colors.grey : (statusColor ?? color);
+    // If draft and statusText is provided, use it; otherwise default to "Draft"
+    final effectiveStatusText = isDraft ? (statusText ?? 'Draft') : statusText;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -60,8 +73,16 @@ class InstrumentItem extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: effectiveColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
+              // Add dashed border for drafts
+              border: isDraft
+                  ? Border.all(
+                      color: Colors.grey.withValues(alpha: 0.5),
+                      width: 1,
+                      strokeAlign: BorderSide.strokeAlignInside,
+                    )
+                  : null,
             ),
             child: Row(
               children: [
@@ -69,10 +90,10 @@ class InstrumentItem extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.2),
+                    color: effectiveColor.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(icon, color: color, size: 16),
+                  child: Icon(icon, color: effectiveColor, size: 16),
                 ),
                 const SizedBox(width: 10),
                 // Title and subtitle
@@ -88,11 +109,14 @@ class InstrumentItem extends StatelessWidget {
                               title,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
+                                color: isDraft
+                                    ? theme.colorScheme.outline
+                                    : null,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (statusText != null) ...[
+                          if (effectiveStatusText != null) ...[
                             const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -103,13 +127,26 @@ class InstrumentItem extends StatelessWidget {
                                 color: badgeColor,
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: Text(
-                                statusText!,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isDraft) ...[
+                                    const Icon(
+                                      Icons.edit_outlined,
+                                      color: Colors.white,
+                                      size: 10,
+                                    ),
+                                    const SizedBox(width: 2),
+                                  ],
+                                  Text(
+                                    effectiveStatusText,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -123,6 +160,29 @@ class InstrumentItem extends StatelessWidget {
                             color: theme.colorScheme.outline,
                           ),
                           overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (vestingInfo != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.schedule,
+                              size: 12,
+                              color: isDraft ? Colors.grey : Colors.indigo,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                vestingInfo!,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: isDraft ? Colors.grey : Colors.indigo,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ],
@@ -155,6 +215,8 @@ class HoldingItem extends StatelessWidget {
   final String? roundName;
   final bool hasVesting;
   final bool isDraft;
+  final String? vestingScheduleName;
+  final String? vestingScheduleTerms;
   final VoidCallback? onTap;
 
   const HoldingItem({
@@ -167,24 +229,35 @@ class HoldingItem extends StatelessWidget {
     this.roundName,
     this.hasVesting = false,
     this.isDraft = false,
+    this.vestingScheduleName,
+    this.vestingScheduleTerms,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final isFullyVested = !hasVesting || vestedCount >= shareCount;
-    final vestingPercent =
-        hasVesting ? ((vestedCount / shareCount) * 100).round() : 100;
+    final vestingPercent = hasVesting
+        ? ((vestedCount / shareCount) * 100).round()
+        : 100;
 
-    // Determine status text: draft takes priority, then vesting
+    // Determine status text: vesting (draft handled by InstrumentItem)
     String? statusText;
     Color? statusColor;
-    if (isDraft) {
-      statusText = 'Draft';
-      statusColor = Colors.orange;
-    } else if (hasVesting) {
+    if (hasVesting && !isDraft) {
       statusText = '$vestingPercent%';
       statusColor = isFullyVested ? Colors.green : Colors.indigo;
+    }
+
+    // Build vesting info string for bottom line
+    String? vestingInfo;
+    if (hasVesting && vestingScheduleName != null) {
+      final progress = '$vestedCount/$shareCount';
+      if (vestingScheduleTerms != null) {
+        vestingInfo = 'Vesting: $vestingScheduleTerms, $progress';
+      } else {
+        vestingInfo = 'Vesting: $vestingScheduleName, $progress';
+      }
     }
 
     return InstrumentItem(
@@ -192,8 +265,10 @@ class HoldingItem extends StatelessWidget {
       color: isFullyVested ? Colors.blue : Colors.indigo,
       title: _formatNumber(shareCount),
       subtitle: _buildSubtitle(),
+      vestingInfo: vestingInfo,
       statusText: statusText,
       statusColor: statusColor,
+      isDraft: isDraft,
       onTap: onTap,
     );
   }
@@ -221,6 +296,10 @@ class OptionItem extends StatelessWidget {
   final String shareClassName;
   final String status;
   final double? vestingPercent;
+  final String? vestingScheduleName;
+  final String? vestingScheduleTerms;
+  final int? vestedCount;
+  final bool isDraft;
   final VoidCallback? onTap;
 
   const OptionItem({
@@ -232,6 +311,10 @@ class OptionItem extends StatelessWidget {
     required this.shareClassName,
     required this.status,
     this.vestingPercent,
+    this.vestingScheduleName,
+    this.vestingScheduleTerms,
+    this.vestedCount,
+    this.isDraft = false,
     this.onTap,
   });
 
@@ -243,17 +326,34 @@ class OptionItem extends StatelessWidget {
     final color = isPending
         ? Colors.amber
         : isActive
-            ? Colors.orange
-            : Colors.grey;
+        ? Colors.orange
+        : Colors.grey;
+
+    // Build vesting info string for bottom line
+    String? vestingInfo;
+    if (vestingScheduleName != null &&
+        vestingPercent != null &&
+        vestingPercent! < 100) {
+      final vested = vestedCount ?? (quantity * vestingPercent! / 100).round();
+      final progress = '$vested/$quantity';
+      if (vestingScheduleTerms != null) {
+        vestingInfo = 'Vesting: $vestingScheduleTerms, $progress';
+      } else {
+        vestingInfo = 'Vesting: $vestingScheduleName, $progress';
+      }
+    }
 
     return InstrumentItem(
       icon: Icons.workspace_premium,
       color: color,
       title: _formatNumber(outstanding),
-      subtitle: '$shareClassName @ \$${strikePrice.toStringAsFixed(2)}'
+      subtitle:
+          '$shareClassName @ \$${strikePrice.toStringAsFixed(2)}'
           '${vestingPercent != null ? ' • ${vestingPercent!.toStringAsFixed(0)}% vested' : ''}',
-      statusText: _getStatusText(),
+      vestingInfo: vestingInfo,
+      statusText: isDraft ? null : _getStatusText(),
       statusColor: color,
+      isDraft: isDraft,
       onTap: onTap,
     );
   }
@@ -292,6 +392,7 @@ class ConvertibleItem extends StatelessWidget {
   final double? discountPercent;
   final double? interestRate;
   final String status;
+  final bool isDraft;
   final VoidCallback? onTap;
 
   const ConvertibleItem({
@@ -302,6 +403,7 @@ class ConvertibleItem extends StatelessWidget {
     this.discountPercent,
     this.interestRate,
     required this.status,
+    this.isDraft = false,
     this.onTap,
   });
 
@@ -310,19 +412,28 @@ class ConvertibleItem extends StatelessWidget {
     final isSafe = type.toLowerCase() == 'safe';
     final isPending = status == 'pending';
     final isOutstanding = status == 'outstanding';
-    final color = isPending
+    final isDraftConversion = status == 'draft_conversion';
+
+    // Use grey for draft conversion, otherwise normal colors
+    final color = isDraft || isDraftConversion
+        ? Colors.grey
+        : isPending
         ? Colors.orange
         : isOutstanding
-            ? (isSafe ? Colors.purple : Colors.teal)
-            : Colors.grey;
+        ? (isSafe ? Colors.purple : Colors.teal)
+        : Colors.grey;
 
     return InstrumentItem(
       icon: isSafe ? Icons.flash_on : Icons.description,
       color: color,
       title: '${_getTypeLabel()} • ${_formatCurrency(principal)}',
       subtitle: _buildTermsSummary(),
-      statusText: _getStatusText(),
+      // Show "Draft Conv." for draft conversions
+      statusText: isDraftConversion
+          ? 'Draft Conv.'
+          : (isDraft ? null : _getStatusText()),
       statusColor: color,
+      isDraft: isDraft || isDraftConversion,
       onTap: onTap,
     );
   }
@@ -384,6 +495,7 @@ class WarrantItem extends StatelessWidget {
   final String status;
   final DateTime expiryDate;
   final double? currentSharePrice;
+  final bool isDraft;
   final VoidCallback? onTap;
 
   const WarrantItem({
@@ -396,6 +508,7 @@ class WarrantItem extends StatelessWidget {
     required this.status,
     required this.expiryDate,
     this.currentSharePrice,
+    this.isDraft = false,
     this.onTap,
   });
 
@@ -409,8 +522,8 @@ class WarrantItem extends StatelessWidget {
     final color = isPending
         ? Colors.orange
         : isActive
-            ? (isInTheMoney ? Colors.green : Colors.teal)
-            : Colors.grey;
+        ? (isInTheMoney ? Colors.green : Colors.teal)
+        : Colors.grey;
 
     return InstrumentItem(
       icon: Icons.receipt_long,
@@ -419,8 +532,9 @@ class WarrantItem extends StatelessWidget {
       subtitle:
           '${shareClassName ?? 'Unspecified'} @ \$${strikePrice.toStringAsFixed(2)}'
           '${isInTheMoney ? ' • ITM' : ''}',
-      statusText: _getStatusText(),
+      statusText: isDraft ? null : _getStatusText(),
       statusColor: color,
+      isDraft: isDraft,
       onTap: onTap,
     );
   }

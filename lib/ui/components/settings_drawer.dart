@@ -207,6 +207,74 @@ class SettingsDrawer extends ConsumerWidget {
             ref.read(themeModeNotifierProvider.notifier).setDarkMode(value);
           },
         ),
+        Builder(
+          builder: (context) {
+            final deleteEnabledAsync = ref.watch(deleteEnabledProvider);
+            final deleteEnabled = deleteEnabledAsync.valueOrNull ?? false;
+            return SwitchListTile(
+              secondary: Icon(
+                Icons.delete_forever,
+                color: deleteEnabled ? Colors.red : null,
+              ),
+              title: const Text('Enable Delete'),
+              subtitle: Text(
+                deleteEnabled
+                    ? 'Delete buttons visible'
+                    : 'Delete buttons hidden',
+              ),
+              value: deleteEnabled,
+              activeColor: Colors.red,
+              onChanged: (value) {
+                ref.read(deleteEnabledProvider.notifier).setEnabled(value);
+              },
+            );
+          },
+        ),
+        Builder(
+          builder: (context) {
+            final showDraftAsync = ref.watch(showDraftProvider);
+            final showDraft = showDraftAsync.valueOrNull ?? true;
+            return SwitchListTile(
+              secondary: Icon(
+                Icons.edit_note,
+                color: showDraft ? Colors.grey : null,
+              ),
+              title: const Text('Show Draft Items'),
+              subtitle: Text(
+                showDraft
+                    ? 'Draft items included in calculations'
+                    : 'Draft items hidden from calculations',
+              ),
+              value: showDraft,
+              onChanged: (value) {
+                ref.read(showDraftProvider.notifier).setEnabled(value);
+              },
+            );
+          },
+        ),
+        Builder(
+          builder: (context) {
+            final premiumEnabledAsync = ref.watch(premiumNotifierProvider);
+            final premiumEnabled = premiumEnabledAsync.valueOrNull ?? false;
+            return SwitchListTile(
+              secondary: Icon(
+                Icons.workspace_premium,
+                color: premiumEnabled ? Colors.amber : null,
+              ),
+              title: const Text('Enable Premium'),
+              subtitle: Text(
+                premiumEnabled
+                    ? 'All features unlocked'
+                    : 'Some features are locked',
+              ),
+              value: premiumEnabled,
+              activeColor: Colors.amber,
+              onChanged: (value) {
+                ref.read(premiumNotifierProvider.notifier).setEnabled(value);
+              },
+            );
+          },
+        ),
         ListTile(
           leading: const Icon(Icons.format_list_numbered),
           title: const Text('Number Format'),
@@ -420,6 +488,11 @@ class SettingsDrawer extends ConsumerWidget {
                   .read(companyCommandsProvider.notifier)
                   .createCompany(name: nameController.text);
               debugPrint('Company created: $companyId');
+              // Initialize default share classes and vesting schedules
+              await ref
+                  .read(companyCommandsProvider.notifier)
+                  .initializeCompanyDefaults(companyId: companyId);
+              debugPrint('Company defaults initialized');
               // Select the newly created company
               await ref
                   .read(currentCompanyIdProvider.notifier)
@@ -448,6 +521,11 @@ class SettingsDrawer extends ConsumerWidget {
                     .read(companyCommandsProvider.notifier)
                     .createCompany(name: nameController.text);
                 debugPrint('Company created: $companyId');
+                // Initialize default share classes and vesting schedules
+                await ref
+                    .read(companyCommandsProvider.notifier)
+                    .initializeCompanyDefaults(companyId: companyId);
+                debugPrint('Company defaults initialized');
                 // Select the newly created company
                 await ref
                     .read(currentCompanyIdProvider.notifier)
@@ -620,12 +698,40 @@ class SettingsDrawer extends ConsumerWidget {
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () async {
-              // TODO: Implement data reset
-              Navigator.pop(context);
-              Navigator.pop(context); // Close drawer
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Data reset - restart the app')),
-              );
+              try {
+                final db = ref.read(databaseProvider);
+                await db.resetAllData();
+
+                // Clear current company selection
+                await ref
+                    .read(currentCompanyIdProvider.notifier)
+                    .clearCompany();
+
+                // Invalidate providers to force refresh
+                ref.invalidate(eventsStreamProvider);
+                ref.invalidate(capTableStateProvider);
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  Navigator.pop(context); // Close drawer
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('All data has been erased'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error resetting data: $e'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Reset Everything'),
           ),

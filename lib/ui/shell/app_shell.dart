@@ -113,7 +113,8 @@ class _AppShellState extends ConsumerState<AppShell> {
                 hintText: 'e.g., Acme Pty Ltd',
               ),
               autofocus: true,
-              onSubmitted: (_) => _createCompany(dialogContext, nameController, errorNotifier),
+              onSubmitted: (_) =>
+                  _createCompany(dialogContext, nameController, errorNotifier),
             ),
             const SizedBox(height: 8),
             ValueListenableBuilder<String?>(
@@ -137,7 +138,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         ),
         actions: [
           FilledButton(
-            onPressed: () => _createCompany(dialogContext, nameController, errorNotifier),
+            onPressed: () =>
+                _createCompany(dialogContext, nameController, errorNotifier),
             child: const Text('Create Company'),
           ),
         ],
@@ -165,6 +167,12 @@ class _AppShellState extends ConsumerState<AppShell> {
           .createCompany(name: name);
       debugPrint('Company created with id: $companyId');
 
+      // Initialize default share classes and vesting schedules
+      await ref
+          .read(companyCommandsProvider.notifier)
+          .initializeCompanyDefaults(companyId: companyId);
+      debugPrint('Company defaults initialized');
+
       // Select the newly created company
       await ref.read(currentCompanyIdProvider.notifier).setCompany(companyId);
       debugPrint('Company set as current');
@@ -172,7 +180,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       if (dialogContext.mounted) {
         Navigator.pop(dialogContext);
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Company "$name" created successfully!')),

@@ -33,6 +33,13 @@ abstract class EventRepository {
   Future<(String stateJson, int atSequence)?> getLatestSnapshot(
     String companyId,
   );
+
+  /// Permanently delete all events related to an entity by ID.
+  /// This searches the event JSON for the entity ID and removes matching events.
+  Future<void> deleteEventsByEntityId(String companyId, String entityId);
+
+  /// Delete all snapshots for a company (to force rebuild after permanent delete).
+  Future<void> deleteAllSnapshots(String companyId);
 }
 
 /// Local SQLite implementation of EventRepository using Drift.
@@ -106,6 +113,31 @@ class DriftEventRepository implements EventRepository {
     final snapshot = await _db.getLatestSnapshot(companyId);
     if (snapshot == null) return null;
     return (snapshot.stateJson, snapshot.atSequenceNumber);
+  }
+
+  @override
+  Future<void> deleteEventsByEntityId(String companyId, String entityId) async {
+    // Get all events for the company
+    final events = await _db.getEvents(companyId);
+
+    // Find events that reference this entity ID in their JSON
+    final eventsToDelete = events.where((e) {
+      return e.eventDataJson.contains('"$entityId"');
+    }).toList();
+
+    // Delete matching events
+    for (final event in eventsToDelete) {
+      await (_db.delete(
+        _db.capitalizationEvents,
+      )..where((e) => e.id.equals(event.id))).go();
+    }
+  }
+
+  @override
+  Future<void> deleteAllSnapshots(String companyId) async {
+    await (_db.delete(
+      _db.snapshots,
+    )..where((s) => s.companyId.equals(companyId))).go();
   }
 
   // ============================================================
@@ -204,19 +236,26 @@ class DriftEventRepository implements EventRepository {
       sharesIssued: (_) => 'sharesIssued',
       sharesTransferred: (_) => 'sharesTransferred',
       sharesRepurchased: (_) => 'sharesRepurchased',
+      holdingDeleted: (_) => 'holdingDeleted',
+      holdingUpdated: (_) => 'holdingUpdated',
       holdingVestingUpdated: (_) => 'holdingVestingUpdated',
       convertibleIssued: (_) => 'convertibleIssued',
       mfnUpgradeApplied: (_) => 'mfnUpgradeApplied',
       convertibleConverted: (_) => 'convertibleConverted',
       convertibleCancelled: (_) => 'convertibleCancelled',
+      convertibleUpdated: (_) => 'convertibleUpdated',
       esopPoolCreated: (_) => 'esopPoolCreated',
       esopPoolExpanded: (_) => 'esopPoolExpanded',
       esopPoolActivated: (_) => 'esopPoolActivated',
+      esopPoolUpdated: (_) => 'esopPoolUpdated',
+      esopPoolDeleted: (_) => 'esopPoolDeleted',
+      esopPoolExpansionReverted: (_) => 'esopPoolExpansionReverted',
       optionGranted: (_) => 'optionGranted',
       optionsVested: (_) => 'optionsVested',
       optionsExercised: (_) => 'optionsExercised',
       optionsCancelled: (_) => 'optionsCancelled',
       optionGrantStatusChanged: (_) => 'optionGrantStatusChanged',
+      optionGrantUpdated: (_) => 'optionGrantUpdated',
       warrantIssued: (_) => 'warrantIssued',
       warrantExercised: (_) => 'warrantExercised',
       warrantCancelled: (_) => 'warrantCancelled',
@@ -256,19 +295,26 @@ class DriftEventRepository implements EventRepository {
       sharesIssued: (e) => e.timestamp,
       sharesTransferred: (e) => e.timestamp,
       sharesRepurchased: (e) => e.timestamp,
+      holdingDeleted: (e) => e.timestamp,
+      holdingUpdated: (e) => e.timestamp,
       holdingVestingUpdated: (e) => e.timestamp,
       convertibleIssued: (e) => e.timestamp,
       mfnUpgradeApplied: (e) => e.timestamp,
       convertibleConverted: (e) => e.timestamp,
       convertibleCancelled: (e) => e.timestamp,
+      convertibleUpdated: (e) => e.timestamp,
       esopPoolCreated: (e) => e.timestamp,
       esopPoolExpanded: (e) => e.timestamp,
       esopPoolActivated: (e) => e.timestamp,
+      esopPoolUpdated: (e) => e.timestamp,
+      esopPoolDeleted: (e) => e.timestamp,
+      esopPoolExpansionReverted: (e) => e.timestamp,
       optionGranted: (e) => e.timestamp,
       optionsVested: (e) => e.timestamp,
       optionsExercised: (e) => e.timestamp,
       optionsCancelled: (e) => e.timestamp,
       optionGrantStatusChanged: (e) => e.timestamp,
+      optionGrantUpdated: (e) => e.timestamp,
       warrantIssued: (e) => e.timestamp,
       warrantExercised: (e) => e.timestamp,
       warrantCancelled: (e) => e.timestamp,
@@ -308,19 +354,26 @@ class DriftEventRepository implements EventRepository {
       sharesIssued: (e) => e.actorId,
       sharesTransferred: (e) => e.actorId,
       sharesRepurchased: (e) => e.actorId,
+      holdingDeleted: (e) => e.actorId,
+      holdingUpdated: (e) => e.actorId,
       holdingVestingUpdated: (e) => e.actorId,
       convertibleIssued: (e) => e.actorId,
       mfnUpgradeApplied: (e) => e.actorId,
       convertibleConverted: (e) => e.actorId,
       convertibleCancelled: (e) => e.actorId,
+      convertibleUpdated: (e) => e.actorId,
       esopPoolCreated: (e) => e.actorId,
       esopPoolExpanded: (e) => e.actorId,
       esopPoolActivated: (e) => e.actorId,
+      esopPoolUpdated: (e) => e.actorId,
+      esopPoolDeleted: (e) => e.actorId,
+      esopPoolExpansionReverted: (e) => e.actorId,
       optionGranted: (e) => e.actorId,
       optionsVested: (e) => e.actorId,
       optionsExercised: (e) => e.actorId,
       optionsCancelled: (e) => e.actorId,
       optionGrantStatusChanged: (e) => e.actorId,
+      optionGrantUpdated: (e) => e.actorId,
       warrantIssued: (e) => e.actorId,
       warrantExercised: (e) => e.actorId,
       warrantCancelled: (e) => e.actorId,

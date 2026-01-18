@@ -1,13 +1,16 @@
 // Provider exports
+export 'collapsible_notice_provider.dart';
 export 'commands.dart';
 export 'company_provider.dart';
 export 'convertibles_provider.dart';
 export 'database_provider.dart';
 export 'esop_pools_provider.dart';
+export 'premium_provider.dart';
 export 'event_providers.dart';
 export 'holdings_provider.dart';
 export 'mfn_provider.dart';
 export 'options_provider.dart';
+export 'permanent_delete_provider.dart';
 export 'projection_adapters.dart';
 export 'projection_providers.dart';
 export 'rounds_provider.dart';

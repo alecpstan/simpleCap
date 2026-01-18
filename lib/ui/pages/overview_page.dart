@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers/providers.dart';
@@ -218,6 +217,26 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
     final convertiblesSummaryAsync = ref.watch(convertiblesSummaryProvider);
     final toolOrderAsync = ref.watch(toolOrderNotifierProvider);
 
+    // Watch premium feature locks
+    final valuationsLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.valuations),
+    );
+    final scenariosLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.scenarios),
+    );
+    final optionsLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.options),
+    );
+    final esopPoolsLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.esopPools),
+    );
+    final warrantsLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.warrants),
+    );
+    final convertiblesLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.convertibles),
+    );
+
     // Build tool data with dynamic subtitles
     final optionsSummary = optionsSummaryAsync.valueOrNull;
     final convertiblesSummary = convertiblesSummaryAsync.valueOrNull;
@@ -240,6 +259,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
         label: 'Scenarios',
         subtitle: 'Model exits',
         color: Colors.purple,
+        isLocked: scenariosLocked,
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const ScenariosPage()),
@@ -253,6 +273,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
             ? '${optionsSummary.activeGrants} active'
             : 'Equity plans',
         color: Colors.orange,
+        isLocked: optionsLocked,
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const OptionsPage()),
@@ -264,6 +285,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
         label: 'ESOP Pools',
         subtitle: 'Manage pools',
         color: Colors.deepOrange,
+        isLocked: esopPoolsLocked,
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const EsopPoolsPage()),
@@ -289,6 +311,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
             ? '${convertiblesSummary.outstandingCount} outstanding'
             : 'SAFEs & notes',
         color: Colors.teal,
+        isLocked: convertiblesLocked,
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const ConvertiblesPage()),
@@ -300,6 +323,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
         label: 'Warrants',
         subtitle: 'View warrants',
         color: Colors.indigo,
+        isLocked: warrantsLocked,
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const WarrantsPage()),
@@ -463,39 +487,57 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
     AsyncValue<List<ShareClassesData>> shareClassesAsync,
     AsyncValue<List<Holding>> holdingsAsync,
   ) {
+    final ownershipAsync = ref.watch(ownershipSummaryProvider);
+
     return shareClassesAsync.when(
       data: (shareClasses) => holdingsAsync.when(
-        data: (holdings) {
-          final byClass = <String, int>{};
-          for (final h in holdings) {
-            byClass.update(
-              h.shareClassId,
-              (v) => v + h.shareCount,
-              ifAbsent: () => h.shareCount,
-            );
-          }
+        data: (holdings) => ownershipAsync.when(
+          data: (ownership) {
+            final byClass = <String, int>{};
+            for (final h in holdings) {
+              byClass.update(
+                h.shareClassId,
+                (v) => v + h.shareCount,
+                ifAbsent: () => h.shareCount,
+              );
+            }
 
-          final slices = <OwnershipSlice>[];
-          var colorIndex = 0;
+            final slices = <OwnershipSlice>[];
+            var colorIndex = 0;
 
-          for (final entry in byClass.entries) {
-            final shareClass = shareClasses
-                .where((sc) => sc.id == entry.key)
-                .firstOrNull;
-            slices.add(
-              OwnershipSlice(
-                id: entry.key,
-                name: shareClass?.name ?? 'Unknown',
-                shares: entry.value,
-                color: ChartColors.getColor(colorIndex++),
-              ),
-            );
-          }
+            for (final entry in byClass.entries) {
+              final shareClass = shareClasses
+                  .where((sc) => sc.id == entry.key)
+                  .firstOrNull;
+              slices.add(
+                OwnershipSlice(
+                  id: entry.key,
+                  name: shareClass?.name ?? 'Unknown',
+                  shares: entry.value,
+                  color: ChartColors.getColor(colorIndex++),
+                ),
+              );
+            }
 
-          slices.sort((a, b) => b.shares.compareTo(a.shares));
+            // Add ESOP reserved shares as a separate slice
+            if (ownership.esopReservedShares > 0) {
+              slices.add(
+                OwnershipSlice(
+                  id: 'esop',
+                  name: 'ESOP',
+                  shares: ownership.esopReservedShares,
+                  color: Colors.deepOrange,
+                ),
+              );
+            }
 
-          return OwnershipPieChart(slices: slices, size: 220);
-        },
+            slices.sort((a, b) => b.shares.compareTo(a.shares));
+
+            return OwnershipPieChart(slices: slices, size: 220);
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Text('Error: $e'),
+        ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Text('Error: $e'),
       ),
@@ -505,6 +547,12 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
   }
 
   Widget _buildOptionsSummary(BuildContext context) {
+    // Hide if options feature is locked
+    final optionsLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.options),
+    );
+    if (optionsLocked) return const SizedBox.shrink();
+
     final optionsSummaryAsync = ref.watch(optionsSummaryProvider);
 
     return optionsSummaryAsync.when(
@@ -558,6 +606,12 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
   }
 
   Widget _buildConvertiblesSummary(BuildContext context) {
+    // Hide if convertibles feature is locked
+    final convertiblesLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.convertibles),
+    );
+    if (convertiblesLocked) return const SizedBox.shrink();
+
     final convertiblesSummaryAsync = ref.watch(convertiblesSummaryProvider);
 
     return convertiblesSummaryAsync.when(
@@ -616,7 +670,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Create Company'),
         content: TextField(
           controller: nameController,
@@ -628,7 +682,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -636,46 +690,30 @@ class _OverviewPageState extends ConsumerState<OverviewPage> {
               final name = nameController.text.trim();
               if (name.isEmpty) return;
 
-              final db = ref.read(databaseProvider);
-              final id = DateTime.now().millisecondsSinceEpoch.toString();
-              final now = DateTime.now();
+              try {
+                // Create company using the command pattern
+                final companyId = await ref
+                    .read(companyCommandsProvider.notifier)
+                    .createCompany(name: name);
 
-              await db.upsertCompany(
-                CompaniesCompanion.insert(
-                  id: id,
-                  name: name,
-                  createdAt: now,
-                  updatedAt: now,
-                ),
-              );
+                // Initialize default share classes and vesting schedules
+                await ref
+                    .read(companyCommandsProvider.notifier)
+                    .initializeCompanyDefaults(companyId: companyId);
 
-              // Create default share classes
-              await db.upsertShareClass(
-                ShareClassesCompanion.insert(
-                  id: '${id}_common',
-                  companyId: id,
-                  name: 'Common',
-                  type: 'common',
-                  createdAt: now,
-                  updatedAt: now,
-                ),
-              );
-              await db.upsertShareClass(
-                ShareClassesCompanion.insert(
-                  id: '${id}_preferred_a',
-                  companyId: id,
-                  name: 'Series A Preferred',
-                  type: 'preferred',
-                  seniority: const Value(1),
-                  liquidationPreference: const Value(1.0),
-                  createdAt: now,
-                  updatedAt: now,
-                ),
-              );
+                // Select the newly created company
+                await ref
+                    .read(currentCompanyIdProvider.notifier)
+                    .setCompany(companyId);
 
-              ref.read(currentCompanyIdProvider.notifier).setCompany(id);
-
-              if (context.mounted) Navigator.pop(context);
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              } catch (e) {
+                if (dialogContext.mounted) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    SnackBar(content: Text('Error creating company: $e')),
+                  );
+                }
+              }
             },
             child: const Text('Create'),
           ),

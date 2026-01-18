@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers/providers.dart';
+import '../../domain/constants/type_constants.dart';
 import '../../domain/services/mfn_calculator.dart';
 import '../../infrastructure/database/database.dart';
 import '../../shared/formatters.dart';
@@ -16,6 +17,7 @@ class ConvertiblesPage extends ConsumerWidget {
     final summaryAsync = ref.watch(convertiblesSummaryProvider);
     final companyId = ref.watch(currentCompanyIdProvider);
     final stakeholders = ref.watch(stakeholdersStreamProvider);
+    final deleteEnabled = ref.watch(deleteEnabledProvider).valueOrNull ?? false;
 
     if (companyId == null) {
       return Scaffold(
@@ -64,6 +66,7 @@ class ConvertiblesPage extends ConsumerWidget {
                   ref,
                   convertibles,
                   stakeholders.valueOrNull ?? [],
+                  deleteEnabled,
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -136,16 +139,31 @@ class ConvertiblesPage extends ConsumerWidget {
     WidgetRef ref,
     List<Convertible> convertibles,
     List<Stakeholder> stakeholders,
+    bool deleteEnabled,
   ) {
     final mfnUpgradesAsync = ref.watch(pendingMfnUpgradesProvider);
 
     return Column(
       children: [
-        // MFN Banner
+        // MFN Notice using CollapsibleNotice
         mfnUpgradesAsync.when(
           data: (upgrades) {
             if (upgrades.isEmpty) return const SizedBox.shrink();
-            return _buildMfnBanner(context, ref, upgrades, stakeholders);
+            return CollapsibleNotice.warning(
+              persistKey: 'convertibles_mfn_upgrades_notice',
+              title: 'MFN Upgrades Available',
+              count: upgrades.length,
+              message:
+                  'Earlier investors with MFN clauses can upgrade to match better terms from later convertibles. '
+                  'Tap "Review Upgrades" to see details and apply upgrades.',
+              action: FilledButton.icon(
+                onPressed: () =>
+                    _showMfnUpgradeDialog(context, ref, upgrades, stakeholders),
+                icon: const Icon(Icons.upgrade, size: 18),
+                label: const Text('Review Upgrades'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+              ),
+            );
           },
           loading: () => const SizedBox.shrink(),
           error: (_, __) => const SizedBox.shrink(),
@@ -162,70 +180,12 @@ class ConvertiblesPage extends ConsumerWidget {
                 ref,
                 convertible,
                 stakeholders,
+                deleteEnabled,
               );
             },
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildMfnBanner(
-    BuildContext context,
-    WidgetRef ref,
-    List<MfnUpgradeOpportunity> upgrades,
-    List<Stakeholder> stakeholders,
-  ) {
-    final theme = Theme.of(context);
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.purple.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.auto_awesome, color: Colors.purple, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '${upgrades.length} MFN Upgrade${upgrades.length > 1 ? 's' : ''} Available',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.purple,
-                  ),
-                ),
-              ),
-              FilledButton.icon(
-                onPressed: () =>
-                    _showMfnUpgradeDialog(context, ref, upgrades, stakeholders),
-                icon: const Icon(Icons.upgrade, size: 18),
-                label: const Text('Review'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.purple,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Earlier investors with MFN clauses can upgrade to match better terms from later convertibles.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -247,6 +207,7 @@ class ConvertiblesPage extends ConsumerWidget {
     WidgetRef ref,
     Convertible convertible,
     List<Stakeholder> stakeholders,
+    bool deleteEnabled,
   ) {
     final stakeholder = stakeholders.firstWhere(
       (s) => s.id == convertible.stakeholderId,
@@ -294,37 +255,10 @@ class ConvertiblesPage extends ConsumerWidget {
             color: Colors.purple,
           ),
       ],
-      expandedContent: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildDetailRow('Type', _formatConvertibleType(convertible.type)),
-          _buildDetailRow(
-            'Principal',
-            Formatters.currency(convertible.principal),
-          ),
-          _buildDetailRow('Issue Date', Formatters.date(convertible.issueDate)),
-          if (convertible.valuationCap != null)
-            _buildDetailRow(
-              'Valuation Cap',
-              Formatters.currency(convertible.valuationCap!),
-            ),
-          if (convertible.discountPercent != null)
-            _buildDetailRow('Discount', '${convertible.discountPercent}%'),
-          if (convertible.interestRate != null)
-            _buildDetailRow(
-              'Interest Rate',
-              '${convertible.interestRate}% p.a.',
-            ),
-          if (convertible.maturityDate != null)
-            _buildDetailRow(
-              'Maturity',
-              Formatters.date(convertible.maturityDate!),
-            ),
-          if (convertible.hasMfn) _buildDetailRow('MFN', 'Yes'),
-          if (convertible.hasProRata) _buildDetailRow('Pro-rata Rights', 'Yes'),
-          if (convertible.notes != null && convertible.notes!.isNotEmpty)
-            _buildDetailRow('Notes', convertible.notes!),
-        ],
+      expandedContent: _ConvertibleExpandedContent(
+        convertible: convertible,
+        stakeholders: stakeholders,
+        deleteEnabled: deleteEnabled,
       ),
       actions: [
         IconButton(
@@ -333,40 +267,33 @@ class ConvertiblesPage extends ConsumerWidget {
               _showEditDialog(context, ref, convertible, stakeholders),
           tooltip: 'Edit',
         ),
-        if (convertible.status == 'outstanding')
+        // Only show convert button if voluntary conversion is allowed
+        if (convertible.status == 'outstanding' &&
+            convertible.allowsVoluntaryConversion)
           IconButton(
             icon: const Icon(Icons.swap_horiz_outlined),
             onPressed: () => _showConvertDialog(context, ref, convertible),
             tooltip: 'Convert',
           ),
-        IconButton(
-          icon: Icon(
-            Icons.delete_outlined,
-            color: Theme.of(context).colorScheme.error,
-          ),
-          onPressed: () => _confirmDelete(context, ref, convertible),
-          tooltip: 'Delete',
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w500),
+        if (convertible.status == 'outstanding')
+          IconButton(
+            icon: Icon(
+              Icons.cancel_outlined,
+              color: Theme.of(context).colorScheme.error,
             ),
+            onPressed: () => _confirmCancel(context, ref, convertible),
+            tooltip: 'Cancel',
           ),
-          Expanded(child: Text(value)),
-        ],
-      ),
+        if (deleteEnabled)
+          IconButton(
+            icon: Icon(
+              Icons.delete_outlined,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => _confirmDelete(context, ref, convertible),
+            tooltip: 'Delete',
+          ),
+      ],
     );
   }
 
@@ -449,6 +376,12 @@ class ConvertiblesPage extends ConsumerWidget {
     final notesController = TextEditingController(
       text: convertible?.notes ?? '',
     );
+    final qualifiedThresholdController = TextEditingController(
+      text: convertible?.qualifiedFinancingThreshold?.toString() ?? '',
+    );
+    final liquidityMultipleController = TextEditingController(
+      text: convertible?.liquidityPayoutMultiple?.toString() ?? '',
+    );
 
     String selectedType = convertible?.type ?? 'safe';
     String? selectedStakeholderId = convertible?.stakeholderId;
@@ -456,6 +389,17 @@ class ConvertiblesPage extends ConsumerWidget {
     DateTime? maturityDate = convertible?.maturityDate;
     bool hasMfn = convertible?.hasMfn ?? false;
     bool hasProRata = convertible?.hasProRata ?? false;
+
+    // Advanced terms state
+    String? maturityBehavior = convertible?.maturityBehavior;
+    bool allowsVoluntaryConversion =
+        convertible?.allowsVoluntaryConversion ?? false;
+    String? liquidityEventBehavior = convertible?.liquidityEventBehavior;
+    String? dissolutionBehavior = convertible?.dissolutionBehavior;
+    String? preferredShareClassId = convertible?.preferredShareClassId;
+
+    // Get share classes for dropdown
+    final shareClasses = ref.read(shareClassesStreamProvider).valueOrNull ?? [];
 
     showDialog(
       context: context,
@@ -545,6 +489,144 @@ class ConvertiblesPage extends ConsumerWidget {
                       setDialogState(() => hasProRata = v ?? false),
                   contentPadding: EdgeInsets.zero,
                 ),
+
+                // Advanced Terms Expandable Section
+                const SizedBox(height: 16),
+                ExpansionTile(
+                  title: const Text('Advanced Terms'),
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(top: 8),
+                  initiallyExpanded:
+                      maturityBehavior != null ||
+                      allowsVoluntaryConversion ||
+                      liquidityEventBehavior != null ||
+                      dissolutionBehavior != null,
+                  children: [
+                    // Qualified Financing Threshold
+                    TextField(
+                      controller: qualifiedThresholdController,
+                      decoration: const InputDecoration(
+                        labelText: 'Qualified Financing Threshold',
+                        prefixText: '\$',
+                        helperText: 'Minimum round size to trigger conversion',
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Maturity Behavior
+                    DropdownButtonFormField<String>(
+                      value: maturityBehavior,
+                      decoration: const InputDecoration(
+                        labelText: 'At Maturity',
+                        helperText: 'What happens when the instrument matures',
+                      ),
+                      items: MaturityBehavior.all
+                          .map(
+                            (b) => DropdownMenuItem(
+                              value: b,
+                              child: Text(MaturityBehavior.displayName(b)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialogState(() => maturityBehavior = v),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Voluntary Conversion
+                    CheckboxListTile(
+                      title: const Text('Allows Voluntary Conversion'),
+                      subtitle: const Text(
+                        'Holder can elect to convert anytime',
+                      ),
+                      value: allowsVoluntaryConversion,
+                      onChanged: (v) => setDialogState(
+                        () => allowsVoluntaryConversion = v ?? false,
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+
+                    // Liquidity Event Behavior
+                    DropdownButtonFormField<String>(
+                      value: liquidityEventBehavior,
+                      decoration: const InputDecoration(
+                        labelText: 'On Liquidity Event',
+                        helperText: 'M&A, IPO, or change of control',
+                      ),
+                      items: LiquidityEventBehavior.all
+                          .map(
+                            (b) => DropdownMenuItem(
+                              value: b,
+                              child: Text(
+                                LiquidityEventBehavior.displayName(b),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialogState(() => liquidityEventBehavior = v),
+                    ),
+                    if (liquidityEventBehavior ==
+                        LiquidityEventBehavior.cashPayout) ...[
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: liquidityMultipleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Payout Multiple',
+                          suffixText: 'x',
+                          helperText: 'e.g. 2.0 = 2x principal',
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+
+                    // Dissolution Behavior
+                    DropdownButtonFormField<String>(
+                      value: dissolutionBehavior,
+                      decoration: const InputDecoration(
+                        labelText: 'On Dissolution',
+                        helperText: 'Company wind-down or bankruptcy',
+                      ),
+                      items: DissolutionBehavior.all
+                          .map(
+                            (b) => DropdownMenuItem(
+                              value: b,
+                              child: Text(DissolutionBehavior.displayName(b)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialogState(() => dissolutionBehavior = v),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Preferred Share Class for Conversion
+                    DropdownButtonFormField<String?>(
+                      value: preferredShareClassId,
+                      decoration: const InputDecoration(
+                        labelText: 'Convert to Share Class',
+                        helperText: 'Preferred class for standalone conversion',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Same as round (default)'),
+                        ),
+                        ...shareClasses.map(
+                          (sc) => DropdownMenuItem(
+                            value: sc.id,
+                            child: Text(sc.name),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) =>
+                          setDialogState(() => preferredShareClassId = v),
+                    ),
+                  ],
+                ),
+
                 const SizedBox(height: 16),
                 TextField(
                   controller: notesController,
@@ -567,13 +649,36 @@ class ConvertiblesPage extends ConsumerWidget {
 
                 final commands = ref.read(convertibleCommandsProvider.notifier);
                 final cap = double.tryParse(capController.text);
+                final qualifiedThreshold = double.tryParse(
+                  qualifiedThresholdController.text,
+                );
+                final liquidityMultiple = double.tryParse(
+                  liquidityMultipleController.text,
+                );
                 final discount = double.tryParse(discountController.text);
                 final interest = double.tryParse(interestController.text);
 
                 if (isEditing) {
-                  // TODO: Implement updateConvertible in ConvertibleCommands
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Edit not yet implemented')),
+                  await commands.updateConvertible(
+                    convertibleId: convertible!.id,
+                    principal: principal,
+                    valuationCap: cap,
+                    discountPercent: discount,
+                    interestRate: interest,
+                    issueDate: issueDate,
+                    maturityDate: maturityDate,
+                    hasMfn: hasMfn,
+                    hasProRata: hasProRata,
+                    notes: notesController.text.trim().isEmpty
+                        ? null
+                        : notesController.text.trim(),
+                    maturityBehavior: maturityBehavior,
+                    allowsVoluntaryConversion: allowsVoluntaryConversion,
+                    liquidityEventBehavior: liquidityEventBehavior,
+                    liquidityPayoutMultiple: liquidityMultiple,
+                    dissolutionBehavior: dissolutionBehavior,
+                    preferredShareClassId: preferredShareClassId,
+                    qualifiedFinancingThreshold: qualifiedThreshold,
                   );
                 } else {
                   await commands.issueConvertible(
@@ -590,6 +695,13 @@ class ConvertiblesPage extends ConsumerWidget {
                     notes: notesController.text.trim().isEmpty
                         ? null
                         : notesController.text.trim(),
+                    maturityBehavior: maturityBehavior,
+                    allowsVoluntaryConversion: allowsVoluntaryConversion,
+                    liquidityEventBehavior: liquidityEventBehavior,
+                    liquidityPayoutMultiple: liquidityMultiple,
+                    dissolutionBehavior: dissolutionBehavior,
+                    preferredShareClassId: preferredShareClassId,
+                    qualifiedFinancingThreshold: qualifiedThreshold,
                   );
                 }
 
@@ -603,71 +715,46 @@ class ConvertiblesPage extends ConsumerWidget {
     );
   }
 
-  void _showConvertDialog(
+  Future<void> _showConvertDialog(
     BuildContext context,
     WidgetRef ref,
     Convertible convertible,
-  ) {
-    final sharesController = TextEditingController();
+  ) async {
+    // Get stakeholder name
+    final stakeholders = ref.read(stakeholdersStreamProvider).valueOrNull ?? [];
+    final stakeholder = stakeholders
+        .where((s) => s.id == convertible.stakeholderId)
+        .firstOrNull;
 
-    showDialog(
+    await ConvertConvertibleDialog.show(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Convert to Shares'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Converting ${Formatters.currency(convertible.principal)} SAFE/Note',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: sharesController,
-              decoration: const InputDecoration(labelText: 'Shares to Issue'),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 8),
-            const InfoBox(
-              message:
-                  'This will mark the convertible as converted and record the shares issued.',
-              type: InfoBoxType.info,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final shares = int.tryParse(sharesController.text);
-              if (shares == null || shares <= 0) return;
-
-              // TODO: Need share class selection UI for proper conversion
-              // await ref
-              //     .read(convertibleCommandsProvider.notifier)
-              //     .convertConvertible(
-              //       convertibleId: convertible.id,
-              //       roundId: roundId, // Need round selection
-              //       toShareClassId: shareClassId, // Need share class selection
-              //       sharesReceived: shares,
-              //       conversionPrice: price, // Need to calculate
-              //     );
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Conversion not yet fully implemented'),
-                ),
-              );
-
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Convert'),
-          ),
-        ],
-      ),
+      convertible: convertible,
+      stakeholderName: stakeholder?.name,
     );
+  }
+
+  Future<void> _confirmCancel(
+    BuildContext context,
+    WidgetRef ref,
+    Convertible convertible,
+  ) async {
+    final confirmed = await ConfirmDialog.show(
+      context: context,
+      title: 'Cancel Convertible',
+      message:
+          'Are you sure you want to cancel this ${_formatConvertibleType(convertible.type)}? This will record a cancellation event.',
+      confirmLabel: 'Cancel Convertible',
+      isDestructive: true,
+    );
+
+    if (confirmed && context.mounted) {
+      await ref
+          .read(convertibleCommandsProvider.notifier)
+          .cancelConvertible(
+            convertibleId: convertible.id,
+            reason: 'Cancelled by user',
+          );
+    }
   }
 
   Future<void> _confirmDelete(
@@ -675,23 +762,44 @@ class ConvertiblesPage extends ConsumerWidget {
     WidgetRef ref,
     Convertible convertible,
   ) async {
+    // Preview cascade impact
+    final cascadeImpact = await ref
+        .read(eventLedgerProvider.notifier)
+        .previewCascadeDelete(
+          entityId: convertible.id,
+          entityType: EntityType.convertible,
+        );
+
+    final impactLines = <String>[];
+    cascadeImpact.forEach((type, count) {
+      if (count > 0) {
+        impactLines.add('• $count ${type.name}(s)');
+      }
+    });
+
+    String message;
+    if (impactLines.isEmpty) {
+      message = convertible.status == 'converted'
+          ? 'Warning: This convertible has already been converted. This cannot be undone.'
+          : 'Are you sure you want to permanently delete this convertible? This cannot be undone.';
+    } else {
+      message = 'This will permanently delete:\n${impactLines.join('\n')}\n\n';
+      if (convertible.status == 'converted') {
+        message += 'Warning: This convertible has already been converted.\n';
+      }
+      message += 'This cannot be undone.';
+    }
+
     final confirmed = await ConfirmDialog.showDelete(
       context: context,
-      itemName: 'this convertible',
-      additionalMessage: convertible.status == 'converted'
-          ? 'Warning: This convertible has already been converted.'
-          : null,
+      itemName: 'convertible',
+      customMessage: message,
     );
 
     if (confirmed && context.mounted) {
-      // TODO: Implement proper deletion with MFN reversion in ConvertibleCommands
-      // For now, use cancelConvertible
       await ref
           .read(convertibleCommandsProvider.notifier)
-          .cancelConvertible(
-            convertibleId: convertible.id,
-            reason: 'Deleted by user',
-          );
+          .deleteConvertible(convertibleId: convertible.id);
     }
   }
 }
@@ -852,14 +960,30 @@ class _MfnUpgradeDialogState extends ConsumerState<_MfnUpgradeDialog> {
     setState(() => _isApplying = true);
 
     try {
-      // TODO: Wire up MFN upgrade using ConvertibleCommands.applyMfnUpgrade
-      // The method exists but requires mapping from MfnUpgradeOpportunity to the command params
+      final commands = ref.read(convertibleCommandsProvider.notifier);
+
+      for (final index in _selectedIndices) {
+        final upgrade = widget.upgrades[index];
+        await commands.applyMfnUpgrade(
+          targetConvertibleId: upgrade.target.id,
+          sourceConvertibleId: upgrade.source.id,
+          previousDiscountPercent: upgrade.target.discountPercent,
+          previousValuationCap: upgrade.target.valuationCap,
+          previousHasProRata: upgrade.target.hasProRata,
+          newDiscountPercent: upgrade.newDiscountPercent,
+          newValuationCap: upgrade.newValuationCap,
+          newHasProRata: upgrade.addsProRata,
+        );
+      }
+
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('MFN upgrade not yet implemented'),
-            backgroundColor: Colors.orange,
+          SnackBar(
+            content: Text(
+              'Applied ${_selectedIndices.length} MFN upgrade${_selectedIndices.length > 1 ? 's' : ''} successfully',
+            ),
+            backgroundColor: Colors.green,
           ),
         );
       }
@@ -875,6 +999,335 @@ class _MfnUpgradeDialogState extends ConsumerState<_MfnUpgradeDialog> {
     } finally {
       if (mounted) {
         setState(() => _isApplying = false);
+      }
+    }
+  }
+}
+
+// =============================================================================
+// Convertible Expanded Content Widget
+// =============================================================================
+
+/// Expanded content for a convertible card, showing details and MFN upgrades.
+class _ConvertibleExpandedContent extends ConsumerWidget {
+  final Convertible convertible;
+  final List<Stakeholder> stakeholders;
+  final bool deleteEnabled;
+
+  const _ConvertibleExpandedContent({
+    required this.convertible,
+    required this.stakeholders,
+    required this.deleteEnabled,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mfnUpgradesAsync = ref.watch(
+      mfnUpgradesForTargetProvider(convertible.id),
+    );
+    final convertiblesAsync = ref.watch(convertiblesStreamProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Basic details
+        _buildDetailRow('Type', _formatConvertibleType(convertible.type)),
+        _buildDetailRow(
+          'Principal',
+          Formatters.currency(convertible.principal),
+        ),
+        _buildDetailRow('Issue Date', Formatters.date(convertible.issueDate)),
+        if (convertible.valuationCap != null)
+          _buildDetailRow(
+            'Valuation Cap',
+            Formatters.currency(convertible.valuationCap!),
+          ),
+        if (convertible.discountPercent != null)
+          _buildDetailRow('Discount', '${convertible.discountPercent}%'),
+        if (convertible.interestRate != null)
+          _buildDetailRow('Interest Rate', '${convertible.interestRate}% p.a.'),
+        if (convertible.maturityDate != null)
+          _buildDetailRow(
+            'Maturity',
+            Formatters.date(convertible.maturityDate!),
+          ),
+        if (convertible.hasMfn) _buildDetailRow('MFN', 'Yes'),
+        if (convertible.hasProRata) _buildDetailRow('Pro-rata Rights', 'Yes'),
+        if (convertible.notes != null && convertible.notes!.isNotEmpty)
+          _buildDetailRow('Notes', convertible.notes!),
+
+        // Advanced Terms section (if any are set)
+        if (_hasAdvancedTerms(convertible)) ...[
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text(
+            'Advanced Terms',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          if (convertible.qualifiedFinancingThreshold != null)
+            _buildDetailRow(
+              'Qualified Financing',
+              '≥ ${Formatters.currency(convertible.qualifiedFinancingThreshold!)}',
+            ),
+          if (convertible.maturityBehavior != null)
+            _buildDetailRow(
+              'At Maturity',
+              MaturityBehavior.displayName(convertible.maturityBehavior!),
+            ),
+          if (convertible.allowsVoluntaryConversion)
+            _buildDetailRow('Voluntary Conversion', 'Allowed'),
+          if (convertible.liquidityEventBehavior != null)
+            _buildDetailRow(
+              'On Liquidity Event',
+              LiquidityEventBehavior.displayName(
+                convertible.liquidityEventBehavior!,
+              ),
+            ),
+          if (convertible.liquidityPayoutMultiple != null)
+            _buildDetailRow(
+              'Payout Multiple',
+              '${convertible.liquidityPayoutMultiple}x',
+            ),
+          if (convertible.dissolutionBehavior != null)
+            _buildDetailRow(
+              'On Dissolution',
+              DissolutionBehavior.displayName(convertible.dissolutionBehavior!),
+            ),
+          if (convertible.preferredShareClassId != null)
+            _buildPreferredShareClassRow(context, ref),
+        ],
+
+        // MFN Upgrades section
+        mfnUpgradesAsync.when(
+          data: (upgrades) {
+            if (upgrades.isEmpty) return const SizedBox.shrink();
+
+            final allConvertibles = convertiblesAsync.valueOrNull ?? [];
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                Text(
+                  'Applied MFN Upgrades',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ...upgrades.map(
+                  (upgrade) => _buildMfnUpgradeBox(
+                    context,
+                    ref,
+                    upgrade,
+                    allConvertibles,
+                  ),
+                ),
+              ],
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
+  String _formatConvertibleType(String type) {
+    switch (type) {
+      case 'safe':
+        return 'SAFE';
+      case 'note':
+        return 'Convertible Note';
+      default:
+        return type.toUpperCase();
+    }
+  }
+
+  bool _hasAdvancedTerms(Convertible conv) {
+    return conv.maturityBehavior != null ||
+        conv.allowsVoluntaryConversion ||
+        conv.liquidityEventBehavior != null ||
+        conv.dissolutionBehavior != null ||
+        conv.preferredShareClassId != null ||
+        conv.qualifiedFinancingThreshold != null;
+  }
+
+  Widget _buildPreferredShareClassRow(BuildContext context, WidgetRef ref) {
+    final shareClasses =
+        ref.watch(shareClassesStreamProvider).valueOrNull ?? [];
+    final shareClass = shareClasses
+        .where((sc) => sc.id == convertible.preferredShareClassId)
+        .firstOrNull;
+    return _buildDetailRow('Converts to', shareClass?.name ?? 'Unknown class');
+  }
+
+  Widget _buildMfnUpgradeBox(
+    BuildContext context,
+    WidgetRef ref,
+    MfnUpgrade upgrade,
+    List<Convertible> allConvertibles,
+  ) {
+    final sourceConvertible = allConvertibles
+        .where((c) => c.id == upgrade.sourceConvertibleId)
+        .firstOrNull;
+    final sourceStakeholder = sourceConvertible != null
+        ? stakeholders
+              .where((s) => s.id == sourceConvertible.stakeholderId)
+              .firstOrNull
+        : null;
+
+    // Build description of what changed
+    final changes = <String>[];
+    if (upgrade.newDiscountPercent != null) {
+      changes.add(
+        'Discount → ${(upgrade.newDiscountPercent! * 100).toStringAsFixed(0)}%',
+      );
+    }
+    if (upgrade.newValuationCap != null) {
+      changes.add(
+        'Cap → ${Formatters.compactCurrency(upgrade.newValuationCap!)}',
+      );
+    }
+    if (upgrade.newHasProRata && !upgrade.previousHasProRata) {
+      changes.add('Pro-rata added');
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () => _showMfnUpgradeDetail(
+          context,
+          ref,
+          upgrade,
+          sourceConvertible,
+          sourceStakeholder,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.upgrade, color: Colors.purple.shade400, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      changes.join(' • '),
+                      style: TextStyle(
+                        color: Colors.purple.shade700,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'From ${sourceStakeholder?.name ?? 'Unknown'} • ${Formatters.date(upgrade.upgradeDate)}',
+                      style: TextStyle(
+                        color: Colors.purple.shade400,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.purple.shade400,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showMfnUpgradeDetail(
+    BuildContext context,
+    WidgetRef ref,
+    MfnUpgrade upgrade,
+    Convertible? sourceConvertible,
+    Stakeholder? sourceStakeholder,
+  ) {
+    MfnUpgradeDetailDialog.show(
+      context: context,
+      upgrade: upgrade,
+      sourceConvertible: sourceConvertible,
+      sourceStakeholder: sourceStakeholder,
+      showDeleteButton: deleteEnabled,
+      onDelete: deleteEnabled
+          ? () => _confirmDeleteUpgrade(context, ref, upgrade)
+          : null,
+    );
+  }
+
+  void _confirmDeleteUpgrade(
+    BuildContext context,
+    WidgetRef ref,
+    MfnUpgrade upgrade,
+  ) async {
+    final confirmed = await ConfirmDialog.showDelete(
+      context: context,
+      itemName: 'MFN Upgrade',
+      customMessage:
+          'Are you sure you want to delete this MFN upgrade? This will remove the upgrade record but will not revert the convertible terms.',
+    );
+
+    if (confirmed && context.mounted) {
+      try {
+        await ref
+            .read(eventLedgerProvider.notifier)
+            .permanentDeleteEntity(upgrade.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('MFN upgrade deleted'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting upgrade: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }

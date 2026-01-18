@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' show Value;
 import '../../application/providers/providers.dart';
 import '../../infrastructure/database/database.dart';
 import '../../shared/formatters.dart';
@@ -78,34 +77,32 @@ class ValuationsPage extends ConsumerWidget {
       );
     }
 
-    // Add round-derived valuations
+    // Add round-derived valuations (show for all rounds with valuations)
     for (final r in rounds) {
-      if (r.status == 'closed') {
-        // Add pre-money valuation
-        if (r.preMoneyValuation != null && r.preMoneyValuation! > 0) {
-          entries.add(
-            _ValuationEntry(
-              type: _ValuationType.roundPreMoney,
-              date: r.date,
-              value: r.preMoneyValuation!,
-              roundName: r.name,
-              round: r,
-            ),
-          );
-        }
-        // Add post-money valuation (pre-money + amount raised)
-        final postMoney = (r.preMoneyValuation ?? 0) + r.amountRaised;
-        if (postMoney > 0) {
-          entries.add(
-            _ValuationEntry(
-              type: _ValuationType.roundPostMoney,
-              date: r.date,
-              value: postMoney,
-              roundName: r.name,
-              round: r,
-            ),
-          );
-        }
+      // Add pre-money valuation
+      if (r.preMoneyValuation != null && r.preMoneyValuation! > 0) {
+        entries.add(
+          _ValuationEntry(
+            type: _ValuationType.roundPreMoney,
+            date: r.date,
+            value: r.preMoneyValuation!,
+            roundName: r.name,
+            round: r,
+          ),
+        );
+      }
+      // Add post-money valuation (pre-money + amount raised)
+      final postMoney = (r.preMoneyValuation ?? 0) + r.amountRaised;
+      if (postMoney > 0) {
+        entries.add(
+          _ValuationEntry(
+            type: _ValuationType.roundPostMoney,
+            date: r.date,
+            value: postMoney,
+            roundName: r.name,
+            round: r,
+          ),
+        );
       }
     }
 
@@ -117,7 +114,7 @@ class ValuationsPage extends ConsumerWidget {
         icon: Icons.trending_up,
         title: 'No Valuations Yet',
         message:
-            'Add a manual valuation or close a funding round to track company value over time.',
+            'Add a manual valuation or create a funding round to track company value over time.',
         actionLabel: companyId != null ? 'Add Valuation' : null,
         onAction: companyId != null
             ? () => _showAddValuationDialog(context, ref, companyId)
@@ -125,8 +122,22 @@ class ValuationsPage extends ConsumerWidget {
       );
     }
 
+    // Check if effective valuation is from a draft round
+    final isEffectiveFromDraftRound = effectiveValuation?.round?.status == 'draft';
+
     return CustomScrollView(
       slivers: [
+        // Draft round notice
+        if (isEffectiveFromDraftRound)
+          SliverToBoxAdapter(
+            child: CollapsibleNotice.warning(
+              title: 'Draft Valuation',
+              message:
+                  'The current valuation is based on the ${effectiveValuation?.roundName ?? 'funding round'} '
+                  'which is still in draft status. Close the round to finalize this valuation.',
+              persistKey: 'valuations_draft_notice',
+            ),
+          ),
         // Current valuation header
         if (effectiveValuation != null)
           SliverToBoxAdapter(
@@ -256,11 +267,36 @@ class ValuationsPage extends ConsumerWidget {
           backgroundColor: color.withValues(alpha: 0.15),
           child: Icon(icon, color: color, size: 20),
         ),
-        title: Text(
-          Formatters.currency(entry.value),
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+        title: Row(
+          children: [
+            Text(
+              Formatters.currency(entry.value),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (entry.isDraft) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(
+                  'DRAFT',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         subtitle: Text(
           '${Formatters.date(entry.date)} • $subtitle',
@@ -290,11 +326,15 @@ class ValuationsPage extends ConsumerWidget {
                 ],
               )
             : Tooltip(
-                message: 'From ${entry.roundName} round',
+                message: entry.isDraft
+                    ? 'From ${entry.roundName} round (draft)'
+                    : 'From ${entry.roundName} round',
                 child: Icon(
-                  Icons.lock_outline,
+                  entry.isDraft ? Icons.edit_outlined : Icons.lock_outline,
                   size: 18,
-                  color: theme.colorScheme.outline,
+                  color: entry.isDraft
+                      ? Colors.orange
+                      : theme.colorScheme.outline,
                 ),
               ),
       ),
@@ -403,30 +443,21 @@ class ValuationsPage extends ConsumerWidget {
                   return;
                 }
 
-                final db = ref.read(databaseProvider);
+                final commands = ref.read(valuationCommandsProvider.notifier);
                 if (isEditing) {
-                  await db.upsertValuation(
-                    ValuationsCompanion(
-                      id: Value(valuation.id),
-                      companyId: Value(valuation.companyId),
-                      preMoneyValue: Value(value),
-                      method: Value(selectedMethod),
-                      date: Value(selectedDate),
-                      createdAt: Value(valuation.createdAt),
-                    ),
+                  // Delete old valuation and create new one with updated values
+                  // (Event sourcing pattern - update via delete + recreate)
+                  await commands.deleteValuation(valuationId: valuation.id);
+                  await commands.recordValuation(
+                    date: selectedDate,
+                    preMoneyValue: value,
+                    method: selectedMethod,
                   );
                 } else {
-                  await db.upsertValuation(
-                    ValuationsCompanion(
-                      id: Value(
-                        DateTime.now().millisecondsSinceEpoch.toString(),
-                      ),
-                      companyId: Value(companyId!),
-                      preMoneyValue: Value(value),
-                      method: Value(selectedMethod),
-                      date: Value(selectedDate),
-                      createdAt: Value(DateTime.now()),
-                    ),
+                  await commands.recordValuation(
+                    date: selectedDate,
+                    preMoneyValue: value,
+                    method: selectedMethod,
                   );
                 }
 
@@ -464,8 +495,8 @@ class ValuationsPage extends ConsumerWidget {
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () async {
-              final db = ref.read(databaseProvider);
-              await db.deleteValuation(valuation.id);
+              final commands = ref.read(valuationCommandsProvider.notifier);
+              await commands.deleteValuation(valuationId: valuation.id);
               if (context.mounted) {
                 Navigator.pop(context);
               }
@@ -500,4 +531,7 @@ class _ValuationEntry {
     this.valuation,
     this.round,
   });
+
+  /// Whether this valuation is from a draft round.
+  bool get isDraft => round?.status == 'draft';
 }

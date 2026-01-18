@@ -191,9 +191,11 @@ class _StakeholderHoldingsProviderElement
       (origin as StakeholderHoldingsProvider).stakeholderId;
 }
 
-String _$ownershipSummaryHash() => r'c3d6da6fe135ba250c12be366d8ee31fbd944dcd';
+String _$ownershipSummaryHash() => r'191e02c381e86dc8d33309d8b35adc3ee3458bf4';
 
 /// Calculates ownership summary for the cap table.
+/// Respects the showDraft toggle - if off, draft holdings are excluded.
+/// Includes ESOP pool reserved shares in fully diluted calculation.
 ///
 /// Copied from [ownershipSummary].
 @ProviderFor(ownershipSummary)

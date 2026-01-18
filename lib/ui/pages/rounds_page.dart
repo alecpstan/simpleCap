@@ -44,6 +44,8 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                 );
               }
               final hasDraft = rounds.any((r) => r.status == 'draft');
+              final deleteEnabled =
+                  ref.watch(deleteEnabledProvider).valueOrNull ?? false;
 
               // Calculate which round can be reopened
               final closedRounds = rounds
@@ -73,6 +75,7 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                       context,
                       round,
                       canReopen: round.id == reopenableId,
+                      deleteEnabled: deleteEnabled,
                       key: ValueKey(round.id),
                     ),
                   ),
@@ -179,6 +182,7 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     BuildContext context,
     Round round, {
     required bool canReopen,
+    required bool deleteEnabled,
     Key? key,
   }) {
     final theme = Theme.of(context);
@@ -254,9 +258,17 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
             isDraft: round.status == 'draft',
           ),
           // Warrants issued in this round
-          _buildRoundWarrantsSection(context, round.id),
-          // Convertibles converted in this round
-          _buildRoundConvertiblesSection(context, round.id),
+          _buildRoundWarrantsSection(
+            context,
+            round.id,
+            isDraft: round.status == 'draft',
+          ),
+          // Convertibles converted in this round (draft conversion if round is draft)
+          _buildRoundConvertiblesSection(
+            context,
+            round.id,
+            isDraft: round.status == 'draft',
+          ),
           if (round.notes != null && round.notes!.isNotEmpty) ...[
             const Divider(height: 24),
             Text(
@@ -288,12 +300,15 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
           icon: const Icon(Icons.edit, size: 18),
           label: const Text('Edit'),
         ),
-        TextButton.icon(
-          onPressed: () => _confirmDelete(context, round),
-          icon: const Icon(Icons.delete, size: 18),
-          label: const Text('Delete'),
-          style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
-        ),
+        if (deleteEnabled)
+          TextButton.icon(
+            onPressed: () => _confirmDelete(context, round),
+            icon: const Icon(Icons.delete, size: 18),
+            label: const Text('Delete'),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+            ),
+          ),
       ],
     );
   }
@@ -416,6 +431,12 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                     c.where((x) => x.id == h.shareClassId).firstOrNull?.name,
               );
 
+              // Get the vesting schedule if applicable
+              final hasVesting = h.vestingScheduleId != null;
+              final vestingSchedule = hasVesting
+                  ? ref.watch(vestingScheduleProvider(h.vestingScheduleId))
+                  : null;
+
               return HoldingItem(
                 shareCount: h.shareCount,
                 vestedCount: h.vestedCount ?? h.shareCount,
@@ -424,12 +445,18 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                 acquiredDate: h.acquiredDate,
                 roundName:
                     stakeholderName, // Show investor name in round context
-                hasVesting: h.vestingScheduleId != null,
+                hasVesting: hasVesting,
                 isDraft: isDraft,
+                vestingScheduleName: vestingSchedule?.name,
+                vestingScheduleTerms: vestingSchedule != null
+                    ? _buildVestingTerms(vestingSchedule)
+                    : null,
                 onTap: () => HoldingDetailDialog.show(
                   context: context,
                   holding: h,
                   shareClassName: shareClassName,
+                  vestingSchedule: vestingSchedule,
+                  isDraft: isDraft,
                   onDelete: () async {
                     final confirmed = await ConfirmDialog.showDelete(
                       context: context,
@@ -458,7 +485,11 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     );
   }
 
-  Widget _buildRoundWarrantsSection(BuildContext context, String roundId) {
+  Widget _buildRoundWarrantsSection(
+    BuildContext context,
+    String roundId, {
+    bool isDraft = false,
+  }) {
     final warrantsAsync = ref.watch(warrantsStreamProvider);
     final stakeholdersAsync = ref.watch(stakeholdersStreamProvider);
 
@@ -486,35 +517,51 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                 data: (s) =>
                     s.where((x) => x.id == w.stakeholderId).firstOrNull?.name,
               );
+              final displayColor = isDraft ? Colors.grey : Colors.indigo;
+              final statusLabel = isDraft
+                  ? 'Draft'
+                  : w.status[0].toUpperCase() + w.status.substring(1);
+              final statusColor = isDraft
+                  ? Colors.grey
+                  : (w.status == 'active' ? Colors.green : Colors.orange);
 
-              return ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.indigo.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: displayColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: isDraft
+                      ? Border.all(
+                          color: Colors.grey.withValues(alpha: 0.5),
+                          width: 1,
+                        )
+                      : null,
+                ),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: displayColor.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.receipt, color: displayColor, size: 20),
                   ),
-                  child: const Icon(
-                    Icons.receipt,
-                    color: Colors.indigo,
-                    size: 20,
+                  title: Text(
+                    '${Formatters.number(w.quantity)} warrants',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: isDraft
+                          ? Theme.of(context).colorScheme.outline
+                          : null,
+                    ),
                   ),
-                ),
-                title: Text(
-                  '${Formatters.number(w.quantity)} warrants',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-                ),
-                subtitle: Text(
-                  '${stakeholderName ?? "Unknown"} • Strike: ${Formatters.currency(w.strikePrice)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                trailing: StatusBadge(
-                  label: w.status[0].toUpperCase() + w.status.substring(1),
-                  color: w.status == 'active' ? Colors.green : Colors.orange,
+                  subtitle: Text(
+                    '${stakeholderName ?? "Unknown"} • Strike: ${Formatters.currency(w.strikePrice)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  trailing: StatusBadge(label: statusLabel, color: statusColor),
                 ),
               );
             }),
@@ -526,7 +573,11 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
     );
   }
 
-  Widget _buildRoundConvertiblesSection(BuildContext context, String roundId) {
+  Widget _buildRoundConvertiblesSection(
+    BuildContext context,
+    String roundId, {
+    bool isDraft = false,
+  }) {
     final convertiblesAsync = ref.watch(convertiblesStreamProvider);
     final stakeholdersAsync = ref.watch(stakeholdersStreamProvider);
 
@@ -540,12 +591,17 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
             .toList();
         if (convertibles.isEmpty) return const SizedBox.shrink();
 
+        // Title changes based on draft status
+        final sectionTitle = isDraft
+            ? 'Draft Conversions'
+            : 'Converted Instruments';
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Divider(height: 24),
             Text(
-              'Converted Instruments',
+              sectionTitle,
               style: Theme.of(
                 context,
               ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
@@ -563,11 +619,14 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
                 valuationCap: c.valuationCap,
                 discountPercent: c.discountPercent,
                 interestRate: c.interestRate,
-                status: c.status,
+                // Show as draft_conversion if round is draft
+                status: isDraft ? 'draft_conversion' : c.status,
+                isDraft: isDraft,
                 onTap: () => ConvertibleDetailDialog.show(
                   context: context,
                   convertible: c,
                   stakeholderName: stakeholderName,
+                  isDraft: isDraft,
                 ),
               );
             }),
@@ -645,12 +704,35 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
   }
 
   Future<void> _confirmDelete(BuildContext context, Round round) async {
+    // Preview cascade impact
+    final cascadeImpact = await ref
+        .read(eventLedgerProvider.notifier)
+        .previewCascadeDelete(entityId: round.id, entityType: EntityType.round);
+
+    final impactLines = <String>[];
+    cascadeImpact.forEach((type, count) {
+      if (count > 0) {
+        impactLines.add('• $count ${type.name}(s)');
+      }
+    });
+
+    String message;
+    if (impactLines.isEmpty) {
+      message = round.status == 'closed'
+          ? 'Warning: This round has been closed. Are you sure you want to permanently delete it?'
+          : 'Are you sure you want to permanently delete ${round.name}?';
+    } else {
+      message = 'This will permanently delete:\n${impactLines.join('\n')}\n\n';
+      if (round.status == 'closed') {
+        message += 'Warning: This round has been closed.\n';
+      }
+      message += 'This cannot be undone.';
+    }
+
     final confirmed = await ConfirmDialog.showDelete(
       context: context,
       itemName: round.name,
-      additionalMessage: round.status == 'closed'
-          ? 'Warning: This round has been closed and may have associated shares.'
-          : null,
+      customMessage: message,
     );
 
     if (confirmed && mounted) {
@@ -671,5 +753,34 @@ class _RoundsPageState extends ConsumerState<RoundsPage> {
         }
       }
     }
+  }
+
+  /// Builds a human-readable description of vesting terms.
+  String _buildVestingTerms(VestingSchedule schedule) {
+    final total = schedule.totalMonths ?? 0;
+    final years = total ~/ 12;
+    final remainingMonths = total % 12;
+    final cliffMonths = schedule.cliffMonths;
+
+    final parts = <String>[];
+
+    if (years > 0) {
+      parts.add('$years yr${years > 1 ? 's' : ''}');
+    }
+    if (remainingMonths > 0) {
+      parts.add('$remainingMonths mo');
+    }
+
+    if (cliffMonths > 0) {
+      final cliffYears = cliffMonths ~/ 12;
+      final cliffRemaining = cliffMonths % 12;
+      if (cliffYears > 0) {
+        parts.add('$cliffYears yr cliff');
+      } else {
+        parts.add('$cliffRemaining mo cliff');
+      }
+    }
+
+    return parts.isEmpty ? schedule.name : parts.join(' / ');
   }
 }

@@ -27,10 +27,6 @@ mixin _$EsopPool {
   /// Name of the pool (e.g., "2024 ESOP", "Employee Option Pool").
   String get name => throw _privateConstructorUsedError;
 
-  /// Share class that pool options convert into upon exercise.
-  /// Typically an ordinary share class.
-  String get shareClassId => throw _privateConstructorUsedError;
-
   /// Current status of the pool.
   EsopPoolStatus get status => throw _privateConstructorUsedError;
 
@@ -85,7 +81,6 @@ abstract class $EsopPoolCopyWith<$Res> {
     String id,
     String companyId,
     String name,
-    String shareClassId,
     EsopPoolStatus status,
     int poolSize,
     double? targetPercentage,
@@ -120,7 +115,6 @@ class _$EsopPoolCopyWithImpl<$Res, $Val extends EsopPool>
     Object? id = null,
     Object? companyId = null,
     Object? name = null,
-    Object? shareClassId = null,
     Object? status = null,
     Object? poolSize = null,
     Object? targetPercentage = freezed,
@@ -148,10 +142,6 @@ class _$EsopPoolCopyWithImpl<$Res, $Val extends EsopPool>
             name: null == name
                 ? _value.name
                 : name // ignore: cast_nullable_to_non_nullable
-                      as String,
-            shareClassId: null == shareClassId
-                ? _value.shareClassId
-                : shareClassId // ignore: cast_nullable_to_non_nullable
                       as String,
             status: null == status
                 ? _value.status
@@ -224,7 +214,6 @@ abstract class _$$EsopPoolImplCopyWith<$Res>
     String id,
     String companyId,
     String name,
-    String shareClassId,
     EsopPoolStatus status,
     int poolSize,
     double? targetPercentage,
@@ -258,7 +247,6 @@ class __$$EsopPoolImplCopyWithImpl<$Res>
     Object? id = null,
     Object? companyId = null,
     Object? name = null,
-    Object? shareClassId = null,
     Object? status = null,
     Object? poolSize = null,
     Object? targetPercentage = freezed,
@@ -286,10 +274,6 @@ class __$$EsopPoolImplCopyWithImpl<$Res>
         name: null == name
             ? _value.name
             : name // ignore: cast_nullable_to_non_nullable
-                  as String,
-        shareClassId: null == shareClassId
-            ? _value.shareClassId
-            : shareClassId // ignore: cast_nullable_to_non_nullable
                   as String,
         status: null == status
             ? _value.status
@@ -355,7 +339,6 @@ class _$EsopPoolImpl extends _EsopPool {
     required this.id,
     required this.companyId,
     required this.name,
-    required this.shareClassId,
     this.status = EsopPoolStatus.draft,
     required this.poolSize,
     this.targetPercentage,
@@ -382,11 +365,6 @@ class _$EsopPoolImpl extends _EsopPool {
   /// Name of the pool (e.g., "2024 ESOP", "Employee Option Pool").
   @override
   final String name;
-
-  /// Share class that pool options convert into upon exercise.
-  /// Typically an ordinary share class.
-  @override
-  final String shareClassId;
 
   /// Current status of the pool.
   @override
@@ -441,7 +419,7 @@ class _$EsopPoolImpl extends _EsopPool {
 
   @override
   String toString() {
-    return 'EsopPool(id: $id, companyId: $companyId, name: $name, shareClassId: $shareClassId, status: $status, poolSize: $poolSize, targetPercentage: $targetPercentage, establishedDate: $establishedDate, resolutionReference: $resolutionReference, roundId: $roundId, defaultVestingScheduleId: $defaultVestingScheduleId, strikePriceMethod: $strikePriceMethod, defaultStrikePrice: $defaultStrikePrice, defaultExpiryYears: $defaultExpiryYears, notes: $notes, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'EsopPool(id: $id, companyId: $companyId, name: $name, status: $status, poolSize: $poolSize, targetPercentage: $targetPercentage, establishedDate: $establishedDate, resolutionReference: $resolutionReference, roundId: $roundId, defaultVestingScheduleId: $defaultVestingScheduleId, strikePriceMethod: $strikePriceMethod, defaultStrikePrice: $defaultStrikePrice, defaultExpiryYears: $defaultExpiryYears, notes: $notes, createdAt: $createdAt, updatedAt: $updatedAt)';
   }
 
   @override
@@ -453,8 +431,6 @@ class _$EsopPoolImpl extends _EsopPool {
             (identical(other.companyId, companyId) ||
                 other.companyId == companyId) &&
             (identical(other.name, name) || other.name == name) &&
-            (identical(other.shareClassId, shareClassId) ||
-                other.shareClassId == shareClassId) &&
             (identical(other.status, status) || other.status == status) &&
             (identical(other.poolSize, poolSize) ||
                 other.poolSize == poolSize) &&
@@ -490,7 +466,6 @@ class _$EsopPoolImpl extends _EsopPool {
     id,
     companyId,
     name,
-    shareClassId,
     status,
     poolSize,
     targetPercentage,
@@ -525,7 +500,6 @@ abstract class _EsopPool extends EsopPool {
     required final String id,
     required final String companyId,
     required final String name,
-    required final String shareClassId,
     final EsopPoolStatus status,
     required final int poolSize,
     final double? targetPercentage,
@@ -553,11 +527,6 @@ abstract class _EsopPool extends EsopPool {
   /// Name of the pool (e.g., "2024 ESOP", "Employee Option Pool").
   @override
   String get name;
-
-  /// Share class that pool options convert into upon exercise.
-  /// Typically an ordinary share class.
-  @override
-  String get shareClassId;
 
   /// Current status of the pool.
   @override
@@ -622,7 +591,6 @@ EsopPoolCreationData _$EsopPoolCreationDataFromJson(Map<String, dynamic> json) {
 /// @nodoc
 mixin _$EsopPoolCreationData {
   String get poolId => throw _privateConstructorUsedError;
-  String get shareClassId => throw _privateConstructorUsedError;
   int get poolSize => throw _privateConstructorUsedError;
   double? get targetPercentage => throw _privateConstructorUsedError;
   String? get resolutionReference => throw _privateConstructorUsedError;
@@ -646,7 +614,6 @@ abstract class $EsopPoolCreationDataCopyWith<$Res> {
   @useResult
   $Res call({
     String poolId,
-    String shareClassId,
     int poolSize,
     double? targetPercentage,
     String? resolutionReference,
@@ -672,7 +639,6 @@ class _$EsopPoolCreationDataCopyWithImpl<
   @override
   $Res call({
     Object? poolId = null,
-    Object? shareClassId = null,
     Object? poolSize = null,
     Object? targetPercentage = freezed,
     Object? resolutionReference = freezed,
@@ -682,10 +648,6 @@ class _$EsopPoolCreationDataCopyWithImpl<
             poolId: null == poolId
                 ? _value.poolId
                 : poolId // ignore: cast_nullable_to_non_nullable
-                      as String,
-            shareClassId: null == shareClassId
-                ? _value.shareClassId
-                : shareClassId // ignore: cast_nullable_to_non_nullable
                       as String,
             poolSize: null == poolSize
                 ? _value.poolSize
@@ -716,7 +678,6 @@ abstract class _$$EsopPoolCreationDataImplCopyWith<$Res>
   @useResult
   $Res call({
     String poolId,
-    String shareClassId,
     int poolSize,
     double? targetPercentage,
     String? resolutionReference,
@@ -738,7 +699,6 @@ class __$$EsopPoolCreationDataImplCopyWithImpl<$Res>
   @override
   $Res call({
     Object? poolId = null,
-    Object? shareClassId = null,
     Object? poolSize = null,
     Object? targetPercentage = freezed,
     Object? resolutionReference = freezed,
@@ -748,10 +708,6 @@ class __$$EsopPoolCreationDataImplCopyWithImpl<$Res>
         poolId: null == poolId
             ? _value.poolId
             : poolId // ignore: cast_nullable_to_non_nullable
-                  as String,
-        shareClassId: null == shareClassId
-            ? _value.shareClassId
-            : shareClassId // ignore: cast_nullable_to_non_nullable
                   as String,
         poolSize: null == poolSize
             ? _value.poolSize
@@ -775,7 +731,6 @@ class __$$EsopPoolCreationDataImplCopyWithImpl<$Res>
 class _$EsopPoolCreationDataImpl implements _EsopPoolCreationData {
   const _$EsopPoolCreationDataImpl({
     required this.poolId,
-    required this.shareClassId,
     required this.poolSize,
     this.targetPercentage,
     this.resolutionReference,
@@ -787,8 +742,6 @@ class _$EsopPoolCreationDataImpl implements _EsopPoolCreationData {
   @override
   final String poolId;
   @override
-  final String shareClassId;
-  @override
   final int poolSize;
   @override
   final double? targetPercentage;
@@ -797,7 +750,7 @@ class _$EsopPoolCreationDataImpl implements _EsopPoolCreationData {
 
   @override
   String toString() {
-    return 'EsopPoolCreationData(poolId: $poolId, shareClassId: $shareClassId, poolSize: $poolSize, targetPercentage: $targetPercentage, resolutionReference: $resolutionReference)';
+    return 'EsopPoolCreationData(poolId: $poolId, poolSize: $poolSize, targetPercentage: $targetPercentage, resolutionReference: $resolutionReference)';
   }
 
   @override
@@ -806,8 +759,6 @@ class _$EsopPoolCreationDataImpl implements _EsopPoolCreationData {
         (other.runtimeType == runtimeType &&
             other is _$EsopPoolCreationDataImpl &&
             (identical(other.poolId, poolId) || other.poolId == poolId) &&
-            (identical(other.shareClassId, shareClassId) ||
-                other.shareClassId == shareClassId) &&
             (identical(other.poolSize, poolSize) ||
                 other.poolSize == poolSize) &&
             (identical(other.targetPercentage, targetPercentage) ||
@@ -821,7 +772,6 @@ class _$EsopPoolCreationDataImpl implements _EsopPoolCreationData {
   int get hashCode => Object.hash(
     runtimeType,
     poolId,
-    shareClassId,
     poolSize,
     targetPercentage,
     resolutionReference,
@@ -848,7 +798,6 @@ class _$EsopPoolCreationDataImpl implements _EsopPoolCreationData {
 abstract class _EsopPoolCreationData implements EsopPoolCreationData {
   const factory _EsopPoolCreationData({
     required final String poolId,
-    required final String shareClassId,
     required final int poolSize,
     final double? targetPercentage,
     final String? resolutionReference,
@@ -859,8 +808,6 @@ abstract class _EsopPoolCreationData implements EsopPoolCreationData {
 
   @override
   String get poolId;
-  @override
-  String get shareClassId;
   @override
   int get poolSize;
   @override

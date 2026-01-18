@@ -89,6 +89,8 @@ class CapTableState with _$CapTableState {
       sharesIssued: (e) => _issueShares(e, newSequence),
       sharesTransferred: (e) => _transferShares(e, newSequence),
       sharesRepurchased: (e) => _repurchaseShares(e, newSequence),
+      holdingDeleted: (e) => _deleteHolding(e, newSequence),
+      holdingUpdated: (e) => _updateHolding(e, newSequence),
       holdingVestingUpdated: (e) => _updateHoldingVesting(e, newSequence),
 
       // Convertibles
@@ -96,11 +98,16 @@ class CapTableState with _$CapTableState {
       mfnUpgradeApplied: (e) => _applyMfnUpgrade(e, newSequence),
       convertibleConverted: (e) => _convertConvertible(e, newSequence),
       convertibleCancelled: (e) => _cancelConvertible(e, newSequence),
+      convertibleUpdated: (e) => _updateConvertible(e, newSequence),
 
       // ESOP Pools
       esopPoolCreated: (e) => _createEsopPool(e, newSequence),
       esopPoolExpanded: (e) => _expandEsopPool(e, newSequence),
       esopPoolActivated: (e) => _activateEsopPool(e, newSequence),
+      esopPoolUpdated: (e) => _updateEsopPool(e, newSequence),
+      esopPoolDeleted: (e) => _deleteEsopPool(e, newSequence),
+      esopPoolExpansionReverted: (e) =>
+          _revertEsopPoolExpansion(e, newSequence),
 
       // Option Grants
       optionGranted: (e) => _grantOptions(e, newSequence),
@@ -108,6 +115,7 @@ class CapTableState with _$CapTableState {
       optionsExercised: (e) => _exerciseOptions(e, newSequence),
       optionsCancelled: (e) => _cancelOptions(e, newSequence),
       optionGrantStatusChanged: (e) => _changeOptionStatus(e, newSequence),
+      optionGrantUpdated: (e) => _updateOptionGrant(e, newSequence),
 
       // Warrants
       warrantIssued: (e) => _issueWarrant(e, newSequence),
@@ -185,9 +193,58 @@ class CapTableState with _$CapTableState {
   }
 
   CapTableState _removeStakeholder(StakeholderRemoved e, int seq) {
+    // Remove the stakeholder
     final newStakeholders = Map<String, StakeholderState>.from(stakeholders)
       ..remove(e.stakeholderId);
-    return copyWith(stakeholders: newStakeholders, lastSequenceNumber: seq);
+
+    // Delete all holdings owned by this stakeholder
+    final newHoldings = Map<String, HoldingState>.from(holdings)
+      ..removeWhere((_, h) => h.stakeholderId == e.stakeholderId);
+
+    // Delete all option grants for this stakeholder
+    final newOptionGrants = Map<String, OptionGrantState>.from(optionGrants)
+      ..removeWhere((_, g) => g.stakeholderId == e.stakeholderId);
+
+    // Delete all warrants for this stakeholder
+    final newWarrants = Map<String, WarrantState>.from(warrants)
+      ..removeWhere((_, w) => w.stakeholderId == e.stakeholderId);
+
+    // Delete all convertibles for this stakeholder
+    final newConvertibles = Map<String, ConvertibleState>.from(convertibles)
+      ..removeWhere((_, c) => c.stakeholderId == e.stakeholderId);
+
+    // Delete all transfers involving this stakeholder (as buyer or seller)
+    final newTransfers = Map<String, TransferState>.from(transfers)
+      ..removeWhere(
+        (_, t) =>
+            t.sellerStakeholderId == e.stakeholderId ||
+            t.buyerStakeholderId == e.stakeholderId,
+      );
+
+    // Clear lead investor references in rounds
+    final newRounds = <String, RoundState>{};
+    for (final entry in rounds.entries) {
+      final round = entry.value;
+      if (round.leadInvestorId == e.stakeholderId) {
+        newRounds[round.id] = round.copyWith(
+          leadInvestorId: null,
+          updatedAt: e.timestamp,
+        );
+      } else {
+        newRounds[round.id] = round;
+      }
+    }
+
+    return copyWith(
+      stakeholders: newStakeholders,
+      holdings: newHoldings,
+      optionGrants: newOptionGrants,
+      warrants: newWarrants,
+      convertibles: newConvertibles,
+      transfers: newTransfers,
+      rounds: newRounds,
+      lastSequenceNumber: seq,
+    );
   }
 
   // ============================================================
@@ -311,8 +368,134 @@ class CapTableState with _$CapTableState {
   }
 
   CapTableState _deleteRound(RoundDeleted e, int seq) {
+    // Remove the round itself
     final newRounds = Map<String, RoundState>.from(rounds)..remove(e.roundId);
-    return copyWith(rounds: newRounds, lastSequenceNumber: seq);
+
+    // Find all holdings associated with this round and collect source IDs
+    final holdingsToDelete = <String>{};
+    final optionGrantsToRestore =
+        <String, int>{}; // grantId -> exercised count to restore
+    final warrantsToRestore =
+        <String, int>{}; // warrantId -> exercised count to restore
+
+    for (final holding in holdings.values) {
+      if (holding.roundId == e.roundId) {
+        holdingsToDelete.add(holding.id);
+        // Track exercise reversals
+        if (holding.sourceOptionGrantId != null) {
+          optionGrantsToRestore[holding.sourceOptionGrantId!] =
+              (optionGrantsToRestore[holding.sourceOptionGrantId!] ?? 0) +
+              holding.shareCount;
+        }
+        if (holding.sourceWarrantId != null) {
+          warrantsToRestore[holding.sourceWarrantId!] =
+              (warrantsToRestore[holding.sourceWarrantId!] ?? 0) +
+              holding.shareCount;
+        }
+      }
+    }
+
+    // Remove holdings
+    final newHoldings = Map<String, HoldingState>.from(holdings)
+      ..removeWhere((id, _) => holdingsToDelete.contains(id));
+
+    // Delete option grants associated with this round
+    // Also restore exercised counts for options whose exercises were reversed
+    final newOptionGrants = <String, OptionGrantState>{};
+    for (final entry in optionGrants.entries) {
+      final grant = entry.value;
+      if (grant.roundId == e.roundId) {
+        // Delete grants created in this round
+        continue;
+      }
+      // Restore exercised count if exercises were reversed
+      if (optionGrantsToRestore.containsKey(grant.id)) {
+        newOptionGrants[grant.id] = grant.copyWith(
+          exercisedCount:
+              grant.exercisedCount - optionGrantsToRestore[grant.id]!,
+          updatedAt: e.timestamp,
+        );
+      } else {
+        newOptionGrants[grant.id] = grant;
+      }
+    }
+
+    // Delete warrants associated with this round
+    // Also restore exercised counts for warrants whose exercises were reversed
+    final newWarrants = <String, WarrantState>{};
+    for (final entry in warrants.entries) {
+      final warrant = entry.value;
+      if (warrant.roundId == e.roundId) {
+        // Delete warrants created in this round
+        continue;
+      }
+      // Restore exercised count if exercises were reversed
+      if (warrantsToRestore.containsKey(warrant.id)) {
+        newWarrants[warrant.id] = warrant.copyWith(
+          exercisedCount:
+              warrant.exercisedCount - warrantsToRestore[warrant.id]!,
+          updatedAt: e.timestamp,
+        );
+      } else {
+        newWarrants[warrant.id] = warrant;
+      }
+    }
+
+    // Delete or revert convertibles associated with this round
+    final newConvertibles = <String, ConvertibleState>{};
+    for (final entry in convertibles.entries) {
+      final convertible = entry.value;
+      if (convertible.roundId == e.roundId) {
+        // Delete convertibles issued in this round
+        continue;
+      }
+      if (convertible.conversionRoundId == e.roundId) {
+        // Revert conversion - restore to pending status
+        newConvertibles[convertible.id] = convertible.copyWith(
+          status: 'pending',
+          conversionRoundId: null,
+          convertedToShareClassId: null,
+          sharesReceived: null,
+          updatedAt: e.timestamp,
+        );
+      } else {
+        newConvertibles[convertible.id] = convertible;
+      }
+    }
+
+    // Clear roundId reference from ESOP pools (don't delete them)
+    final newEsopPools = <String, EsopPoolState>{};
+    for (final entry in esopPools.entries) {
+      final pool = entry.value;
+      if (pool.roundId == e.roundId) {
+        newEsopPools[pool.id] = pool.copyWith(
+          roundId: null,
+          updatedAt: e.timestamp,
+        );
+      } else {
+        newEsopPools[pool.id] = pool;
+      }
+    }
+
+    // Delete valuations associated with this round (check methodParamsJson)
+    final newValuations = Map<String, ValuationState>.from(valuations)
+      ..removeWhere((_, v) {
+        if (v.method != 'round' || v.methodParamsJson == null) return false;
+        // Check if methodParamsJson contains this roundId
+        return v.methodParamsJson!.contains('"roundId": "${e.roundId}"') ||
+            v.methodParamsJson!.contains('"roundId":"${e.roundId}"');
+      });
+
+    return copyWith(
+      rounds: newRounds,
+      holdings: newHoldings,
+      optionGrants: newOptionGrants,
+      warrants: newWarrants,
+      convertibles: newConvertibles,
+      esopPools: newEsopPools,
+      valuations: newValuations,
+      lastSequenceNumber: seq,
+    );
   }
 
   // ============================================================
@@ -386,6 +569,30 @@ class CapTableState with _$CapTableState {
     return copyWith(lastSequenceNumber: seq);
   }
 
+  CapTableState _deleteHolding(HoldingDeleted e, int seq) {
+    final newHoldings = Map<String, HoldingState>.from(holdings)
+      ..remove(e.holdingId);
+    return copyWith(holdings: newHoldings, lastSequenceNumber: seq);
+  }
+
+  CapTableState _updateHolding(HoldingUpdated e, int seq) {
+    final existing = holdings[e.holdingId];
+    if (existing == null) return copyWith(lastSequenceNumber: seq);
+
+    final updated = existing.copyWith(
+      shareCount: e.shareCount ?? existing.shareCount,
+      costBasis: e.costBasis ?? existing.costBasis,
+      acquiredDate: e.acquiredDate ?? existing.acquiredDate,
+      shareClassId: e.shareClassId ?? existing.shareClassId,
+      vestingScheduleId: e.vestingScheduleId ?? existing.vestingScheduleId,
+      updatedAt: e.timestamp,
+    );
+    return copyWith(
+      holdings: {...holdings, e.holdingId: updated},
+      lastSequenceNumber: seq,
+    );
+  }
+
   CapTableState _updateHoldingVesting(HoldingVestingUpdated e, int seq) {
     final existing = holdings[e.holdingId];
     if (existing == null) return copyWith(lastSequenceNumber: seq);
@@ -420,6 +627,13 @@ class CapTableState with _$CapTableState {
       hasProRata: e.hasProRata,
       roundId: e.roundId,
       notes: e.notes,
+      maturityBehavior: e.maturityBehavior,
+      allowsVoluntaryConversion: e.allowsVoluntaryConversion,
+      liquidityEventBehavior: e.liquidityEventBehavior,
+      liquidityPayoutMultiple: e.liquidityPayoutMultiple,
+      dissolutionBehavior: e.dissolutionBehavior,
+      preferredShareClassId: e.preferredShareClassId,
+      qualifiedFinancingThreshold: e.qualifiedFinancingThreshold,
       createdAt: e.timestamp,
       updatedAt: e.timestamp,
     );
@@ -476,16 +690,54 @@ class CapTableState with _$CapTableState {
     );
   }
 
+  CapTableState _updateConvertible(ConvertibleUpdated e, int seq) {
+    final existing = convertibles[e.convertibleId];
+    if (existing == null) return copyWith(lastSequenceNumber: seq);
+
+    final updated = existing.copyWith(
+      principal: e.principal ?? existing.principal,
+      valuationCap: e.valuationCap ?? existing.valuationCap,
+      discountPercent: e.discountPercent ?? existing.discountPercent,
+      interestRate: e.interestRate ?? existing.interestRate,
+      issueDate: e.issueDate ?? existing.issueDate,
+      maturityDate: e.maturityDate ?? existing.maturityDate,
+      hasMfn: e.hasMfn ?? existing.hasMfn,
+      hasProRata: e.hasProRata ?? existing.hasProRata,
+      roundId: e.roundId ?? existing.roundId,
+      notes: e.notes ?? existing.notes,
+      maturityBehavior: e.maturityBehavior ?? existing.maturityBehavior,
+      allowsVoluntaryConversion:
+          e.allowsVoluntaryConversion ?? existing.allowsVoluntaryConversion,
+      liquidityEventBehavior:
+          e.liquidityEventBehavior ?? existing.liquidityEventBehavior,
+      liquidityPayoutMultiple:
+          e.liquidityPayoutMultiple ?? existing.liquidityPayoutMultiple,
+      dissolutionBehavior:
+          e.dissolutionBehavior ?? existing.dissolutionBehavior,
+      preferredShareClassId:
+          e.preferredShareClassId ?? existing.preferredShareClassId,
+      qualifiedFinancingThreshold:
+          e.qualifiedFinancingThreshold ?? existing.qualifiedFinancingThreshold,
+      updatedAt: e.timestamp,
+    );
+    return copyWith(
+      convertibles: {...convertibles, e.convertibleId: updated},
+      lastSequenceNumber: seq,
+    );
+  }
+
   // ============================================================
   // ESOP Pool Reducers
   // ============================================================
 
   CapTableState _createEsopPool(EsopPoolCreated e, int seq) {
+    // Pools created via round builder (with roundId) start as draft.
+    // Pools created directly (no roundId) start as active.
+    final status = e.roundId != null ? 'draft' : 'active';
     final pool = EsopPoolState(
       id: e.poolId,
       name: e.name,
-      shareClassId: e.shareClassId,
-      status: 'draft',
+      status: status,
       poolSize: e.poolSize,
       targetPercentage: e.targetPercentage,
       establishedDate: e.establishedDate,
@@ -530,6 +782,79 @@ class CapTableState with _$CapTableState {
     );
   }
 
+  CapTableState _updateEsopPool(EsopPoolUpdated e, int seq) {
+    final existing = esopPools[e.poolId];
+    if (existing == null) return copyWith(lastSequenceNumber: seq);
+
+    final updated = existing.copyWith(
+      name: e.name ?? existing.name,
+      targetPercentage: e.targetPercentage ?? existing.targetPercentage,
+      defaultVestingScheduleId:
+          e.defaultVestingScheduleId ?? existing.defaultVestingScheduleId,
+      strikePriceMethod: e.strikePriceMethod ?? existing.strikePriceMethod,
+      defaultStrikePrice: e.defaultStrikePrice ?? existing.defaultStrikePrice,
+      defaultExpiryYears: e.defaultExpiryYears ?? existing.defaultExpiryYears,
+      notes: e.notes ?? existing.notes,
+      updatedAt: e.timestamp,
+    );
+    return copyWith(
+      esopPools: {...esopPools, e.poolId: updated},
+      lastSequenceNumber: seq,
+    );
+  }
+
+  CapTableState _deleteEsopPool(EsopPoolDeleted e, int seq) {
+    // Remove the pool
+    final newEsopPools = Map<String, EsopPoolState>.from(esopPools)
+      ..remove(e.poolId);
+
+    // Delete all option grants from this pool
+    // First track exercises to reverse
+    final grantsToDelete = optionGrants.values
+        .where((g) => g.esopPoolId == e.poolId)
+        .toList();
+
+    // Find holdings that came from exercising these grants
+    final holdingsToDelete = <String>{};
+    for (final grant in grantsToDelete) {
+      for (final holding in holdings.values) {
+        if (holding.sourceOptionGrantId == grant.id) {
+          holdingsToDelete.add(holding.id);
+        }
+      }
+    }
+
+    // Remove holdings
+    final newHoldings = Map<String, HoldingState>.from(holdings)
+      ..removeWhere((id, _) => holdingsToDelete.contains(id));
+
+    // Remove grants
+    final newOptionGrants = Map<String, OptionGrantState>.from(optionGrants)
+      ..removeWhere((_, g) => g.esopPoolId == e.poolId);
+
+    return copyWith(
+      esopPools: newEsopPools,
+      holdings: newHoldings,
+      optionGrants: newOptionGrants,
+      lastSequenceNumber: seq,
+    );
+  }
+
+  CapTableState _revertEsopPoolExpansion(EsopPoolExpansionReverted e, int seq) {
+    final existing = esopPools[e.poolId];
+    if (existing == null) return copyWith(lastSequenceNumber: seq);
+
+    // Reduce pool size back to before expansion
+    final updated = existing.copyWith(
+      poolSize: e.revertedSize,
+      updatedAt: e.timestamp,
+    );
+    return copyWith(
+      esopPools: {...esopPools, e.poolId: updated},
+      lastSequenceNumber: seq,
+    );
+  }
+
   // ============================================================
   // Option Grant Reducers
   // ============================================================
@@ -540,7 +865,7 @@ class CapTableState with _$CapTableState {
       stakeholderId: e.stakeholderId,
       shareClassId: e.shareClassId,
       esopPoolId: e.esopPoolId,
-      status: 'pending',
+      status: 'active', // Options are active once granted
       quantity: e.quantity,
       strikePrice: e.strikePrice,
       grantDate: e.grantDate,
@@ -601,6 +926,30 @@ class CapTableState with _$CapTableState {
 
     final updated = existing.copyWith(
       status: e.newStatus,
+      updatedAt: e.timestamp,
+    );
+    return copyWith(
+      optionGrants: {...optionGrants, e.grantId: updated},
+      lastSequenceNumber: seq,
+    );
+  }
+
+  CapTableState _updateOptionGrant(OptionGrantUpdated e, int seq) {
+    final existing = optionGrants[e.grantId];
+    if (existing == null) return copyWith(lastSequenceNumber: seq);
+
+    final updated = existing.copyWith(
+      shareClassId: e.shareClassId ?? existing.shareClassId,
+      esopPoolId: e.esopPoolId ?? existing.esopPoolId,
+      quantity: e.quantity ?? existing.quantity,
+      strikePrice: e.strikePrice ?? existing.strikePrice,
+      grantDate: e.grantDate ?? existing.grantDate,
+      expiryDate: e.expiryDate ?? existing.expiryDate,
+      vestingScheduleId: e.vestingScheduleId ?? existing.vestingScheduleId,
+      roundId: e.roundId ?? existing.roundId,
+      allowsEarlyExercise:
+          e.allowsEarlyExercise ?? existing.allowsEarlyExercise,
+      notes: e.notes ?? existing.notes,
       updatedAt: e.timestamp,
     );
     return copyWith(
@@ -1064,6 +1413,14 @@ class ConvertibleState with _$ConvertibleState {
     String? convertedToShareClassId,
     int? sharesReceived,
     String? notes,
+    // Advanced conversion terms
+    String? maturityBehavior,
+    @Default(false) bool allowsVoluntaryConversion,
+    String? liquidityEventBehavior,
+    double? liquidityPayoutMultiple,
+    String? dissolutionBehavior,
+    String? preferredShareClassId,
+    double? qualifiedFinancingThreshold,
     required DateTime createdAt,
     required DateTime updatedAt,
   }) = _ConvertibleState;
@@ -1077,7 +1434,6 @@ class EsopPoolState with _$EsopPoolState {
   const factory EsopPoolState({
     required String id,
     required String name,
-    required String shareClassId,
     required String status,
     required int poolSize,
     double? targetPercentage,

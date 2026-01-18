@@ -3,6 +3,7 @@ import '../../infrastructure/database/database.dart';
 import 'database_provider.dart';
 import 'company_provider.dart';
 import 'holdings_provider.dart';
+import 'options_provider.dart';
 import 'projection_adapters.dart';
 
 part 'esop_pools_provider.g.dart';
@@ -22,20 +23,22 @@ List<EsopPool> esopPools(EsopPoolsRef ref) {
 }
 
 /// Gets a specific ESOP pool by ID.
+/// Uses projected state instead of database for event sourcing compatibility.
 @riverpod
 Future<EsopPool?> esopPoolById(EsopPoolByIdRef ref, String poolId) async {
-  final db = ref.watch(databaseProvider);
-  return db.getEsopPool(poolId);
+  final pools = await ref.watch(esopPoolsStreamProvider.future);
+  return pools.where((p) => p.id == poolId).firstOrNull;
 }
 
 /// Watches option grants for a specific ESOP pool.
+/// Uses projected state instead of database for event sourcing compatibility.
 @riverpod
 Stream<List<OptionGrant>> poolOptionGrantsStream(
   PoolOptionGrantsStreamRef ref,
   String poolId,
-) {
-  final db = ref.watch(databaseProvider);
-  return db.watchOptionGrantsForPool(poolId);
+) async* {
+  final allGrants = await ref.watch(optionGrantsStreamProvider.future);
+  yield allGrants.where((g) => g.esopPoolId == poolId).toList();
 }
 
 /// Summary data for an ESOP pool including allocation metrics.
@@ -58,17 +61,20 @@ class EsopPoolSummary {
 }
 
 /// Provides detailed summary for an ESOP pool.
+/// Uses projected state instead of database for event sourcing compatibility.
 @riverpod
 Future<EsopPoolSummary?> esopPoolSummary(
   EsopPoolSummaryRef ref,
   String poolId,
 ) async {
-  final db = ref.watch(databaseProvider);
-
-  final pool = await db.getEsopPool(poolId);
+  // Get pool from projected state
+  final pools = await ref.watch(esopPoolsStreamProvider.future);
+  final pool = pools.where((p) => p.id == poolId).firstOrNull;
   if (pool == null) return null;
 
-  final grants = await db.getOptionGrantsForPool(poolId);
+  // Get option grants from projected state
+  final allGrants = await ref.watch(optionGrantsStreamProvider.future);
+  final grants = allGrants.where((g) => g.esopPoolId == poolId).toList();
 
   int allocated = 0;
   int exercised = 0;
@@ -98,10 +104,11 @@ Future<EsopPoolSummary?> esopPoolSummary(
 }
 
 /// Aggregated summary across all ESOP pools.
+/// Uses projected state instead of database for event sourcing compatibility.
 @riverpod
 Future<AllPoolsSummary> allEsopPoolsSummary(AllEsopPoolsSummaryRef ref) async {
   final pools = await ref.watch(esopPoolsStreamProvider.future);
-  final db = ref.watch(databaseProvider);
+  final allGrants = await ref.watch(optionGrantsStreamProvider.future);
 
   int totalPoolSize = 0;
   int totalAllocated = 0;
@@ -109,7 +116,7 @@ Future<AllPoolsSummary> allEsopPoolsSummary(AllEsopPoolsSummaryRef ref) async {
   int totalActiveGrants = 0;
 
   for (final pool in pools) {
-    final grants = await db.getOptionGrantsForPool(pool.id);
+    final grants = allGrants.where((g) => g.esopPoolId == pool.id);
 
     totalPoolSize += pool.poolSize;
 

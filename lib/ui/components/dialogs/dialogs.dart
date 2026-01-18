@@ -48,11 +48,13 @@ class ConfirmDialog extends StatelessWidget {
     required BuildContext context,
     required String itemName,
     String? additionalMessage,
+    String? customMessage,
   }) {
     return show(
       context: context,
       title: 'Delete $itemName?',
       message:
+          customMessage ??
           additionalMessage ??
           'This action cannot be undone. Are you sure you want to delete this $itemName?',
       confirmLabel: 'Delete',

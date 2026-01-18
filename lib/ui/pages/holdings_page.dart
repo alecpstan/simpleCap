@@ -304,6 +304,11 @@ class HoldingsPage extends ConsumerWidget {
     final theme = Theme.of(context);
     final totalValue = holding.shareCount * holding.costBasis;
 
+    // Get vesting schedule if applicable
+    final vestingSchedule = holding.vestingScheduleId != null
+        ? ref.read(vestingScheduleProvider(holding.vestingScheduleId))
+        : null;
+
     showModalBottomSheet(
       context: context,
       builder: (context) => Padding(
@@ -347,11 +352,16 @@ class HoldingsPage extends ConsumerWidget {
               '${Formatters.currency(holding.costBasis)}/share',
             ),
             _buildDetailRow('Total Cost', Formatters.currency(totalValue)),
-            if (holding.vestedCount != null)
+            if (holding.vestedCount != null) ...[
               _buildDetailRow(
                 'Vested',
                 '${Formatters.number(holding.vestedCount!)} shares',
               ),
+              if (vestingSchedule != null) ...[
+                _buildDetailRow('Vesting Schedule', vestingSchedule.name),
+                _buildDetailRow('Terms', _buildVestingTerms(vestingSchedule)),
+              ],
+            ],
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -391,6 +401,35 @@ class HoldingsPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Builds a human-readable description of vesting terms.
+  String _buildVestingTerms(VestingSchedule schedule) {
+    final total = schedule.totalMonths ?? 0;
+    final years = total ~/ 12;
+    final remainingMonths = total % 12;
+    final cliffMonths = schedule.cliffMonths;
+
+    final parts = <String>[];
+
+    if (years > 0) {
+      parts.add('$years yr${years > 1 ? 's' : ''}');
+    }
+    if (remainingMonths > 0) {
+      parts.add('$remainingMonths mo');
+    }
+
+    if (cliffMonths > 0) {
+      final cliffYears = cliffMonths ~/ 12;
+      final cliffRemaining = cliffMonths % 12;
+      if (cliffYears > 0) {
+        parts.add('$cliffYears yr cliff');
+      } else {
+        parts.add('$cliffRemaining mo cliff');
+      }
+    }
+
+    return parts.isEmpty ? schedule.name : parts.join(' / ');
   }
 
   Future<void> _confirmDelete(

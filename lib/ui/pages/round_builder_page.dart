@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers/providers.dart';
+import '../../domain/services/conversion_calculator.dart';
 import '../../infrastructure/database/database.dart';
 import '../../shared/formatters.dart';
 
@@ -28,7 +29,7 @@ class RoundBuilderPage extends ConsumerStatefulWidget {
 
 class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
   int _currentStep = 0;
-  static const int _totalSteps = 6;
+  static const int _totalSteps = 7;
 
   // Step 1: Round Details
   String _roundType = 'seed';
@@ -57,10 +58,38 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
   final Set<String> _newlyCreatedWarrantIds =
       {}; // Track IDs created in this builder
 
-  // Step 6: Summary
+  // Step 6: ESOP
+  final List<_PendingPoolExpansion> _pendingPoolExpansions = [];
+  final List<_PendingNewPool> _pendingNewPools = [];
+
+  // Step 7: Summary
   final _notesController = TextEditingController();
 
   bool get isEditing => widget.existingRound != null;
+
+  /// Builds an "Issue New" button that respects premium lock status.
+  Widget _buildIssueNewButton({
+    required bool isLocked,
+    required VoidCallback onPressed,
+  }) {
+    final theme = Theme.of(context);
+    if (isLocked) {
+      return FilledButton.icon(
+        onPressed: null,
+        style: FilledButton.styleFrom(
+          disabledBackgroundColor: theme.colorScheme.surfaceContainerHighest,
+          disabledForegroundColor: theme.colorScheme.outline,
+        ),
+        icon: const Icon(Icons.lock, size: 18),
+        label: const Text('Issue New'),
+      );
+    }
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('Issue New'),
+    );
+  }
 
   @override
   void initState() {
@@ -87,31 +116,61 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
     }
     _notesController.text = round.notes ?? '';
 
-    // Load existing holdings for this round
-    _loadExistingInvestments(round.id);
+    // Load existing securities for this round
+    _loadExistingSecurities(round.id);
   }
 
-  Future<void> _loadExistingInvestments(String roundId) async {
-    final db = ref.read(databaseProvider);
-    final holdings = await db.getHoldings(widget.existingRound!.companyId);
+  Future<void> _loadExistingSecurities(String roundId) async {
+    // Use projection providers instead of direct database queries
+    // since the app uses event sourcing and data lives in projections
+    final holdings = await ref.read(holdingsStreamProvider.future);
     final roundHoldings = holdings.where((h) => h.roundId == roundId).toList();
 
-    if (roundHoldings.isNotEmpty) {
-      setState(() {
-        for (final holding in roundHoldings) {
-          _pendingInvestments.add(
-            _PendingInvestment(
-              existingId: holding.id, // Track the existing holding ID
-              stakeholderId: holding.stakeholderId,
-              shareClassId: holding.shareClassId,
-              vestingScheduleId: holding.vestingScheduleId,
-              amount: holding.costBasis * holding.shareCount,
-              shares: holding.shareCount,
-            ),
-          );
-        }
-      });
-    }
+    final convertibles = await ref.read(convertiblesStreamProvider.future);
+    // Convertibles issued in this round
+    final issuedConvertibles = convertibles
+        .where((c) => c.roundId == roundId)
+        .toList();
+    // Convertibles being converted in this round
+    final convertingConvertibles = convertibles
+        .where((c) => c.conversionEventId == roundId)
+        .toList();
+
+    final warrants = await ref.read(warrantsStreamProvider.future);
+    final roundWarrants = warrants.where((w) => w.roundId == roundId).toList();
+
+    setState(() {
+      // Add existing holdings
+      for (final holding in roundHoldings) {
+        _pendingInvestments.add(
+          _PendingInvestment(
+            existingId: holding.id,
+            stakeholderId: holding.stakeholderId,
+            shareClassId: holding.shareClassId,
+            vestingScheduleId: holding.vestingScheduleId,
+            amount: holding.costBasis * holding.shareCount,
+            shares: holding.shareCount,
+          ),
+        );
+      }
+
+      // Pre-select convertibles that are being converted in this round
+      for (final conv in convertingConvertibles) {
+        _selectedConvertibleIds.add(conv.id);
+      }
+
+      // Track newly created convertibles issued in this round
+      for (final conv in issuedConvertibles) {
+        _newlyCreatedConvertibleIds.add(conv.id);
+      }
+
+      // Pre-select existing warrants that belong to this round
+      for (final warrant in roundWarrants) {
+        _selectedWarrantIds.add(warrant.id);
+        // Track as newly created so they display correctly in the builder
+        _newlyCreatedWarrantIds.add(warrant.id);
+      }
+    });
   }
 
   void _initializeDefaults() {
@@ -120,55 +179,18 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
   }
 
   Future<void> _loadDefaultValuation() async {
-    final db = ref.read(databaseProvider);
     final companyId = ref.read(currentCompanyIdProvider);
     if (companyId == null) return;
 
-    final valuations = await db.getValuations(companyId);
-    if (valuations.isEmpty) return;
-
-    // Find the most recent valuation that is on or before the round date
-    final relevantValuations = valuations
-        .where((v) => !v.date.isAfter(_roundDate))
-        .toList();
-
-    if (relevantValuations.isEmpty) return;
-
-    // Valuations are already sorted by date descending, so first is most recent
-    final latestValuation = relevantValuations.first;
+    // Get the effective valuation which considers BOTH manual valuations
+    // AND round post-money valuations, returning the most recent
+    final effectiveVal = await ref.read(effectiveValuationProvider.future);
+    if (effectiveVal == null) return;
 
     setState(() {
-      _preMoneyController.text = latestValuation.preMoneyValue.toStringAsFixed(
-        0,
-      );
-      _valuationSourceNote =
-          '${_formatValuationMethod(latestValuation.method)} on ${Formatters.shortDate(latestValuation.date)}';
+      _preMoneyController.text = effectiveVal.value.toStringAsFixed(0);
+      _valuationSourceNote = effectiveVal.sourceDescription;
     });
-  }
-
-  String _formatValuationMethod(String method) {
-    switch (method) {
-      case 'vcMethod':
-        return 'VC Method';
-      case 'comparables':
-        return 'Comparables';
-      case 'dcf':
-        return 'DCF';
-      case 'scorecard':
-        return 'Scorecard';
-      case 'berkus':
-        return 'Berkus Method';
-      case 'riskFactor':
-        return 'Risk Factor';
-      case 'lastRound':
-        return 'Last Round';
-      case 'custom':
-        return 'Custom Valuation';
-      case '409a':
-        return '409A Valuation';
-      default:
-        return method;
-    }
   }
 
   @override
@@ -222,6 +244,7 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
       'Investments',
       'Convertibles',
       'Warrants',
+      'ESOP',
       'Summary',
     ];
 
@@ -287,6 +310,8 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
       case 4:
         return _buildWarrantsStep();
       case 5:
+        return _buildEsopStep();
+      case 6:
         return _buildSummaryStep();
       default:
         return const SizedBox.shrink();
@@ -1000,80 +1025,42 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
     final theme = Theme.of(context);
     final convertiblesAsync = ref.watch(convertiblesStreamProvider);
     final stakeholdersAsync = ref.watch(stakeholdersStreamProvider);
+    final convertiblesLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.convertibles),
+    );
 
     final convertibles = convertiblesAsync.valueOrNull ?? [];
     final stakeholders = stakeholdersAsync.valueOrNull ?? [];
 
-    // Filter to convertibles that can be attached to a round (pending or outstanding)
+    // Filter to convertibles that can be attached to a round:
+    // 1. Pending or outstanding status (available for conversion)
+    // 2. Already selected for conversion in this round (conversionEventId matches)
+    // 3. Issued in this round (roundId matches) - these are newly created
+    final roundId = widget.existingRound?.id;
     final outstanding = convertibles
-        .where((c) => c.status == 'pending' || c.status == 'outstanding')
+        .where(
+          (c) =>
+              c.status == 'pending' ||
+              c.status == 'outstanding' ||
+              (roundId != null && c.conversionEventId == roundId) ||
+              (roundId != null && c.roundId == roundId),
+        )
         .toList();
 
-    if (outstanding.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Convertibles',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: () =>
-                      _showNewConvertibleDialog(context, stakeholders),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Issue New'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.description_outlined,
-                    size: 48,
-                    color: theme.colorScheme.outline,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No Outstanding Convertibles',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Issue a new SAFE or Convertible Note, or skip this step.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    // Separate existing from newly created in this round
+    final existingConvertibles = outstanding
+        .where((c) => !_newlyCreatedConvertibleIds.contains(c.id))
+        .toList();
+    final newConvertibles = outstanding
+        .where((c) => _newlyCreatedConvertibleIds.contains(c.id))
+        .toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1097,11 +1084,10 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
                   ],
                 ),
               ),
-              FilledButton.icon(
+              _buildIssueNewButton(
+                isLocked: convertiblesLocked,
                 onPressed: () =>
                     _showNewConvertibleDialog(context, stakeholders),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Issue New'),
               ),
             ],
           ),
@@ -1110,85 +1096,156 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
           // MFN Upgrades Section
           _buildMfnUpgradesSection(stakeholders),
 
-          // Select all toggle
-          Row(
-            children: [
-              Checkbox(
-                value: _selectedConvertibleIds.length == outstanding.length,
-                tristate: true,
-                onChanged: (value) {
-                  setState(() {
-                    if (value == true) {
-                      _selectedConvertibleIds.addAll(
-                        outstanding.map((c) => c.id),
-                      );
-                    } else {
-                      _selectedConvertibleIds.clear();
-                    }
-                  });
-                },
-              ),
-              Text(
-                'Select All (${outstanding.length})',
-                style: theme.textTheme.titleSmall,
-              ),
-            ],
-          ),
-          const Divider(),
-
-          // Convertibles list
-          ...outstanding.map((conv) {
-            final stakeholder = stakeholders
-                .where((s) => s.id == conv.stakeholderId)
-                .firstOrNull;
-            final isSelected = _selectedConvertibleIds.contains(conv.id);
-
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: CheckboxListTile(
-                value: isSelected,
-                onChanged: (value) {
-                  setState(() {
-                    if (value == true) {
-                      _selectedConvertibleIds.add(conv.id);
-                    } else {
-                      _selectedConvertibleIds.remove(conv.id);
-                    }
-                  });
-                },
-                secondary: CircleAvatar(
-                  backgroundColor: conv.type == 'safe'
-                      ? Colors.blue.shade100
-                      : Colors.orange.shade100,
-                  child: Icon(
-                    conv.type == 'safe' ? Icons.security : Icons.receipt_long,
-                    color: conv.type == 'safe'
-                        ? Colors.blue.shade700
-                        : Colors.orange.shade700,
-                    size: 20,
+          // Existing Convertibles Section
+          if (existingConvertibles.isNotEmpty) ...[
+            Row(
+              children: [
+                Text(
+                  'Existing Convertibles',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                title: Text(stakeholder?.name ?? 'Unknown'),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${conv.type.toUpperCase()} • ${Formatters.currency(conv.principal)}',
-                    ),
-                    if (conv.valuationCap != null)
-                      Text(
-                        'Cap: ${Formatters.compactCurrency(conv.valuationCap!)}',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                  ],
+                const Spacer(),
+                // Select all toggle for existing
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      final allSelected = existingConvertibles
+                          .every((c) => _selectedConvertibleIds.contains(c.id));
+                      if (allSelected) {
+                        for (final c in existingConvertibles) {
+                          _selectedConvertibleIds.remove(c.id);
+                        }
+                      } else {
+                        _selectedConvertibleIds
+                            .addAll(existingConvertibles.map((c) => c.id));
+                      }
+                    });
+                  },
+                  icon: Icon(
+                    existingConvertibles.every(
+                            (c) => _selectedConvertibleIds.contains(c.id))
+                        ? Icons.deselect
+                        : Icons.select_all,
+                    size: 18,
+                  ),
+                  label: Text(
+                    existingConvertibles.every(
+                            (c) => _selectedConvertibleIds.contains(c.id))
+                        ? 'Deselect All'
+                        : 'Select All',
+                  ),
                 ),
-                isThreeLine: true,
-              ),
-            );
-          }),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...existingConvertibles.map((conv) =>
+                _buildConvertibleCard(conv, stakeholders, theme)),
+            const SizedBox(height: 24),
+          ],
 
+          // New Convertibles Section (created in this round)
+          if (newConvertibles.isNotEmpty) ...[
+            Text(
+              'New Convertibles (This Round)',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...newConvertibles.map((conv) {
+              final stakeholder = stakeholders
+                  .where((s) => s.id == conv.stakeholderId)
+                  .firstOrNull;
+              final isSelected = _selectedConvertibleIds.contains(conv.id);
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.green.shade100,
+                    child: Icon(
+                      Icons.add,
+                      color: Colors.green.shade800,
+                    ),
+                  ),
+                  title: Text(stakeholder?.name ?? 'Unknown'),
+                  subtitle: Text(
+                    '${conv.type.toUpperCase()} • ${Formatters.currency(conv.principal)}${conv.valuationCap != null ? ' • Cap: ${Formatters.compactCurrency(conv.valuationCap!)}' : ''}',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: isSelected,
+                        onChanged: (value) {
+                          setState(() {
+                            if (value == true) {
+                              _selectedConvertibleIds.add(conv.id);
+                            } else {
+                              _selectedConvertibleIds.remove(conv.id);
+                            }
+                          });
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        color: Colors.red,
+                        onPressed: () {
+                          setState(() {
+                            _newlyCreatedConvertibleIds.remove(conv.id);
+                            _selectedConvertibleIds.remove(conv.id);
+                          });
+                          // Note: The actual convertible is already created in DB
+                          // This just removes it from the "new" tracking
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 24),
+          ],
+
+          // Empty state
+          if (outstanding.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.description_outlined,
+                    size: 48,
+                    color: theme.colorScheme.outline,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No Convertibles',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Issue a new SAFE or Convertible Note to convert in this round.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Summary of selected convertibles
           if (_selectedConvertibleIds.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const Divider(height: 32),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -1199,7 +1256,7 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${_selectedConvertibleIds.length} selected',
+                    '${_selectedConvertibleIds.length} selected for conversion',
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
@@ -1230,6 +1287,58 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildConvertibleCard(
+    Convertible conv,
+    List<Stakeholder> stakeholders,
+    ThemeData theme,
+  ) {
+    final stakeholder =
+        stakeholders.where((s) => s.id == conv.stakeholderId).firstOrNull;
+    final isSelected = _selectedConvertibleIds.contains(conv.id);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: CheckboxListTile(
+        value: isSelected,
+        onChanged: (value) {
+          setState(() {
+            if (value == true) {
+              _selectedConvertibleIds.add(conv.id);
+            } else {
+              _selectedConvertibleIds.remove(conv.id);
+            }
+          });
+        },
+        secondary: CircleAvatar(
+          backgroundColor:
+              conv.type == 'safe' ? Colors.blue.shade100 : Colors.orange.shade100,
+          child: Icon(
+            conv.type == 'safe' ? Icons.security : Icons.receipt_long,
+            color: conv.type == 'safe'
+                ? Colors.blue.shade700
+                : Colors.orange.shade700,
+            size: 20,
+          ),
+        ),
+        title: Text(stakeholder?.name ?? 'Unknown'),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${conv.type.toUpperCase()} • ${Formatters.currency(conv.principal)}',
+            ),
+            if (conv.valuationCap != null)
+              Text(
+                'Cap: ${Formatters.compactCurrency(conv.valuationCap!)}',
+                style: theme.textTheme.bodySmall,
+              ),
+          ],
+        ),
+        isThreeLine: true,
       ),
     );
   }
@@ -1609,84 +1718,41 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
     final theme = Theme.of(context);
     final warrantsAsync = ref.watch(warrantsStreamProvider);
     final stakeholdersAsync = ref.watch(stakeholdersStreamProvider);
+    final warrantsLocked = ref.watch(
+      isFeatureLockedProvider(PremiumFeature.warrants),
+    );
 
     final warrants = warrantsAsync.valueOrNull ?? [];
     final stakeholders = stakeholdersAsync.valueOrNull ?? [];
 
-    // Filter to warrants that can be attached to a round (pending, outstanding, or active)
+    // Filter to warrants that can be attached to a round:
+    // 1. Pending, outstanding, or active status (available for attachment)
+    // 2. Already belongs to this round (roundId matches)
+    final roundId = widget.existingRound?.id;
     final outstanding = warrants
         .where(
           (w) =>
               w.status == 'pending' ||
               w.status == 'outstanding' ||
-              w.status == 'active',
+              w.status == 'active' ||
+              (roundId != null && w.roundId == roundId),
         )
         .toList();
 
-    if (outstanding.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Warrants',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _showNewWarrantDialog(context, stakeholders),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Issue New'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.receipt_outlined,
-                    size: 48,
-                    color: theme.colorScheme.outline,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No Outstanding Warrants',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Issue a new warrant, or skip this step.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    // Separate existing from newly created in this round
+    final existingWarrants = outstanding
+        .where((w) => !_newlyCreatedWarrantIds.contains(w.id))
+        .toList();
+    final newWarrants = outstanding
+        .where((w) => _newlyCreatedWarrantIds.contains(w.id))
+        .toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1710,87 +1776,164 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
                   ],
                 ),
               ),
-              FilledButton.icon(
+              _buildIssueNewButton(
+                isLocked: warrantsLocked,
                 onPressed: () => _showNewWarrantDialog(context, stakeholders),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Issue New'),
               ),
             ],
           ),
           const SizedBox(height: 24),
 
-          // Select all toggle
-          Row(
-            children: [
-              Checkbox(
-                value: _selectedWarrantIds.length == outstanding.length,
-                tristate: true,
-                onChanged: (value) {
-                  setState(() {
-                    if (value == true) {
-                      _selectedWarrantIds.addAll(outstanding.map((w) => w.id));
-                    } else {
-                      _selectedWarrantIds.clear();
-                    }
-                  });
-                },
-              ),
-              Text(
-                'Select All (${outstanding.length})',
-                style: theme.textTheme.titleSmall,
-              ),
-            ],
-          ),
-          const Divider(),
-
-          // Warrants list
-          ...outstanding.map((warrant) {
-            final stakeholder = stakeholders
-                .where((s) => s.id == warrant.stakeholderId)
-                .firstOrNull;
-            final isSelected = _selectedWarrantIds.contains(warrant.id);
-
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: CheckboxListTile(
-                value: isSelected,
-                onChanged: (value) {
-                  setState(() {
-                    if (value == true) {
-                      _selectedWarrantIds.add(warrant.id);
-                    } else {
-                      _selectedWarrantIds.remove(warrant.id);
-                    }
-                  });
-                },
-                secondary: CircleAvatar(
-                  backgroundColor: Colors.indigo.shade100,
-                  child: Icon(
-                    Icons.receipt,
-                    color: Colors.indigo.shade700,
-                    size: 20,
+          // Existing Warrants Section
+          if (existingWarrants.isNotEmpty) ...[
+            Row(
+              children: [
+                Text(
+                  'Existing Warrants',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                title: Text(stakeholder?.name ?? 'Unknown'),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${Formatters.compactNumber(warrant.quantity)} warrants @ ${Formatters.currency(warrant.strikePrice)}',
-                    ),
-                    Text(
-                      'Expires: ${Formatters.date(warrant.expiryDate)}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
+                const Spacer(),
+                // Select all toggle for existing
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      final allSelected = existingWarrants
+                          .every((w) => _selectedWarrantIds.contains(w.id));
+                      if (allSelected) {
+                        for (final w in existingWarrants) {
+                          _selectedWarrantIds.remove(w.id);
+                        }
+                      } else {
+                        _selectedWarrantIds
+                            .addAll(existingWarrants.map((w) => w.id));
+                      }
+                    });
+                  },
+                  icon: Icon(
+                    existingWarrants
+                            .every((w) => _selectedWarrantIds.contains(w.id))
+                        ? Icons.deselect
+                        : Icons.select_all,
+                    size: 18,
+                  ),
+                  label: Text(
+                    existingWarrants
+                            .every((w) => _selectedWarrantIds.contains(w.id))
+                        ? 'Deselect All'
+                        : 'Select All',
+                  ),
                 ),
-                isThreeLine: true,
-              ),
-            );
-          }),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...existingWarrants
+                .map((warrant) => _buildWarrantCard(warrant, stakeholders, theme)),
+            const SizedBox(height: 24),
+          ],
 
+          // New Warrants Section (created in this round)
+          if (newWarrants.isNotEmpty) ...[
+            Text(
+              'New Warrants (This Round)',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...newWarrants.map((warrant) {
+              final stakeholder = stakeholders
+                  .where((s) => s.id == warrant.stakeholderId)
+                  .firstOrNull;
+              final isSelected = _selectedWarrantIds.contains(warrant.id);
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.green.shade100,
+                    child: Icon(
+                      Icons.add,
+                      color: Colors.green.shade800,
+                    ),
+                  ),
+                  title: Text(stakeholder?.name ?? 'Unknown'),
+                  subtitle: Text(
+                    '${Formatters.compactNumber(warrant.quantity)} warrants @ ${Formatters.currency(warrant.strikePrice)} • Expires: ${Formatters.date(warrant.expiryDate)}',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: isSelected,
+                        onChanged: (value) {
+                          setState(() {
+                            if (value == true) {
+                              _selectedWarrantIds.add(warrant.id);
+                            } else {
+                              _selectedWarrantIds.remove(warrant.id);
+                            }
+                          });
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        color: Colors.red,
+                        onPressed: () {
+                          setState(() {
+                            _newlyCreatedWarrantIds.remove(warrant.id);
+                            _selectedWarrantIds.remove(warrant.id);
+                          });
+                          // Note: The actual warrant is already created in DB
+                          // This just removes it from the "new" tracking
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 24),
+          ],
+
+          // Empty state
+          if (outstanding.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.receipt_outlined,
+                    size: 48,
+                    color: theme.colorScheme.outline,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No Warrants',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Issue a new warrant to attach to this round.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Summary of selected warrants
           if (_selectedWarrantIds.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const Divider(height: 32),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -1822,13 +1965,522 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
     );
   }
 
-  // ─── Step 6: Summary ───────────────────────────────────────────────────────
+  Widget _buildWarrantCard(
+    Warrant warrant,
+    List<Stakeholder> stakeholders,
+    ThemeData theme,
+  ) {
+    final stakeholder =
+        stakeholders.where((s) => s.id == warrant.stakeholderId).firstOrNull;
+    final isSelected = _selectedWarrantIds.contains(warrant.id);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: CheckboxListTile(
+        value: isSelected,
+        onChanged: (value) {
+          setState(() {
+            if (value == true) {
+              _selectedWarrantIds.add(warrant.id);
+            } else {
+              _selectedWarrantIds.remove(warrant.id);
+            }
+          });
+        },
+        secondary: CircleAvatar(
+          backgroundColor: Colors.indigo.shade100,
+          child: Icon(
+            Icons.receipt,
+            color: Colors.indigo.shade700,
+            size: 20,
+          ),
+        ),
+        title: Text(stakeholder?.name ?? 'Unknown'),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${Formatters.compactNumber(warrant.quantity)} warrants @ ${Formatters.currency(warrant.strikePrice)}',
+            ),
+            Text(
+              'Expires: ${Formatters.date(warrant.expiryDate)}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
+        isThreeLine: true,
+      ),
+    );
+  }
+
+  // ─── Step 6: ESOP ──────────────────────────────────────────────────────────
+
+  Widget _buildEsopStep() {
+    final theme = Theme.of(context);
+    final esopPoolsAsync = ref.watch(esopPoolsStreamProvider);
+    final holdingsAsync = ref.watch(holdingsStreamProvider);
+    final vestingSchedulesAsync = ref.watch(vestingSchedulesStreamProvider);
+    final esopLocked = ref.watch(isFeatureLockedProvider(PremiumFeature.options));
+
+    final pools = esopPoolsAsync.valueOrNull ?? [];
+    final vestingSchedules = vestingSchedulesAsync.valueOrNull ?? [];
+
+    // Calculate post-money shares for target % calculations
+    final preMoneyVal = double.tryParse(_preMoneyController.text) ?? 0;
+    final currentShares = holdingsAsync.valueOrNull?.fold<int>(0, (sum, h) => sum + h.shareCount) ?? 0;
+    final newShares = _pendingInvestments.fold<int>(0, (sum, inv) => sum + inv.shares);
+    final postMoneyShares = currentShares + newShares;
+
+    // Calculate which pools need expansion based on their target percentage
+    final poolsNeedingExpansion = <EsopPool, int>{};
+    for (final pool in pools) {
+      if (pool.targetPercentage != null && pool.targetPercentage! > 0 && postMoneyShares > 0) {
+        final targetShares = (postMoneyShares * pool.targetPercentage! / 100).ceil();
+        final currentPoolSize = pool.poolSize;
+        // Add any pending expansion
+        final pendingExpansion = _pendingPoolExpansions
+            .where((e) => e.poolId == pool.id)
+            .fold<int>(0, (sum, e) => sum + e.sharesToAdd);
+        final totalPoolSize = currentPoolSize + pendingExpansion;
+        if (targetShares > totalPoolSize) {
+          poolsNeedingExpansion[pool] = targetShares - totalPoolSize;
+        }
+      }
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ESOP Pools',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Expand existing pools or create new ones for this round.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _buildIssueNewButton(
+                isLocked: esopLocked,
+                onPressed: () => _showNewPoolDialog(context, vestingSchedules),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Pools needing expansion section
+          if (poolsNeedingExpansion.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Pools Below Target',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ...poolsNeedingExpansion.entries.map((entry) {
+                    final pool = entry.key;
+                    final sharesNeeded = entry.value;
+                    final pendingExpansion = _pendingPoolExpansions
+                        .where((e) => e.poolId == pool.id)
+                        .fold<int>(0, (sum, e) => sum + e.sharesToAdd);
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  pool.name,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  'Target: ${pool.targetPercentage?.toStringAsFixed(1)}% • Need: +${Formatters.number(sharesNeeded)} shares',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (pendingExpansion > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '+${Formatters.number(pendingExpansion)}',
+                                style: TextStyle(
+                                  color: Colors.green.shade800,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            )
+                          else
+                            FilledButton.tonal(
+                              onPressed: () => _addPoolExpansion(pool, sharesNeeded),
+                              child: const Text('Top Up'),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // Existing pools section
+          if (pools.isNotEmpty) ...[
+            Text(
+              'Existing Pools',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...pools.map((pool) {
+              final pendingExpansion = _pendingPoolExpansions
+                  .where((e) => e.poolId == pool.id)
+                  .fold<int>(0, (sum, e) => sum + e.sharesToAdd);
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                    child: Icon(
+                      Icons.groups_outlined,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  title: Text(pool.name),
+                  subtitle: Text(
+                    '${Formatters.number(pool.poolSize)} shares${pendingExpansion > 0 ? ' (+${Formatters.number(pendingExpansion)} pending)' : ''}',
+                  ),
+                  trailing: pendingExpansion > 0
+                      ? IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          color: Colors.red,
+                          onPressed: () => _removePoolExpansion(pool.id),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: () => _showExpandPoolDialog(context, pool),
+                        ),
+                ),
+              );
+            }),
+            const SizedBox(height: 24),
+          ],
+
+          // New pools being created in this round
+          if (_pendingNewPools.isNotEmpty) ...[
+            Text(
+              'New Pools (This Round)',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ..._pendingNewPools.asMap().entries.map((entry) {
+              final index = entry.key;
+              final newPool = entry.value;
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.green.shade100,
+                    child: Icon(
+                      Icons.add,
+                      color: Colors.green.shade800,
+                    ),
+                  ),
+                  title: Text(newPool.name),
+                  subtitle: Text(
+                    '${Formatters.number(newPool.poolSize)} shares${newPool.targetPercentage != null ? ' • Target: ${newPool.targetPercentage!.toStringAsFixed(1)}%' : ''}',
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    color: Colors.red,
+                    onPressed: () {
+                      setState(() {
+                        _pendingNewPools.removeAt(index);
+                      });
+                    },
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 24),
+          ],
+
+          // Empty state
+          if (pools.isEmpty && _pendingNewPools.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.groups_outlined,
+                    size: 48,
+                    color: theme.colorScheme.outline,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No ESOP Pools',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Create an employee option pool to reserve shares for future grants.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Summary of ESOP changes
+          if (_pendingPoolExpansions.isNotEmpty || _pendingNewPools.isNotEmpty) ...[
+            const Divider(height: 32),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'ESOP Changes',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  Text(
+                    '+${Formatters.number(_pendingPoolExpansions.fold<int>(0, (sum, e) => sum + e.sharesToAdd) + _pendingNewPools.fold<int>(0, (sum, p) => sum + p.poolSize))} shares',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _addPoolExpansion(EsopPool pool, int sharesToAdd) {
+    setState(() {
+      _pendingPoolExpansions.add(_PendingPoolExpansion(
+        poolId: pool.id,
+        poolName: pool.name,
+        sharesToAdd: sharesToAdd,
+      ));
+    });
+  }
+
+  void _removePoolExpansion(String poolId) {
+    setState(() {
+      _pendingPoolExpansions.removeWhere((e) => e.poolId == poolId);
+    });
+  }
+
+  void _showExpandPoolDialog(BuildContext context, EsopPool pool) {
+    final controller = TextEditingController();
+    final theme = Theme.of(context);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Expand ${pool.name}'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Shares to Add',
+            hintText: 'Enter number of shares',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final shares = int.tryParse(controller.text);
+              if (shares != null && shares > 0) {
+                _addPoolExpansion(pool, shares);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showNewPoolDialog(BuildContext context, List<VestingSchedule> vestingSchedules) {
+    final nameController = TextEditingController();
+    final poolSizeController = TextEditingController();
+    final targetPercentController = TextEditingController();
+    String? selectedVestingScheduleId;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Create ESOP Pool'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Pool Name *',
+                    hintText: 'e.g., 2024 Employee Option Pool',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: poolSizeController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Pool Size (shares) *',
+                    hintText: 'Total shares reserved',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: targetPercentController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Target % of Company',
+                    hintText: 'Optional - e.g., 10',
+                    suffixText: '%',
+                  ),
+                ),
+                if (vestingSchedules.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedVestingScheduleId,
+                    decoration: const InputDecoration(
+                      labelText: 'Default Vesting Schedule',
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('None'),
+                      ),
+                      ...vestingSchedules.map(
+                        (vs) => DropdownMenuItem(
+                          value: vs.id,
+                          child: Text(vs.name),
+                        ),
+                      ),
+                    ],
+                    onChanged: (v) => setState(() => selectedVestingScheduleId = v),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final poolSize = int.tryParse(poolSizeController.text);
+                if (nameController.text.isEmpty || poolSize == null || poolSize <= 0) {
+                  return;
+                }
+
+                this.setState(() {
+                  _pendingNewPools.add(_PendingNewPool(
+                    name: nameController.text,
+                    poolSize: poolSize,
+                    targetPercentage: double.tryParse(targetPercentController.text),
+                    defaultVestingScheduleId: selectedVestingScheduleId,
+                  ));
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Step 7: Summary ───────────────────────────────────────────────────────
 
   Widget _buildSummaryStep() {
     final theme = Theme.of(context);
     final stakeholdersAsync = ref.watch(stakeholdersStreamProvider);
     final convertiblesAsync = ref.watch(convertiblesStreamProvider);
     final warrantsAsync = ref.watch(warrantsStreamProvider);
+    final holdingsAsync = ref.watch(holdingsStreamProvider);
 
     final stakeholders = stakeholdersAsync.valueOrNull ?? [];
     final convertibles = convertiblesAsync.valueOrNull ?? [];
@@ -1840,6 +2492,20 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
       (sum, inv) => sum + inv.amount,
     );
     final postMoneyVal = preMoneyVal + totalInvestment;
+
+    // Calculate price per share for conversion calculations
+    final pricePerShareOverride = double.tryParse(
+      _pricePerShareController.text,
+    );
+    final totalShares =
+        holdingsAsync.valueOrNull?.fold<int>(
+          0,
+          (sum, h) => sum + h.shareCount,
+        ) ??
+        0;
+    final roundPricePerShare =
+        pricePerShareOverride ??
+        (totalShares > 0 ? preMoneyVal / totalShares : 0.0);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -1904,6 +2570,11 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
                     label: 'Pre-Money',
                     value: Formatters.currency(preMoneyVal),
                   ),
+                  if (roundPricePerShare > 0)
+                    _SummaryRow(
+                      label: 'Price Per Share',
+                      value: Formatters.currency(roundPricePerShare),
+                    ),
                   _SummaryRow(
                     label: 'Amount Raised',
                     value: Formatters.currency(totalInvestment),
@@ -1954,7 +2625,7 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
             const SizedBox(height: 16),
           ],
 
-          // Convertibles summary
+          // Convertibles summary with conversion details
           if (_selectedConvertibleIds.isNotEmpty) ...[
             Text(
               'Converting (${_selectedConvertibleIds.length})',
@@ -1969,16 +2640,159 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
               final stakeholder = stakeholders
                   .where((s) => s.id == conv.stakeholderId)
                   .firstOrNull;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    Expanded(child: Text(stakeholder?.name ?? 'Unknown')),
-                    Text(
-                      Formatters.currency(conv.principal),
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                  ],
+
+              // Calculate conversion details
+              final effectivePrice = totalShares > 0 && roundPricePerShare > 0
+                  ? ConversionCalculator.effectivePrice(
+                      convertible: conv,
+                      roundPricePerShare: roundPricePerShare,
+                      preMoneyShares: totalShares,
+                    )
+                  : roundPricePerShare;
+              final totalValue = ConversionCalculator.totalValue(
+                conv,
+                asOf: _roundDate,
+              );
+              final sharesReceived = effectivePrice > 0
+                  ? (totalValue / effectivePrice).floor()
+                  : 0;
+
+              // Determine which term was applied
+              String termApplied = 'Round Price';
+              if (conv.valuationCap != null &&
+                  conv.discountPercent != null &&
+                  totalShares > 0) {
+                final capPrice = conv.valuationCap! / totalShares;
+                final discountPrice =
+                    roundPricePerShare * (1 - conv.discountPercent! / 100);
+                if (capPrice < discountPrice) {
+                  termApplied = 'Cap';
+                } else {
+                  termApplied = 'Discount';
+                }
+              } else if (conv.valuationCap != null && totalShares > 0) {
+                termApplied = 'Cap';
+              } else if (conv.discountPercent != null) {
+                termApplied = 'Discount';
+              }
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: conv.type == 'safe'
+                                ? Colors.blue.shade100
+                                : Colors.orange.shade100,
+                            child: Icon(
+                              conv.type == 'safe'
+                                  ? Icons.security
+                                  : Icons.receipt_long,
+                              size: 14,
+                              color: conv.type == 'safe'
+                                  ? Colors.blue.shade700
+                                  : Colors.orange.shade700,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              stakeholder?.name ?? 'Unknown',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              termApplied,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Principal',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.outline,
+                                ),
+                              ),
+                              Text(Formatters.currency(conv.principal)),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Eff. Price',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.outline,
+                                ),
+                              ),
+                              Text(Formatters.currency(effectivePrice)),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'Shares',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.outline,
+                                ),
+                              ),
+                              Text(
+                                Formatters.compactNumber(sharesReceived),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      if (conv.valuationCap != null ||
+                          conv.discountPercent != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          [
+                            if (conv.valuationCap != null)
+                              'Cap: ${Formatters.compactCurrency(conv.valuationCap!)}',
+                            if (conv.discountPercent != null)
+                              'Discount: ${conv.discountPercent!.toStringAsFixed(0)}%',
+                          ].join(' • '),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               );
             }),
@@ -2089,7 +2903,9 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
         return true;
       case 4: // Warrants - optional
         return true;
-      case 5: // Summary
+      case 5: // ESOP - optional
+        return true;
+      case 6: // Summary
         return true;
       default:
         return false;
@@ -2115,10 +2931,6 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
 
     final preMoneyVal = double.tryParse(_preMoneyController.text) ?? 0;
     final pricePerShare = double.tryParse(_pricePerShareController.text);
-    final totalInvestment = _pendingInvestments.fold(
-      0.0,
-      (sum, inv) => sum + inv.amount,
-    );
 
     try {
       // Create or update the round
@@ -2165,7 +2977,7 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
           ) ??
           0;
       final pps =
-          pricePerShare ?? (totalShares > 0 ? preMoneyVal / totalShares : 1.0);
+          pricePerShare ?? (totalShares > 0 ? preMoneyVal / totalShares : 0.0);
 
       // Create or update holdings
       for (final inv in _pendingInvestments) {
@@ -2173,12 +2985,13 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
           // TODO: Implement updateHolding in HoldingCommands
           // For now, we skip existing holdings as update is not yet supported
         } else {
-          // Create new holding
+          // Create new holding - use the investment's actual cost basis
+          final costBasis = inv.shares > 0 ? inv.amount / inv.shares : pps;
           await holdingCommands.issueShares(
             stakeholderId: inv.stakeholderId,
             shareClassId: inv.shareClassId,
             shareCount: inv.shares,
-            costBasis: pps,
+            costBasis: costBasis,
             acquiredDate: _roundDate,
             vestingScheduleId: inv.vestingScheduleId,
             roundId: roundId,
@@ -2238,17 +3051,71 @@ class _RoundBuilderPageState extends ConsumerState<RoundBuilderPage> {
         }
       }
 
-      // Convert selected convertibles
+      // Convert selected convertibles using proper cap/discount math
       if (defaultShareClassId != null) {
         for (final convId in _selectedConvertibleIds) {
-          // Convert the instrument and link it to this round
-          // TODO: Full conversion math would calculate shares based on cap/discount
+          final conv = convertibles.where((c) => c.id == convId).firstOrNull;
+          if (conv == null) continue;
+
+          // Calculate effective conversion price using cap and/or discount
+          // ConversionCalculator returns the LOWER of cap-based price or discount-based price
+          final effectivePrice = ConversionCalculator.effectivePrice(
+            convertible: conv,
+            roundPricePerShare: pps,
+            preMoneyShares: totalShares,
+          );
+
+          // Calculate shares received: total value (principal + accrued interest) / effective price
+          final sharesReceived = ConversionCalculator.sharesToReceive(
+            convertible: conv,
+            roundPricePerShare: pps,
+            preMoneyShares: totalShares,
+            asOf: _roundDate,
+          );
+
           await convertibleCommands.convertConvertible(
             convertibleId: convId,
             roundId: roundId,
             toShareClassId: defaultShareClassId,
-            sharesReceived: 0, // Placeholder - full math to be implemented
-            conversionPrice: pps,
+            sharesReceived: sharesReceived,
+            conversionPrice: effectivePrice,
+          );
+        }
+      }
+
+      // Process ESOP pool expansions
+      if (_pendingPoolExpansions.isNotEmpty) {
+        final esopCommands = ref.read(esopPoolCommandsProvider.notifier);
+        final pools = await ref.read(esopPoolsStreamProvider.future);
+
+        for (final expansion in _pendingPoolExpansions) {
+          // Find the current pool to get its current size
+          final pool = pools.where((p) => p.id == expansion.poolId).firstOrNull;
+          if (pool == null) continue;
+
+          await esopCommands.expandPool(
+            poolId: expansion.poolId,
+            previousSize: pool.poolSize,
+            newSize: pool.poolSize + expansion.sharesToAdd,
+            sharesAdded: expansion.sharesToAdd,
+            reason: 'Round expansion: ${_nameController.text}',
+            resolutionReference: roundId,
+          );
+        }
+      }
+
+      // Create new ESOP pools (draft status tied to round)
+      if (_pendingNewPools.isNotEmpty) {
+        final esopCommands = ref.read(esopPoolCommandsProvider.notifier);
+
+        for (final newPool in _pendingNewPools) {
+          await esopCommands.createPool(
+            name: newPool.name,
+            poolSize: newPool.poolSize,
+            targetPercentage: newPool.targetPercentage,
+            establishedDate: _roundDate,
+            defaultVestingScheduleId: newPool.defaultVestingScheduleId,
+            roundId: roundId, // Links to round, starts as draft
           );
         }
       }
@@ -2715,6 +3582,34 @@ class _PendingInvestment {
   });
 
   bool get isExisting => existingId != null;
+}
+
+/// Helper class to track pending ESOP pool expansions
+class _PendingPoolExpansion {
+  final String poolId;
+  final String poolName;
+  final int sharesToAdd;
+
+  const _PendingPoolExpansion({
+    required this.poolId,
+    required this.poolName,
+    required this.sharesToAdd,
+  });
+}
+
+/// Helper class to track new ESOP pools being created in this round
+class _PendingNewPool {
+  final String name;
+  final int poolSize;
+  final double? targetPercentage;
+  final String? defaultVestingScheduleId;
+
+  const _PendingNewPool({
+    required this.name,
+    required this.poolSize,
+    this.targetPercentage,
+    this.defaultVestingScheduleId,
+  });
 }
 
 /// Helper class for pro-rata rights display

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers/providers.dart';
+import '../../domain/events/cap_table_event.dart';
 import '../../infrastructure/database/database.dart';
 import '../../shared/formatters.dart';
 import '../components/components.dart';
@@ -16,6 +17,8 @@ class EsopPoolsPage extends ConsumerWidget {
     final companyId = ref.watch(currentCompanyIdProvider);
     final shareClasses = ref.watch(shareClassesStreamProvider);
     final vestingSchedules = ref.watch(vestingSchedulesStreamProvider);
+    final stakeholders = ref.watch(stakeholdersStreamProvider);
+    final deleteEnabled = ref.watch(deleteEnabledProvider).valueOrNull ?? false;
 
     if (companyId == null) {
       return Scaffold(
@@ -55,7 +58,6 @@ class EsopPoolsPage extends ConsumerWidget {
                       context,
                       ref,
                       companyId,
-                      shareClasses.valueOrNull ?? [],
                       vestingSchedules.valueOrNull ?? [],
                     ),
                   );
@@ -66,6 +68,8 @@ class EsopPoolsPage extends ConsumerWidget {
                   pools,
                   shareClasses.valueOrNull ?? [],
                   vestingSchedules.valueOrNull ?? [],
+                  stakeholders.valueOrNull ?? [],
+                  deleteEnabled,
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -82,7 +86,6 @@ class EsopPoolsPage extends ConsumerWidget {
           context,
           ref,
           companyId,
-          shareClasses.valueOrNull ?? [],
           vestingSchedules.valueOrNull ?? [],
         ),
         icon: const Icon(Icons.add),
@@ -133,6 +136,8 @@ class EsopPoolsPage extends ConsumerWidget {
     List<EsopPool> pools,
     List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
+    List<Stakeholder> stakeholders,
+    bool deleteEnabled,
   ) {
     final shareClassMap = {for (final sc in shareClasses) sc.id: sc};
     final expansionNeededAsync = ref.watch(poolsNeedingExpansionProvider);
@@ -162,6 +167,8 @@ class EsopPoolsPage extends ConsumerWidget {
                 shareClassMap,
                 shareClasses,
                 vestingSchedules,
+                stakeholders,
+                deleteEnabled,
               );
             },
           ),
@@ -247,9 +254,12 @@ class EsopPoolsPage extends ConsumerWidget {
     Map<String, ShareClassesData> shareClassMap,
     List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
+    List<Stakeholder> stakeholders,
+    bool deleteEnabled,
   ) {
-    final shareClass = shareClassMap[pool.shareClassId];
     final summaryAsync = ref.watch(esopPoolSummaryProvider(pool.id));
+    final poolGrantsAsync = ref.watch(poolOptionGrantsStreamProvider(pool.id));
+    final esopPools = ref.watch(esopPoolsStreamProvider).valueOrNull ?? [];
 
     return summaryAsync.when(
       data: (summary) {
@@ -261,8 +271,7 @@ class EsopPoolsPage extends ConsumerWidget {
             size: 40,
           ),
           title: pool.name,
-          subtitle:
-              '${Formatters.number(pool.poolSize)} shares • ${shareClass?.name ?? 'Unknown class'}',
+          subtitle: '${Formatters.number(pool.poolSize)} shares reserved',
           badges: [
             StatusBadge(
               label: _formatStatus(pool.status),
@@ -368,16 +377,42 @@ class EsopPoolsPage extends ConsumerWidget {
                   ).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
                 ),
               ],
+              // Pool History Section
+              const Divider(height: 24),
+              _buildPoolHistorySection(context, ref, pool),
+              // Option Grants from this Pool
+              const Divider(height: 24),
+              _buildPoolGrantsSection(
+                context,
+                ref,
+                pool,
+                poolGrantsAsync,
+                shareClassMap,
+                stakeholders,
+              ),
             ],
           ),
           actions: [
+            if (summary.available > 0)
+              IconButton(
+                icon: const Icon(Icons.card_giftcard_outlined),
+                onPressed: () => _showGrantOptionsDialog(
+                  context,
+                  ref,
+                  pool,
+                  stakeholders,
+                  shareClasses,
+                  vestingSchedules,
+                  esopPools,
+                ),
+                tooltip: 'Grant Options',
+              ),
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               onPressed: () => _showEditDialog(
                 context,
                 ref,
                 pool,
-                shareClasses,
                 vestingSchedules,
               ),
               tooltip: 'Edit',
@@ -387,7 +422,7 @@ class EsopPoolsPage extends ConsumerWidget {
               onPressed: () => _showExpandDialog(context, ref, pool),
               tooltip: 'Expand Pool',
             ),
-            if (summary.allocated == 0)
+            if (deleteEnabled)
               IconButton(
                 icon: Icon(
                   Icons.delete_outlined,
@@ -477,23 +512,661 @@ class EsopPoolsPage extends ConsumerWidget {
     }
   }
 
+  Widget _buildPoolHistorySection(
+    BuildContext context,
+    WidgetRef ref,
+    EsopPool pool,
+  ) {
+    final eventsAsync = ref.watch(eventsStreamProvider);
+    final stakeholdersAsync = ref.watch(stakeholdersStreamProvider);
+
+    return eventsAsync.when(
+      data: (events) {
+        // Filter events related to this pool
+        final poolEvents = events.where((e) {
+          return e.maybeMap(
+            esopPoolCreated: (e) => e.poolId == pool.id,
+            esopPoolExpanded: (e) => e.poolId == pool.id,
+            esopPoolActivated: (e) => e.poolId == pool.id,
+            esopPoolUpdated: (e) => e.poolId == pool.id,
+            esopPoolExpansionReverted: (e) => e.poolId == pool.id,
+            optionGranted: (e) => e.esopPoolId == pool.id,
+            optionsExercised: (e) {
+              // Check if this grant belongs to this pool
+              final grant = ref
+                  .read(optionGrantsStreamProvider)
+                  .valueOrNull
+                  ?.firstWhere(
+                    (g) => g.id == e.grantId,
+                    orElse: () => OptionGrant(
+                      id: '',
+                      companyId: '',
+                      stakeholderId: '',
+                      shareClassId: '',
+                      status: '',
+                      quantity: 0,
+                      strikePrice: 0,
+                      grantDate: DateTime.now(),
+                      expiryDate: DateTime.now(),
+                      exercisedCount: 0,
+                      cancelledCount: 0,
+                      allowsEarlyExercise: false,
+                      createdAt: DateTime.now(),
+                      updatedAt: DateTime.now(),
+                    ),
+                  );
+              return grant?.esopPoolId == pool.id;
+            },
+            orElse: () => false,
+          );
+        }).toList();
+
+        // Sort by timestamp descending (newest first)
+        poolEvents.sort((a, b) {
+          final aTime = _getEventTimestamp(a);
+          final bTime = _getEventTimestamp(b);
+          return bTime.compareTo(aTime);
+        });
+
+        if (poolEvents.isEmpty) {
+          return Text(
+            'No history events',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          );
+        }
+
+        final stakeholders = stakeholdersAsync.valueOrNull ?? [];
+        final stakeholderMap = {for (final s in stakeholders) s.id: s.name};
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pool History',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            ...poolEvents
+                .take(10)
+                .map(
+                  (event) =>
+                      _buildEventRow(context, ref, event, stakeholderMap),
+                ),
+            if (poolEvents.length > 10)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '+ ${poolEvents.length - 10} more events',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildEventRow(
+    BuildContext context,
+    WidgetRef ref,
+    CapTableEvent event,
+    Map<String, String> stakeholderMap,
+  ) {
+    final timestamp = _getEventTimestamp(event);
+    final description = _getEventDescription(event, stakeholderMap);
+    final icon = _getEventIcon(event);
+    final color = _getEventColor(event);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(description, style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  Formatters.shortDate(timestamp),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (event is EsopPoolExpanded)
+            IconButton(
+              icon: const Icon(Icons.undo, size: 16),
+              onPressed: () => _confirmRevertExpansion(context, ref, event),
+              tooltip: 'Revert Expansion',
+              iconSize: 16,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+        ],
+      ),
+    );
+  }
+
+  DateTime _getEventTimestamp(CapTableEvent event) {
+    return event.maybeMap(
+      esopPoolCreated: (e) => e.timestamp,
+      esopPoolExpanded: (e) => e.timestamp,
+      esopPoolActivated: (e) => e.timestamp,
+      esopPoolUpdated: (e) => e.timestamp,
+      esopPoolExpansionReverted: (e) => e.timestamp,
+      optionGranted: (e) => e.timestamp,
+      optionsExercised: (e) => e.timestamp,
+      orElse: () => DateTime.now(),
+    );
+  }
+
+  String _getEventDescription(
+    CapTableEvent event,
+    Map<String, String> stakeholderMap,
+  ) {
+    return event.maybeMap(
+      esopPoolCreated: (e) =>
+          'Pool created with ${Formatters.number(e.poolSize)} shares',
+      esopPoolExpanded: (e) =>
+          'Expanded by ${Formatters.number(e.sharesAdded)} shares (${e.reason})',
+      esopPoolActivated: (e) => 'Pool activated',
+      esopPoolUpdated: (e) => 'Pool settings updated',
+      esopPoolExpansionReverted: (e) =>
+          'Expansion reverted, removed ${Formatters.number(e.sharesRemoved)} shares',
+      optionGranted: (e) {
+        final name = stakeholderMap[e.stakeholderId] ?? 'Unknown';
+        return 'Granted ${Formatters.number(e.quantity)} options to $name';
+      },
+      optionsExercised: (e) =>
+          'Exercised ${Formatters.number(e.exercisedCount)} options',
+      orElse: () => 'Unknown event',
+    );
+  }
+
+  IconData _getEventIcon(CapTableEvent event) {
+    return event.maybeMap(
+      esopPoolCreated: (_) => Icons.add_circle_outline,
+      esopPoolExpanded: (_) => Icons.trending_up,
+      esopPoolActivated: (_) => Icons.check_circle_outline,
+      esopPoolUpdated: (_) => Icons.edit_outlined,
+      esopPoolExpansionReverted: (_) => Icons.undo,
+      optionGranted: (_) => Icons.card_giftcard,
+      optionsExercised: (_) => Icons.play_arrow,
+      orElse: () => Icons.event,
+    );
+  }
+
+  Color _getEventColor(CapTableEvent event) {
+    return event.maybeMap(
+      esopPoolCreated: (_) => Colors.green,
+      esopPoolExpanded: (_) => Colors.blue,
+      esopPoolActivated: (_) => Colors.teal,
+      esopPoolUpdated: (_) => Colors.orange,
+      esopPoolExpansionReverted: (_) => Colors.red,
+      optionGranted: (_) => Colors.purple,
+      optionsExercised: (_) => Colors.indigo,
+      orElse: () => Colors.grey,
+    );
+  }
+
+  void _confirmRevertExpansion(
+    BuildContext context,
+    WidgetRef ref,
+    EsopPoolExpanded expansion,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Revert Pool Expansion?'),
+        content: Text(
+          'This will remove ${Formatters.number(expansion.sharesAdded)} shares '
+          'from the pool. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () async {
+              try {
+                await ref
+                    .read(esopPoolCommandsProvider.notifier)
+                    .revertExpansion(
+                      expansionId: expansion.expansionId,
+                      poolId: expansion.poolId,
+                      previousSize: expansion.newSize,
+                      sharesRemoved: expansion.sharesAdded,
+                    );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Expansion reverted successfully'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Revert'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPoolGrantsSection(
+    BuildContext context,
+    WidgetRef ref,
+    EsopPool pool,
+    AsyncValue<List<OptionGrant>> poolGrantsAsync,
+    Map<String, ShareClassesData> shareClassMap,
+    List<Stakeholder> stakeholders,
+  ) {
+    final stakeholderMap = {for (final s in stakeholders) s.id: s};
+    final vestingSchedulesAsync = ref.watch(vestingSchedulesStreamProvider);
+    final vestingScheduleMap = {
+      for (final v in vestingSchedulesAsync.valueOrNull ?? []) v.id: v,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Option Grants from Pool',
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        poolGrantsAsync.when(
+          data: (grants) {
+            if (grants.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'No option grants from this pool yet',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              );
+            }
+            return Column(
+              children: grants.map((grant) {
+                final shareClass = shareClassMap[grant.shareClassId];
+                final stakeholder = stakeholderMap[grant.stakeholderId];
+                final vestingSchedule = grant.vestingScheduleId != null
+                    ? vestingScheduleMap[grant.vestingScheduleId]
+                    : null;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: OptionItem(
+                    quantity: grant.quantity,
+                    exercisedCount: grant.exercisedCount,
+                    cancelledCount: grant.cancelledCount,
+                    strikePrice: grant.strikePrice,
+                    shareClassName: shareClass?.name ?? 'Unknown',
+                    status: grant.status,
+                    vestingScheduleName: vestingSchedule?.name,
+                    onTap: () => _showGrantDetail(
+                      context,
+                      ref,
+                      grant,
+                      stakeholder,
+                      shareClass,
+                      vestingSchedule,
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+          error: (e, _) => Text('Error: $e'),
+        ),
+      ],
+    );
+  }
+
+  void _showGrantDetail(
+    BuildContext context,
+    WidgetRef ref,
+    OptionGrant grant,
+    Stakeholder? stakeholder,
+    ShareClassesData? shareClass,
+    VestingSchedule? vestingSchedule,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                EntityAvatar(
+                  name: stakeholder?.name ?? 'Unknown',
+                  type: EntityAvatarType.person,
+                  size: 40,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        stakeholder?.name ?? 'Unknown Grantee',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '${Formatters.number(grant.quantity)} options @ \$${grant.strikePrice.toStringAsFixed(2)}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            _buildDetailRow('Share Class', shareClass?.name ?? 'Unknown'),
+            _buildDetailRow(
+              'Grant Date',
+              Formatters.shortDate(grant.grantDate),
+            ),
+            _buildDetailRow(
+              'Expiry Date',
+              Formatters.shortDate(grant.expiryDate),
+            ),
+            _buildDetailRow('Status', _formatGrantStatus(grant.status)),
+            if (vestingSchedule != null)
+              _buildDetailRow('Vesting', vestingSchedule.name),
+            _buildDetailRow(
+              'Exercised',
+              Formatters.number(grant.exercisedCount),
+            ),
+            _buildDetailRow(
+              'Cancelled',
+              Formatters.number(grant.cancelledCount),
+            ),
+            _buildDetailRow(
+              'Outstanding',
+              Formatters.number(
+                grant.quantity - grant.exercisedCount - grant.cancelledCount,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatGrantStatus(String status) {
+    switch (status) {
+      case 'pending':
+        return 'Pending';
+      case 'active':
+        return 'Active';
+      case 'partially_exercised':
+        return 'Partially Exercised';
+      case 'fully_exercised':
+        return 'Fully Exercised';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'expired':
+        return 'Expired';
+      default:
+        return status;
+    }
+  }
+
+  void _showGrantOptionsDialog(
+    BuildContext context,
+    WidgetRef ref,
+    EsopPool pool,
+    List<Stakeholder> stakeholders,
+    List<ShareClassesData> shareClasses,
+    List<VestingSchedule> vestingSchedules,
+    List<EsopPool> esopPools,
+  ) {
+    final quantityController = TextEditingController();
+    final strikeController = TextEditingController(
+      text: pool.defaultStrikePrice?.toString() ?? '',
+    );
+    final notesController = TextEditingController();
+
+    String? selectedStakeholderId;
+    String? selectedShareClassId = shareClasses.isNotEmpty ? shareClasses.first.id : null;
+    String? selectedVestingScheduleId;
+    DateTime grantDate = DateTime.now();
+    DateTime expiryDate = DateTime.now().add(
+      Duration(days: 365 * pool.defaultExpiryYears),
+    );
+    bool allowsEarlyExercise = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Grant Options from ${pool.name}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: selectedStakeholderId,
+                  decoration: const InputDecoration(labelText: 'Grantee'),
+                  items: stakeholders
+                      .map(
+                        (s) =>
+                            DropdownMenuItem(value: s.id, child: Text(s.name)),
+                      )
+                      .toList(),
+                  onChanged: (v) =>
+                      setDialogState(() => selectedStakeholderId = v),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedShareClassId,
+                  decoration: const InputDecoration(labelText: 'Share Class'),
+                  items: shareClasses
+                      .map(
+                        (sc) => DropdownMenuItem(
+                          value: sc.id,
+                          child: Text(sc.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setDialogState(() => selectedShareClassId = v);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: quantityController,
+                  decoration: const InputDecoration(labelText: 'Quantity'),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: strikeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Strike Price',
+                    prefixText: '\$',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String?>(
+                  value: selectedVestingScheduleId,
+                  decoration: const InputDecoration(
+                    labelText: 'Vesting Schedule (Optional)',
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('No Vesting'),
+                    ),
+                    ...vestingSchedules.map(
+                      (v) => DropdownMenuItem(value: v.id, child: Text(v.name)),
+                    ),
+                  ],
+                  onChanged: (v) =>
+                      setDialogState(() => selectedVestingScheduleId = v),
+                ),
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: grantDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (date != null) {
+                      setDialogState(() {
+                        grantDate = date;
+                        if (expiryDate.isBefore(grantDate)) {
+                          expiryDate = grantDate.add(
+                            Duration(days: 365 * pool.defaultExpiryYears),
+                          );
+                        }
+                      });
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Grant Date',
+                      suffixIcon: Icon(Icons.calendar_today, size: 18),
+                    ),
+                    child: Text(Formatters.date(grantDate)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: expiryDate,
+                      firstDate: grantDate,
+                      lastDate: DateTime(2100),
+                    );
+                    if (date != null) {
+                      setDialogState(() => expiryDate = date);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Expiry Date',
+                      suffixIcon: Icon(Icons.calendar_today, size: 18),
+                    ),
+                    child: Text(Formatters.date(expiryDate)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                CheckboxListTile(
+                  title: const Text('Allow Early Exercise'),
+                  value: allowsEarlyExercise,
+                  onChanged: (v) =>
+                      setDialogState(() => allowsEarlyExercise = v ?? false),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: notesController,
+                  decoration: const InputDecoration(labelText: 'Notes'),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final quantity = int.tryParse(quantityController.text);
+                final strike = double.tryParse(strikeController.text);
+                if (quantity == null || quantity <= 0) return;
+                if (strike == null || strike <= 0) return;
+                if (selectedStakeholderId == null) return;
+                if (selectedShareClassId == null) return;
+
+                final commands = ref.read(optionGrantCommandsProvider.notifier);
+                await commands.grantOptions(
+                  stakeholderId: selectedStakeholderId!,
+                  shareClassId: selectedShareClassId!,
+                  vestingScheduleId: selectedVestingScheduleId,
+                  esopPoolId: pool.id,
+                  quantity: quantity,
+                  strikePrice: strike,
+                  grantDate: grantDate,
+                  expiryDate: expiryDate,
+                  allowsEarlyExercise: allowsEarlyExercise,
+                  notes: notesController.text.trim().isEmpty
+                      ? null
+                      : notesController.text.trim(),
+                );
+
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('Grant'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showAddDialog(
     BuildContext context,
     WidgetRef ref,
     String companyId,
-    List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
   ) {
-    if (shareClasses.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please create a share class first'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
     final nameController = TextEditingController();
     final poolSizeController = TextEditingController();
     final targetPercentController = TextEditingController();
@@ -501,7 +1174,6 @@ class EsopPoolsPage extends ConsumerWidget {
     final expiryYearsController = TextEditingController(text: '10');
     final notesController = TextEditingController();
 
-    String? selectedShareClassId = shareClasses.first.id;
     String? selectedVestingScheduleId;
     DateTime establishedDate = DateTime.now();
     String strikePriceMethod = 'fmv';
@@ -522,20 +1194,6 @@ class EsopPoolsPage extends ConsumerWidget {
                     labelText: 'Pool Name *',
                     hintText: 'e.g., 2024 Employee Option Pool',
                   ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedShareClassId,
-                  decoration: const InputDecoration(labelText: 'Share Class *'),
-                  items: shareClasses
-                      .map(
-                        (sc) => DropdownMenuItem(
-                          value: sc.id,
-                          child: Text(sc.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() => selectedShareClassId = v),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -658,7 +1316,6 @@ class EsopPoolsPage extends ConsumerWidget {
             FilledButton(
               onPressed: () async {
                 if (nameController.text.isEmpty ||
-                    selectedShareClassId == null ||
                     poolSizeController.text.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -685,7 +1342,6 @@ class EsopPoolsPage extends ConsumerWidget {
                       .read(esopPoolCommandsProvider.notifier)
                       .createPool(
                         name: nameController.text,
-                        shareClassId: selectedShareClassId!,
                         poolSize: poolSize,
                         targetPercentage: double.tryParse(
                           targetPercentController.text,
@@ -735,7 +1391,6 @@ class EsopPoolsPage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     EsopPool pool,
-    List<ShareClassesData> shareClasses,
     List<VestingSchedule> vestingSchedules,
   ) {
     final nameController = TextEditingController(text: pool.name);
@@ -750,7 +1405,6 @@ class EsopPoolsPage extends ConsumerWidget {
     );
     final notesController = TextEditingController(text: pool.notes ?? '');
 
-    String? selectedShareClassId = pool.shareClassId;
     String? selectedVestingScheduleId = pool.defaultVestingScheduleId;
     String status = pool.status;
     String strikePriceMethod = pool.strikePriceMethod;
@@ -783,20 +1437,6 @@ class EsopPoolsPage extends ConsumerWidget {
                     ),
                   ],
                   onChanged: (v) => setState(() => status = v ?? 'active'),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedShareClassId,
-                  decoration: const InputDecoration(labelText: 'Share Class *'),
-                  items: shareClasses
-                      .map(
-                        (sc) => DropdownMenuItem(
-                          value: sc.id,
-                          child: Text(sc.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() => selectedShareClassId = v),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -886,8 +1526,7 @@ class EsopPoolsPage extends ConsumerWidget {
             ),
             FilledButton(
               onPressed: () async {
-                if (nameController.text.isEmpty ||
-                    selectedShareClassId == null) {
+                if (nameController.text.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please fill in required fields'),
@@ -898,14 +1537,53 @@ class EsopPoolsPage extends ConsumerWidget {
                 }
 
                 try {
-                  // TODO: Implement updatePool in EsopPoolCommands
-                  // This operation is not yet supported in the event-sourcing architecture.
-                  // The current commands only support createPool and expandPool.
+                  final targetPercent = double.tryParse(
+                    targetPercentController.text,
+                  );
+                  final strikePrice = double.tryParse(
+                    strikePriceController.text,
+                  );
+                  final expiryYears =
+                      int.tryParse(expiryYearsController.text) ?? 10;
+
+                  await ref
+                      .read(esopPoolCommandsProvider.notifier)
+                      .updatePool(
+                        poolId: pool.id,
+                        name: nameController.text != pool.name
+                            ? nameController.text
+                            : null,
+                        targetPercentage: targetPercent != pool.targetPercentage
+                            ? targetPercent
+                            : null,
+                        strikePriceMethod:
+                            strikePriceMethod != pool.strikePriceMethod
+                            ? strikePriceMethod
+                            : null,
+                        defaultStrikePrice:
+                            strikePrice != pool.defaultStrikePrice
+                            ? strikePrice
+                            : null,
+                        defaultExpiryYears:
+                            expiryYears != pool.defaultExpiryYears
+                            ? expiryYears
+                            : null,
+                        defaultVestingScheduleId:
+                            selectedVestingScheduleId !=
+                                pool.defaultVestingScheduleId
+                            ? selectedVestingScheduleId
+                            : null,
+                        notes: notesController.text != (pool.notes ?? '')
+                            ? notesController.text.isNotEmpty
+                                  ? notesController.text
+                                  : null
+                            : null,
+                      );
                   if (context.mounted) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Pool update not yet implemented'),
+                        content: Text('Pool updated successfully'),
                         behavior: SnackBarBehavior.floating,
                       ),
                     );
@@ -1026,39 +1704,60 @@ class EsopPoolsPage extends ConsumerWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, EsopPool pool) {
-    showDialog(
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    EsopPool pool,
+  ) async {
+    // Preview cascade impact
+    final cascadeImpact = await ref
+        .read(eventLedgerProvider.notifier)
+        .previewCascadeDelete(
+          entityId: pool.id,
+          entityType: EntityType.esopPool,
+        );
+
+    final impactLines = <String>[];
+    cascadeImpact.forEach((type, count) {
+      if (count > 0) {
+        impactLines.add('• $count ${type.name}(s)');
+      }
+    });
+
+    final message = impactLines.isEmpty
+        ? 'Are you sure you want to permanently delete "${pool.name}"? This cannot be undone.'
+        : 'This will permanently delete:\n${impactLines.join('\n')}\n\nThis cannot be undone.';
+
+    final confirmed = await ConfirmDialog.showDelete(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete ESOP Pool?'),
-        content: Text(
-          'Are you sure you want to delete "${pool.name}"? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              // TODO: Implement deletePool in EsopPoolCommands
-              // This operation is not yet supported in the event-sourcing architecture.
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Pool delete not yet implemented'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      itemName: pool.name,
+      customMessage: message,
     );
+
+    if (confirmed && context.mounted) {
+      try {
+        await ref
+            .read(esopPoolCommandsProvider.notifier)
+            .deletePool(poolId: pool.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Pool deleted successfully'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
   }
 }
 
